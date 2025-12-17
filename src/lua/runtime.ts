@@ -4,6 +4,7 @@ import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { ILuaRuntime, ILogger } from "../types/interfaces.js";
 import { TYPES } from "../types/index.js";
 import { sanitizeLuaIdentifier } from "../utils/lua-identifier.js";
+import { takeResult } from "@modelcontextprotocol/sdk/experimental";
 
 @injectable()
 export class WasmoonRuntime implements ILuaRuntime {
@@ -83,10 +84,12 @@ export class WasmoonRuntime implements ILuaRuntime {
                   `(Lua: ${sanitizedServerName}.${sanitizedToolName}) with args:`,
                 args,
               );
-              const result = await client.callTool({
-                name: originalToolName, // Use ORIGINAL name for MCP call
-                arguments: (args as Record<string, unknown>) || {},
-              });
+              const result = await takeResult(
+                client.experimental.tasks.callToolStream({
+                  name: originalToolName,
+                  arguments: (args as Record<string, unknown>) || {},
+                }),
+              );
               return result;
             } catch (error) {
               this.logger.error(
