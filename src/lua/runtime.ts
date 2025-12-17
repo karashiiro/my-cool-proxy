@@ -1,7 +1,9 @@
 import { injectable, inject } from "inversify";
 import { LuaFactory, LuaEngine } from "wasmoon";
+import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { ILuaRuntime, ILogger } from "../types/interfaces.js";
 import { TYPES } from "../types/index.js";
+import { sanitizeLuaIdentifier } from "../utils/lua-identifier.js";
 
 @injectable()
 export class WasmoonRuntime implements ILuaRuntime {
@@ -11,9 +13,15 @@ export class WasmoonRuntime implements ILuaRuntime {
     this.factory = new LuaFactory();
   }
 
-  async executeScript(script: string): Promise<unknown> {
+  async executeScript(
+    script: string,
+    mcpServers: Map<string, Client>,
+  ): Promise<unknown> {
     const engine = await this.createEngine();
     try {
+      // Inject MCP servers as Lua globals
+      await this.injectMCPServers(engine, mcpServers);
+
       await engine.doString(script);
       const result = engine.global.get("result");
       return result;
@@ -44,5 +52,69 @@ export class WasmoonRuntime implements ILuaRuntime {
     engine.global.set("debug", undefined);
 
     return engine;
+  }
+
+  private async injectMCPServers(
+    engine: LuaEngine,
+    mcpServers: Map<string, Client>,
+  ): Promise<void> {
+    for (const [originalServerName, client] of mcpServers.entries()) {
+      try {
+        // Sanitize server name for Lua
+        const sanitizedServerName = sanitizeLuaIdentifier(originalServerName);
+
+        // List available tools from the MCP server
+        const toolsResponse = await client.listTools();
+        const tools = toolsResponse.tools;
+
+        // Create a Lua table for this server
+        const serverTable: Record<string, unknown> = {};
+
+        // Add each tool as a function on the server table
+        for (const tool of tools) {
+          const originalToolName = tool.name;
+          const sanitizedToolName = sanitizeLuaIdentifier(originalToolName);
+
+          // Capture original names in closure for MCP calls
+          serverTable[sanitizedToolName] = async (args: unknown) => {
+            try {
+              this.logger.debug(
+                `Calling ${originalServerName}.${originalToolName} ` +
+                  `(Lua: ${sanitizedServerName}.${sanitizedToolName}) with args:`,
+                args,
+              );
+              const result = await client.callTool({
+                name: originalToolName, // Use ORIGINAL name for MCP call
+                arguments: (args as Record<string, unknown>) || {},
+              });
+              return result;
+            } catch (error) {
+              this.logger.error(
+                `Error calling ${originalServerName}.${originalToolName}:`,
+                error as Error,
+              );
+              throw error;
+            }
+          };
+        }
+
+        // Set the server table as a global in Lua using sanitized name
+        engine.global.set(sanitizedServerName, serverTable);
+
+        const nameInfo =
+          sanitizedServerName !== originalServerName
+            ? ` (Lua name: '${sanitizedServerName}')`
+            : "";
+        this.logger.debug(
+          `Injected MCP server '${originalServerName}'${nameInfo} with ${tools.length} tools`,
+        );
+      } catch (error) {
+        this.logger.error(
+          `Failed to inject MCP server '${originalServerName}':`,
+          error as Error,
+        );
+        // Continue with other servers even if one fails
+      }
+    }
   }
 }

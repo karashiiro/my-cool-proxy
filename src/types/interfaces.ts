@@ -2,7 +2,10 @@ import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 
 export interface ILuaRuntime {
-  executeScript(script: string): Promise<unknown>;
+  executeScript(
+    script: string,
+    mcpServers: Map<string, Client>,
+  ): Promise<unknown>;
 }
 
 export interface IMCPClientManager {
