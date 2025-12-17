@@ -12,17 +12,9 @@ export class WasmoonRuntime implements ILuaRuntime {
     this.factory = new LuaFactory();
   }
 
-  async getEngine(): Promise<LuaEngine> {
-    if (!this.engine) {
-      this.engine = await this.factory.createEngine();
-      this.logger.info("Lua engine initialized");
-    }
-    return this.engine;
-  }
-
   async executeScript(script: string): Promise<unknown> {
-    const engine = await this.getEngine();
     try {
+      const engine = await this.createEngine();
       await engine.doString(script);
       const result = engine.global.get("result");
       return result;
@@ -30,6 +22,27 @@ export class WasmoonRuntime implements ILuaRuntime {
       this.logger.error("Lua script execution failed", error as Error);
       throw error;
     }
+  }
+
+  private async createEngine(): Promise<LuaEngine> {
+    const engine = await this.factory.createEngine();
+
+    // Remove dangerous OS access
+    engine.global.set("os", undefined);
+
+    // Remove file I/O
+    engine.global.set("io", undefined);
+
+    // Remove module loading capabilities
+    engine.global.set("require", undefined);
+    engine.global.set("dofile", undefined);
+    engine.global.set("loadfile", undefined);
+    engine.global.set("package", undefined);
+
+    // Remove debug facilities
+    engine.global.set("debug", undefined);
+
+    return engine;
   }
 
   async close(): Promise<void> {

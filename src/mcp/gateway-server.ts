@@ -38,7 +38,8 @@ export class MCPGatewayServer {
     this.server.registerTool(
       "execute-lua",
       {
-        description: "Execute a Lua script with access to MCP servers",
+        description:
+          "Execute a Lua script with access to MCP servers. Assign the result to 'result' global variable.",
         inputSchema: {
           script: z.string().describe("Lua script to execute"),
         },

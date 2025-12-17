@@ -1,9 +1,7 @@
-import type { LuaEngine } from "wasmoon";
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 
 export interface ILuaRuntime {
-  getEngine(): Promise<LuaEngine>;
   executeScript(script: string): Promise<unknown>;
   close(): Promise<void>;
 }
