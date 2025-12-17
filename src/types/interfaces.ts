@@ -3,7 +3,6 @@ import type { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/se
 
 export interface ILuaRuntime {
   executeScript(script: string): Promise<unknown>;
-  close(): Promise<void>;
 }
 
 export interface IMCPClientManager {

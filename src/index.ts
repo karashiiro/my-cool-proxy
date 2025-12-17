@@ -69,7 +69,6 @@ async function main() {
     logger.info("Shutting down...");
     await transportManager.closeAll();
     await clientPool.close();
-    await luaRuntime.close();
     process.exit(0);
   });
 }
