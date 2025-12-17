@@ -47,6 +47,17 @@ export class MCPClientManager implements IMCPClientManager {
     return client;
   }
 
+  getClientsBySession(sessionId: string): Map<string, Client> {
+    return new Map(
+      Array.from(this.clients.entries())
+        .filter(([key]) => key.endsWith(`-${sessionId}`))
+        .map(([key, client]) => {
+          const name = key.split(`-${sessionId}`)[0];
+          return [name, client] as [string, Client];
+        }),
+    );
+  }
+
   async close(): Promise<void> {
     for (const [name, client] of this.clients) {
       await client.close();
