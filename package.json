@@ -9,7 +9,8 @@
     "lint": "eslint . --ext .ts,.js",
     "build": "tsgo -p tsconfig.build.json",
     "dev": "tsx src/index.ts",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "keywords": [],
   "author": "karashiiro",
@@ -26,7 +27,8 @@
     "jiti": "^2.6.1",
     "prettier": "^3.7.4",
     "tsx": "^4.21.0",
-    "typescript-eslint": "^8.50.0"
+    "typescript-eslint": "^8.50.0",
+    "vitest": "^4.0.16"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.25.1",
