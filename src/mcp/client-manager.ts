@@ -1,6 +1,7 @@
 import { injectable, inject } from "inversify";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import type { ILogger, IMCPClientManager } from "../types/interfaces.js";
 import { TYPES } from "../types/index.js";
 
@@ -10,13 +11,16 @@ export class MCPClientManager implements IMCPClientManager {
 
   constructor(@inject(TYPES.Logger) private logger: ILogger) {}
 
-  async addClient(
+  async addHttpClient(
     name: string,
     endpoint: string,
     sessionId: string,
   ): Promise<void> {
-    if (this.clients.has(name)) {
-      this.logger.debug(`Client ${name} already exists`);
+    const key = `${name}-${sessionId}`;
+    if (this.clients.has(key)) {
+      this.logger.debug(
+        `Client ${name} already exists for session ${sessionId}`,
+      );
       return;
     }
 
@@ -33,9 +37,49 @@ export class MCPClientManager implements IMCPClientManager {
     const transport = new StreamableHTTPClientTransport(new URL(endpoint));
     await client.connect(transport);
 
-    this.clients.set(`${name}-${sessionId}`, client);
+    this.clients.set(key, client);
 
     this.logger.info(`MCP client ${name} connected to ${endpoint}`);
+  }
+
+  async addStdioClient(
+    name: string,
+    command: string,
+    sessionId: string,
+    args?: string[],
+    env?: Record<string, string>,
+  ): Promise<void> {
+    const key = `${name}-${sessionId}`;
+    if (this.clients.has(key)) {
+      this.logger.debug(
+        `Client ${name} already exists for session ${sessionId}`,
+      );
+      return;
+    }
+
+    const client = new Client(
+      {
+        name: "my-cool-proxy",
+        version: "1.0.0",
+      },
+      {
+        capabilities: {},
+      },
+    );
+
+    const transport = new StdioClientTransport({
+      command,
+      args,
+      env,
+    });
+
+    await client.connect(transport);
+
+    this.clients.set(key, client);
+
+    this.logger.info(
+      `MCP client ${name} connected to stdio process: ${command} ${args?.join(" ") || ""}`,
+    );
   }
 
   async getClient(name: string, sessionId: string): Promise<Client> {

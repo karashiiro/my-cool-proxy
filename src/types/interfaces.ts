@@ -9,7 +9,18 @@ export interface ILuaRuntime {
 }
 
 export interface IMCPClientManager {
-  addClient(name: string, endpoint: string, sessionId: string): Promise<void>;
+  addHttpClient(
+    name: string,
+    endpoint: string,
+    sessionId: string,
+  ): Promise<void>;
+  addStdioClient(
+    name: string,
+    command: string,
+    sessionId: string,
+    args?: string[],
+    env?: Record<string, string>,
+  ): Promise<void>;
   getClient(name: string, sessionId: string): Promise<Client>;
   getClientsBySession(sessionId: string): Map<string, Client>;
   close(): Promise<void>;

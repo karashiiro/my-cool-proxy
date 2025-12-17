@@ -39,17 +39,25 @@ async function main() {
     const sessionId = req.headers["mcp-session-id"] as string | undefined;
 
     for (const [name, clientConfig] of Object.entries(config.mcpClients)) {
-      // For now, only support HTTP clients
-      // TODO: Add stdio transport support
       if (clientConfig.type === "http") {
-        await clientPool.addClient(
+        await clientPool.addHttpClient(
           name,
           clientConfig.url,
           sessionId || "default",
         );
+      } else if (clientConfig.type === "stdio") {
+        await clientPool.addStdioClient(
+          name,
+          clientConfig.command,
+          sessionId || "default",
+          clientConfig.args,
+          clientConfig.env,
+        );
       } else {
+        // This should never happen due to config validation, but handle it for safety
+        const unknownConfig = clientConfig as { type: string };
         logger.error(
-          `Unsupported client type '${clientConfig.type}' for '${name}'`,
+          `Unsupported client type '${unknownConfig.type}' for '${name}'`,
         );
       }
     }

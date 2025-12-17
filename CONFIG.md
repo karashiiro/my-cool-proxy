@@ -78,7 +78,7 @@ Each server in `mcpClients` is identified by its key (e.g., `"mcp-docs"`), which
 - **type** (string): Must be `"http"`
 - **url** (string): HTTP endpoint URL for the MCP server
 
-**Stdio Transport (coming soon):**
+**Stdio Transport:**
 
 ```json
 {
@@ -170,9 +170,9 @@ If validation fails, the server will exit with a descriptive error message.
 
 ## Transport Types
 
-### HTTP Transport (Supported)
+### HTTP Transport
 
-HTTP transport connects to MCP servers over HTTP. This is currently the only supported transport type.
+HTTP transport connects to MCP servers over HTTP.
 
 ```json
 {
@@ -183,9 +183,9 @@ HTTP transport connects to MCP servers over HTTP. This is currently the only sup
 }
 ```
 
-### Stdio Transport (Coming Soon)
+### Stdio Transport
 
-Stdio transport will launch a local process and communicate over standard input/output. Configuration is ready but implementation is pending.
+Stdio transport launches a local process and communicates over standard input/output.
 
 ```json
 {

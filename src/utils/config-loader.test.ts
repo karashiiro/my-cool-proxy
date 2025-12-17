@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { writeFileSync, unlinkSync, existsSync } from "fs";
 import { resolve } from "path";
 import { loadConfig, mergeEnvConfig } from "./config-loader.js";
