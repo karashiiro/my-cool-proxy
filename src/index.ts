@@ -17,8 +17,7 @@ const config: ServerConfig = {
   host: process.env.HOST || "localhost",
   useOAuth: process.env.USE_OAUTH === "true",
   mcpClients: [
-    // Add your MCP server endpoints here
-    // { name: 'example-server', endpoint: 'http://localhost:3001/mcp' }
+    { name: "mcp-docs", endpoint: "https://modelcontextprotocol.io/mcp" },
   ],
 };
 
