@@ -39,11 +39,25 @@ export interface AuthInfo {
   expiresAt?: number;
 }
 
+export interface MCPClientConfigHTTP {
+  type: "http";
+  url: string;
+}
+
+export interface MCPClientConfigStdio {
+  type: "stdio";
+  command: string;
+  args?: string[];
+  env?: Record<string, string>;
+}
+
+export type MCPClientConfig = MCPClientConfigHTTP | MCPClientConfigStdio;
+
 export interface ServerConfig {
   port: number;
   host: string;
   useOAuth: boolean;
-  mcpClients: { name: string; endpoint: string }[];
+  mcpClients: Record<string, MCPClientConfig>;
 }
 
 export interface ILogger {

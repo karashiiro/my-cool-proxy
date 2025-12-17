@@ -6,19 +6,13 @@ import type {
   IMCPClientManager,
   ITransportManager,
   ILogger,
-  ServerConfig,
 } from "./types/interfaces.js";
 import { MCPGatewayServer } from "./mcp/gateway-server.js";
 import { createMcpExpressApp } from "@modelcontextprotocol/sdk/server/express.js";
+import { loadConfig, mergeEnvConfig } from "./utils/config-loader.js";
 
-const config: ServerConfig = {
-  port: parseInt(process.env.PORT || "3000"),
-  host: process.env.HOST || "localhost",
-  useOAuth: process.env.USE_OAUTH === "true",
-  mcpClients: [
-    { name: "mcp-docs", endpoint: "https://modelcontextprotocol.io/mcp" },
-  ],
-};
+// Load configuration from file and merge with environment variables
+const config = mergeEnvConfig(loadConfig());
 
 async function main() {
   const container = createContainer(config);
@@ -44,8 +38,20 @@ async function main() {
   app.post("/mcp", async (req, res) => {
     const sessionId = req.headers["mcp-session-id"] as string | undefined;
 
-    for (const { name, endpoint } of config.mcpClients) {
-      await clientPool.addClient(name, endpoint, sessionId || "default");
+    for (const [name, clientConfig] of Object.entries(config.mcpClients)) {
+      // For now, only support HTTP clients
+      // TODO: Add stdio transport support
+      if (clientConfig.type === "http") {
+        await clientPool.addClient(
+          name,
+          clientConfig.url,
+          sessionId || "default",
+        );
+      } else {
+        logger.error(
+          `Unsupported client type '${clientConfig.type}' for '${name}'`,
+        );
+      }
     }
 
     const transport = transportManager.getOrCreate(sessionId || "default");

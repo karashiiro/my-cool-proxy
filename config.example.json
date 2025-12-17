@@ -1,0 +1,19 @@
+{
+  "port": 3000,
+  "host": "localhost",
+  "useOAuth": false,
+  "mcpClients": {
+    "mcp-docs": {
+      "type": "http",
+      "url": "https://modelcontextprotocol.io/mcp"
+    },
+    "local-server": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["path/to/server.js"],
+      "env": {
+        "NODE_ENV": "production"
+      }
+    }
+  }
+}
