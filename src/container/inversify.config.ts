@@ -4,11 +4,13 @@ import { TYPES } from "../types/index.js";
 import type {
   ILuaRuntime,
   IMCPClientManager,
+  ITransportManager,
   ILogger,
   ServerConfig,
 } from "../types/interfaces.js";
 import { WasmoonRuntime } from "../lua/runtime.js";
 import { MCPClientManager } from "../mcp/client-manager.js";
+import { TransportManager } from "../mcp/transport-manager.js";
 import { ConsoleLogger } from "../utils/logger.js";
 
 export function createContainer(config: ServerConfig): Container {
@@ -30,6 +32,12 @@ export function createContainer(config: ServerConfig): Container {
   container
     .bind<IMCPClientManager>(TYPES.MCPClientManager)
     .to(MCPClientManager)
+    .inSingletonScope();
+
+  // Bind transport manager
+  container
+    .bind<ITransportManager>(TYPES.TransportManager)
+    .to(TransportManager)
     .inSingletonScope();
 
   return container;

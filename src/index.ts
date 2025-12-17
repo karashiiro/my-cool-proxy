@@ -4,13 +4,12 @@ import { TYPES } from "./types/index.js";
 import type {
   ILuaRuntime,
   IMCPClientManager,
+  ITransportManager,
   ILogger,
   ServerConfig,
 } from "./types/interfaces.js";
 import { MCPGatewayServer } from "./mcp/gateway-server.js";
 import { createMcpExpressApp } from "@modelcontextprotocol/sdk/server/express.js";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { randomUUID } from "crypto";
 
 const config: ServerConfig = {
   port: parseInt(process.env.PORT || "3000"),
@@ -31,12 +30,16 @@ async function main() {
   // Initialize Lua runtime with MCP bridge
   const luaRuntime = container.get<ILuaRuntime>(TYPES.LuaRuntime);
 
+  // Initialize transport manager
+  const transportManager = container.get<ITransportManager>(
+    TYPES.TransportManager,
+  );
+
   // Create gateway server
   const gatewayServer = new MCPGatewayServer(luaRuntime, clientPool, logger);
 
   // Setup Express app
   const app = createMcpExpressApp();
-  const transports = new Map<string, StreamableHTTPServerTransport>();
 
   app.post("/mcp", async (req, res) => {
     const sessionId = req.headers["mcp-session-id"] as string | undefined;
@@ -45,26 +48,10 @@ async function main() {
       await clientPool.addClient(name, endpoint, sessionId || "default");
     }
 
-    // TODO: Create transport manager
-    let transport: StreamableHTTPServerTransport;
-    if (sessionId && transports.has(sessionId)) {
-      transport = transports.get(sessionId)!;
-    } else {
-      transport = new StreamableHTTPServerTransport({
-        sessionIdGenerator: () => randomUUID(),
-        onsessioninitialized: (sid) => {
-          logger.info(`Session initialized: ${sid}`);
-          transports.set(sid, transport);
-        },
-      });
+    const transport = transportManager.getOrCreate(sessionId || "default");
 
-      transport.onclose = () => {
-        const sid = transport.sessionId;
-        if (sid) transports.delete(sid);
-        // TODO: Clean up MCP clients for this session
-        logger.info(`Session closed: ${sid}`);
-      };
-
+    // Only connect if this is a new transport
+    if (!transport.sessionId) {
       await gatewayServer.getServer().connect(transport);
     }
 
@@ -80,6 +67,7 @@ async function main() {
   // Graceful shutdown
   process.on("SIGINT", async () => {
     logger.info("Shutting down...");
+    await transportManager.closeAll();
     await clientPool.close();
     await luaRuntime.close();
     process.exit(0);
