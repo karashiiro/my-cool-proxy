@@ -59,15 +59,22 @@ export class MCPGatewayServer {
   }
 
   private setupTools(): void {
-    // Tool to execute Lua scripts
-    // TODO: Improve name/desc/args
+    // Tool to execute Lua scripts with access to MCP servers
     this.server.registerTool(
-      "execute-lua",
+      "execute",
       {
-        description:
-          "Execute a Lua script with access to MCP servers. Assign the result to 'result' global variable.",
+        description: `Execute a Lua script that can call tools on available MCP servers.
+MCP servers are available as globals with their Lua identifiers.
+Use list-servers to see available servers and their tools.
+To return a value, assign it to the 'result' global variable.
+Example: result = server_name.tool_name({ arg = "value" })`,
         inputSchema: {
-          script: z.string().describe("Lua script to execute"),
+          script: z
+            .string()
+            .describe(
+              "Lua script to execute. Available servers are accessible as global variables. " +
+                "Set 'result' variable to return a value from the script.",
+            ),
         },
       },
       async ({ script }, { sessionId }): Promise<CallToolResult> => {
@@ -83,7 +90,10 @@ export class MCPGatewayServer {
             content: [
               {
                 type: "text",
-                text: `Script executed successfully: ${JSON.stringify(result)}`,
+                text:
+                  result !== undefined
+                    ? `Script executed successfully.\n\nResult:\n${JSON.stringify(result, null, 2)}`
+                    : "Script executed successfully. No result returned.",
               },
             ],
           };
@@ -92,7 +102,7 @@ export class MCPGatewayServer {
             content: [
               {
                 type: "text",
-                text: `Script execution failed: ${error}`,
+                text: `Script execution failed:\n${error}`,
               },
             ],
             isError: true,
