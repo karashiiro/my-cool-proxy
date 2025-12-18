@@ -2,6 +2,10 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { MCPClientSession } from "./client-session.js";
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { ILogger } from "../types/interfaces.js";
+import {
+  ToolListChangedNotificationSchema,
+  ResourceListChangedNotificationSchema,
+} from "@modelcontextprotocol/sdk/types.js";
 
 // Mock logger
 const createMockLogger = (): ILogger => ({
@@ -19,6 +23,7 @@ describe("MCPClientSession", () => {
     logger = createMockLogger();
     mockClient = {
       listTools: vi.fn(),
+      listResources: vi.fn(),
       close: vi.fn(),
       setNotificationHandler: vi.fn(),
       experimental: { someProperty: "test-value" },
@@ -709,7 +714,9 @@ describe("MCPClientSession", () => {
       let notificationHandler: (() => Promise<void>) | undefined;
       vi.mocked(mockClient.setNotificationHandler).mockImplementation(
         (schema, handler) => {
-          notificationHandler = handler as () => Promise<void>;
+          if (schema === ToolListChangedNotificationSchema) {
+            notificationHandler = handler as () => Promise<void>;
+          }
         },
       );
 
@@ -762,7 +769,9 @@ describe("MCPClientSession", () => {
       let notificationHandler: (() => Promise<void>) | undefined;
       vi.mocked(mockClient.setNotificationHandler).mockImplementation(
         (schema, handler) => {
-          notificationHandler = handler as () => Promise<void>;
+          if (schema === ToolListChangedNotificationSchema) {
+            notificationHandler = handler as () => Promise<void>;
+          }
         },
       );
 
@@ -866,6 +875,587 @@ describe("MCPClientSession", () => {
       expect(logger.error).toHaveBeenCalledWith(
         expect.stringContaining("Server 'server-two':"),
       );
+    });
+  });
+
+  describe("resource list caching", () => {
+    describe("basic resource listing", () => {
+      it("should list resources when no pagination", async () => {
+        const mockResponse = {
+          resources: [
+            {
+              uri: "file:///test1.txt",
+              name: "Test File 1",
+              description: "First test file",
+              mimeType: "text/plain",
+            },
+            {
+              uri: "file:///test2.txt",
+              name: "Test File 2",
+              description: "Second test file",
+              mimeType: "text/plain",
+            },
+          ],
+        };
+
+        vi.mocked(mockClient.listResources).mockResolvedValue(mockResponse);
+
+        const session = new MCPClientSession(
+          mockClient,
+          serverName,
+          undefined,
+          logger,
+        );
+
+        const result = await session.listResources();
+
+        expect(result.resources).toHaveLength(2);
+        expect(result.resources[0]?.uri).toBe("file:///test1.txt");
+        expect(result.resources[1]?.uri).toBe("file:///test2.txt");
+        expect(mockClient.listResources).toHaveBeenCalledTimes(1);
+        expect(mockClient.listResources).toHaveBeenCalledWith(undefined);
+        expect(logger.info).not.toHaveBeenCalled();
+        expect(logger.error).not.toHaveBeenCalled();
+      });
+
+      it("should preserve resource metadata", async () => {
+        const mockResponse = {
+          resources: [
+            {
+              uri: "file:///data.json",
+              name: "Data",
+              mimeType: "application/json",
+            },
+          ],
+          _meta: { version: "2.0", timestamp: "2024-01-01" },
+        };
+
+        vi.mocked(mockClient.listResources).mockResolvedValue(mockResponse);
+
+        const session = new MCPClientSession(
+          mockClient,
+          serverName,
+          undefined,
+          logger,
+        );
+
+        const result = await session.listResources();
+
+        expect(result._meta).toEqual({
+          version: "2.0",
+          timestamp: "2024-01-01",
+        });
+        expect(result.resources).toHaveLength(1);
+      });
+
+      it("should handle empty resource list", async () => {
+        const mockResponse = {
+          resources: [],
+        };
+
+        vi.mocked(mockClient.listResources).mockResolvedValue(mockResponse);
+
+        const session = new MCPClientSession(
+          mockClient,
+          serverName,
+          undefined,
+          logger,
+        );
+
+        const result = await session.listResources();
+
+        expect(result.resources).toEqual([]);
+        expect(mockClient.listResources).toHaveBeenCalledTimes(1);
+        expect(logger.error).not.toHaveBeenCalled();
+      });
+    });
+
+    describe("pagination handling", () => {
+      it("should fetch single page when no cursor", async () => {
+        const mockResponse = {
+          resources: [
+            {
+              uri: "file:///page1.txt",
+              name: "Page 1",
+              mimeType: "text/plain",
+            },
+          ],
+        };
+
+        vi.mocked(mockClient.listResources).mockResolvedValue(mockResponse);
+
+        const session = new MCPClientSession(
+          mockClient,
+          serverName,
+          undefined,
+          logger,
+        );
+
+        const result = await session.listResources();
+
+        expect(mockClient.listResources).toHaveBeenCalledTimes(1);
+        expect(mockClient.listResources).toHaveBeenCalledWith(undefined);
+        expect(result.resources).toHaveLength(1);
+        expect(result.nextCursor).toBeUndefined();
+      });
+
+      it("should fetch all pages when pagination present", async () => {
+        const mockResponse1 = {
+          resources: [
+            {
+              uri: "file:///page1-item1.txt",
+              name: "Page 1 Item 1",
+              mimeType: "text/plain",
+            },
+            {
+              uri: "file:///page1-item2.txt",
+              name: "Page 1 Item 2",
+              mimeType: "text/plain",
+            },
+          ],
+          nextCursor: "cursor1",
+        };
+
+        const mockResponse2 = {
+          resources: [
+            {
+              uri: "file:///page2-item1.txt",
+              name: "Page 2 Item 1",
+              mimeType: "text/plain",
+            },
+            {
+              uri: "file:///page2-item2.txt",
+              name: "Page 2 Item 2",
+              mimeType: "text/plain",
+            },
+            {
+              uri: "file:///page2-item3.txt",
+              name: "Page 2 Item 3",
+              mimeType: "text/plain",
+            },
+          ],
+          nextCursor: "cursor2",
+        };
+
+        const mockResponse3 = {
+          resources: [
+            {
+              uri: "file:///page3-item1.txt",
+              name: "Page 3 Item 1",
+              mimeType: "text/plain",
+            },
+          ],
+          _meta: { finalPage: true },
+        };
+
+        vi.mocked(mockClient.listResources)
+          .mockResolvedValueOnce(mockResponse1)
+          .mockResolvedValueOnce(mockResponse2)
+          .mockResolvedValueOnce(mockResponse3);
+
+        const session = new MCPClientSession(
+          mockClient,
+          serverName,
+          undefined,
+          logger,
+        );
+
+        const result = await session.listResources();
+
+        // Verify all three calls were made with correct parameters
+        expect(mockClient.listResources).toHaveBeenCalledTimes(3);
+        expect(mockClient.listResources).toHaveBeenNthCalledWith(1, undefined);
+        expect(mockClient.listResources).toHaveBeenNthCalledWith(2, {
+          cursor: "cursor1",
+        });
+        expect(mockClient.listResources).toHaveBeenNthCalledWith(3, {
+          cursor: "cursor2",
+        });
+
+        // Verify all resources are combined
+        expect(result.resources).toHaveLength(6);
+        expect(result.resources[0]?.uri).toBe("file:///page1-item1.txt");
+        expect(result.resources[2]?.uri).toBe("file:///page2-item1.txt");
+        expect(result.resources[5]?.uri).toBe("file:///page3-item1.txt");
+
+        // Verify no nextCursor in final result
+        expect(result.nextCursor).toBeUndefined();
+
+        // Verify metadata from last response is preserved
+        expect(result._meta).toEqual({ finalPage: true });
+      });
+
+      it("should handle many pages of resources", async () => {
+        // Create 10 pages of resources
+        const mockResponses = Array.from({ length: 10 }, (_, i) => ({
+          resources: [
+            {
+              uri: `file:///page${i + 1}.txt`,
+              name: `Page ${i + 1}`,
+              mimeType: "text/plain",
+            },
+          ],
+          nextCursor: i < 9 ? `cursor${i + 1}` : undefined,
+        }));
+
+        const mockFn = vi.mocked(mockClient.listResources);
+        mockResponses.forEach((response) => {
+          mockFn.mockResolvedValueOnce(response);
+        });
+
+        const session = new MCPClientSession(
+          mockClient,
+          serverName,
+          undefined,
+          logger,
+        );
+
+        const result = await session.listResources();
+
+        expect(mockClient.listResources).toHaveBeenCalledTimes(10);
+        expect(result.resources).toHaveLength(10);
+        expect(result.resources[0]?.uri).toBe("file:///page1.txt");
+        expect(result.resources[9]?.uri).toBe("file:///page10.txt");
+      });
+    });
+
+    describe("caching behavior", () => {
+      it("should cache resource list after first call", async () => {
+        const mockResponse = {
+          resources: [
+            {
+              uri: "file:///cached.txt",
+              name: "Cached File",
+              mimeType: "text/plain",
+            },
+          ],
+        };
+
+        vi.mocked(mockClient.listResources).mockResolvedValue(mockResponse);
+
+        const session = new MCPClientSession(
+          mockClient,
+          serverName,
+          undefined,
+          logger,
+        );
+
+        // First call should fetch from client
+        const result1 = await session.listResources();
+        expect(result1.resources).toHaveLength(1);
+        expect(mockClient.listResources).toHaveBeenCalledTimes(1);
+
+        // Second call should return cached result
+        const result2 = await session.listResources();
+        expect(result2.resources).toHaveLength(1);
+        expect(mockClient.listResources).toHaveBeenCalledTimes(1); // Still only 1 call
+
+        // Should log cache hit
+        expect(logger.debug).toHaveBeenCalledWith(
+          `Server '${serverName}': Returning cached resource list`,
+        );
+      });
+
+      it("should cache complete paginated results", async () => {
+        const mockResponse1 = {
+          resources: [
+            {
+              uri: "file:///page1.txt",
+              name: "Page 1",
+              mimeType: "text/plain",
+            },
+          ],
+          nextCursor: "cursor1",
+        };
+
+        const mockResponse2 = {
+          resources: [
+            {
+              uri: "file:///page2.txt",
+              name: "Page 2",
+              mimeType: "text/plain",
+            },
+          ],
+        };
+
+        vi.mocked(mockClient.listResources)
+          .mockResolvedValueOnce(mockResponse1)
+          .mockResolvedValueOnce(mockResponse2);
+
+        const session = new MCPClientSession(
+          mockClient,
+          serverName,
+          undefined,
+          logger,
+        );
+
+        // First call fetches both pages
+        const result1 = await session.listResources();
+        expect(result1.resources).toHaveLength(2);
+        expect(mockClient.listResources).toHaveBeenCalledTimes(2);
+
+        // Second call returns cached result with both pages
+        const result2 = await session.listResources();
+        expect(result2.resources).toHaveLength(2);
+        expect(mockClient.listResources).toHaveBeenCalledTimes(2); // No additional calls
+      });
+
+      it("should not refetch on multiple cache hits", async () => {
+        const mockResponse = {
+          resources: [
+            {
+              uri: "file:///test.txt",
+              name: "Test",
+              mimeType: "text/plain",
+            },
+          ],
+        };
+
+        vi.mocked(mockClient.listResources).mockResolvedValue(mockResponse);
+
+        const session = new MCPClientSession(
+          mockClient,
+          serverName,
+          undefined,
+          logger,
+        );
+
+        // First call fetches
+        await session.listResources();
+        expect(mockClient.listResources).toHaveBeenCalledTimes(1);
+
+        // Multiple subsequent calls use cache
+        await session.listResources();
+        await session.listResources();
+        await session.listResources();
+        await session.listResources();
+
+        expect(mockClient.listResources).toHaveBeenCalledTimes(1); // Still only 1 call
+        expect(logger.debug).toHaveBeenCalledTimes(4); // 4 cache hits
+      });
+    });
+
+    describe("cache invalidation", () => {
+      it("should invalidate cache when resource list changed notification received", async () => {
+        const mockResponse1 = {
+          resources: [
+            {
+              uri: "file:///original.txt",
+              name: "Original",
+              mimeType: "text/plain",
+            },
+          ],
+        };
+
+        const mockResponse2 = {
+          resources: [
+            {
+              uri: "file:///updated1.txt",
+              name: "Updated 1",
+              mimeType: "text/plain",
+            },
+            {
+              uri: "file:///updated2.txt",
+              name: "Updated 2",
+              mimeType: "text/plain",
+            },
+            {
+              uri: "file:///updated3.txt",
+              name: "Updated 3",
+              mimeType: "text/plain",
+            },
+          ],
+        };
+
+        vi.mocked(mockClient.listResources)
+          .mockResolvedValueOnce(mockResponse1)
+          .mockResolvedValueOnce(mockResponse2);
+
+        // Capture notification handler
+        let resourceNotificationHandler: (() => Promise<void>) | undefined;
+        vi.mocked(mockClient.setNotificationHandler).mockImplementation(
+          (schema, handler) => {
+            if (schema === ResourceListChangedNotificationSchema) {
+              resourceNotificationHandler = handler as () => Promise<void>;
+            }
+          },
+        );
+
+        const session = new MCPClientSession(
+          mockClient,
+          serverName,
+          undefined,
+          logger,
+        );
+
+        // First call should fetch
+        const result1 = await session.listResources();
+        expect(result1.resources).toHaveLength(1);
+        expect(mockClient.listResources).toHaveBeenCalledTimes(1);
+
+        // Second call should use cache
+        const result2 = await session.listResources();
+        expect(result2.resources).toHaveLength(1);
+        expect(mockClient.listResources).toHaveBeenCalledTimes(1);
+
+        // Trigger notification
+        expect(resourceNotificationHandler).toBeDefined();
+        await resourceNotificationHandler!();
+
+        // Should log cache invalidation
+        expect(logger.info).toHaveBeenCalledWith(
+          `Server '${serverName}': Resource list changed, invalidating cache`,
+        );
+
+        // Next call should fetch fresh data
+        const result3 = await session.listResources();
+        expect(result3.resources).toHaveLength(3);
+        expect(mockClient.listResources).toHaveBeenCalledTimes(2);
+      });
+
+      it("should handle multiple cache invalidations", async () => {
+        const mockResponse = {
+          resources: [
+            {
+              uri: "file:///test.txt",
+              name: "Test",
+              mimeType: "text/plain",
+            },
+          ],
+        };
+
+        vi.mocked(mockClient.listResources).mockResolvedValue(mockResponse);
+
+        // Capture notification handler
+        let resourceNotificationHandler: (() => Promise<void>) | undefined;
+        vi.mocked(mockClient.setNotificationHandler).mockImplementation(
+          (schema, handler) => {
+            if (schema === ResourceListChangedNotificationSchema) {
+              resourceNotificationHandler = handler as () => Promise<void>;
+            }
+          },
+        );
+
+        const session = new MCPClientSession(
+          mockClient,
+          serverName,
+          undefined,
+          logger,
+        );
+
+        // Fetch and cache
+        await session.listResources();
+        expect(mockClient.listResources).toHaveBeenCalledTimes(1);
+
+        // Invalidate multiple times
+        await resourceNotificationHandler!();
+        await resourceNotificationHandler!();
+        await resourceNotificationHandler!();
+
+        expect(logger.info).toHaveBeenCalledTimes(3);
+
+        // Next call should still fetch fresh
+        await session.listResources();
+        expect(mockClient.listResources).toHaveBeenCalledTimes(2);
+      });
+    });
+
+    describe("integration scenarios", () => {
+      it("should handle multiple listResources calls in sequence", async () => {
+        const mockResponse = {
+          resources: [
+            {
+              uri: "file:///resource1.txt",
+              name: "Resource 1",
+              mimeType: "text/plain",
+            },
+            {
+              uri: "file:///resource2.txt",
+              name: "Resource 2",
+              mimeType: "text/plain",
+            },
+          ],
+        };
+
+        vi.mocked(mockClient.listResources).mockResolvedValue(mockResponse);
+
+        const session = new MCPClientSession(
+          mockClient,
+          serverName,
+          undefined,
+          logger,
+        );
+
+        const result1 = await session.listResources();
+        expect(result1.resources).toHaveLength(2);
+
+        const result2 = await session.listResources();
+        expect(result2.resources).toHaveLength(2);
+
+        const result3 = await session.listResources();
+        expect(result3.resources).toHaveLength(2);
+
+        // Should only call once due to caching
+        expect(mockClient.listResources).toHaveBeenCalledTimes(1);
+
+        // Results should be consistent
+        expect(result1.resources[0]?.uri).toBe(result2.resources[0]?.uri);
+        expect(result2.resources[0]?.uri).toBe(result3.resources[0]?.uri);
+      });
+
+      it("should work correctly with different server names", async () => {
+        const mockResponse = {
+          resources: [
+            {
+              uri: "file:///test.txt",
+              name: "Test",
+              mimeType: "text/plain",
+            },
+          ],
+        };
+
+        vi.mocked(mockClient.listResources).mockResolvedValue(mockResponse);
+
+        // Capture notification handler
+        let resourceNotificationHandler: (() => Promise<void>) | undefined;
+        vi.mocked(mockClient.setNotificationHandler).mockImplementation(
+          (schema, handler) => {
+            if (schema === ResourceListChangedNotificationSchema) {
+              resourceNotificationHandler = handler as () => Promise<void>;
+            }
+          },
+        );
+
+        const session1 = new MCPClientSession(
+          mockClient,
+          "server-one",
+          undefined,
+          logger,
+        );
+
+        await session1.listResources();
+        await resourceNotificationHandler!();
+
+        expect(logger.info).toHaveBeenCalledWith(
+          expect.stringContaining("Server 'server-one':"),
+        );
+
+        vi.clearAllMocks();
+
+        const session2 = new MCPClientSession(
+          mockClient,
+          "server-two",
+          undefined,
+          logger,
+        );
+
+        await session2.listResources();
+        await resourceNotificationHandler!();
+
+        expect(logger.info).toHaveBeenCalledWith(
+          expect.stringContaining("Server 'server-two':"),
+        );
+      });
     });
   });
 });

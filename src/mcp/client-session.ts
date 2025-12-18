@@ -2,8 +2,10 @@ import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { ILogger } from "../types/interfaces.js";
 import {
   ToolListChangedNotificationSchema,
+  ResourceListChangedNotificationSchema,
   type Implementation,
   type ListToolsResult,
+  type ListResourcesResult,
 } from "@modelcontextprotocol/sdk/types.js";
 
 export class MCPClientSession {
@@ -12,6 +14,7 @@ export class MCPClientSession {
   private logger: ILogger;
   private serverName: string;
   private cachedToolList: ListToolsResult | undefined;
+  private cachedResourceList: ListResourcesResult | undefined;
 
   constructor(
     client: Client,
@@ -40,6 +43,17 @@ export class MCPClientSession {
         this.clearToolCache();
       },
     );
+
+    // Handle resources/list_changed notifications
+    this.client.setNotificationHandler(
+      ResourceListChangedNotificationSchema,
+      async () => {
+        this.logger.info(
+          `Server '${this.serverName}': Resource list changed, invalidating cache`,
+        );
+        this.clearResourceCache();
+      },
+    );
   }
 
   getServerVersion(): Implementation | undefined {
@@ -52,6 +66,10 @@ export class MCPClientSession {
 
   private clearToolCache(): void {
     this.cachedToolList = undefined;
+  }
+
+  private clearResourceCache(): void {
+    this.cachedResourceList = undefined;
   }
 
   // Wrap listTools to filter results
@@ -107,6 +125,46 @@ export class MCPClientSession {
     this.cachedToolList = filteredResponse;
 
     return filteredResponse;
+  }
+
+  async listResources() {
+    // Return cached response if available
+    if (this.cachedResourceList !== undefined) {
+      this.logger.debug(
+        `Server '${this.serverName}': Returning cached resource list`,
+      );
+      return this.cachedResourceList;
+    }
+
+    // Fetch all pages of resources
+    const allResources: ListResourcesResult["resources"] = [];
+    let nextCursor: string | undefined = undefined;
+    let response: ListResourcesResult;
+
+    do {
+      // Fetch current page
+      response = await this.client.listResources(
+        nextCursor ? { cursor: nextCursor } : undefined,
+      );
+
+      // Accumulate resources from this page
+      allResources.push(...response.resources);
+
+      // Update cursor for next iteration
+      nextCursor = response.nextCursor;
+    } while (nextCursor !== undefined);
+
+    // Create final response with all accumulated resources
+    const finalResponse: ListResourcesResult = {
+      ...response, // Preserves _meta from last response
+      resources: allResources,
+      nextCursor: undefined, // No cursor since we fetched everything
+    };
+
+    // Cache the complete response
+    this.cachedResourceList = finalResponse;
+
+    return finalResponse;
   }
 
   // Pass through other methods we need
