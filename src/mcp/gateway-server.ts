@@ -97,10 +97,18 @@ Example: result = server_name.tool_name({ arg = "value" }):await()`,
           );
 
           // Check if result is already a valid CallToolResult
-          const parseResult = CallToolResultSchema.safeParse(result);
-          if (parseResult.success) {
-            // Return the CallToolResult directly to preserve rich content (images, audio, etc.)
-            return parseResult.data;
+          // Only attempt to parse as CallToolResult if it explicitly has a content array
+          if (
+            result &&
+            typeof result === "object" &&
+            "content" in result &&
+            Array.isArray((result as Record<string, unknown>).content)
+          ) {
+            const parseResult = CallToolResultSchema.safeParse(result);
+            if (parseResult.success) {
+              // Return the CallToolResult directly to preserve rich content (images, audio, etc.)
+              return parseResult.data;
+            }
           }
 
           // If result is an object, return it as structuredContent (with JSON in text for backwards compatibility)
