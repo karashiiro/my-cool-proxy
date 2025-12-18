@@ -5,6 +5,7 @@ import type { ILogger } from "../types/interfaces.js";
 import {
   ToolListChangedNotificationSchema,
   ResourceListChangedNotificationSchema,
+  PromptListChangedNotificationSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 
 // Mock logger
@@ -24,6 +25,7 @@ describe("MCPClientSession", () => {
     mockClient = {
       listTools: vi.fn(),
       listResources: vi.fn(),
+      listPrompts: vi.fn(),
       close: vi.fn(),
       setNotificationHandler: vi.fn(),
       experimental: { someProperty: "test-value" },
@@ -1451,6 +1453,606 @@ describe("MCPClientSession", () => {
 
         await session2.listResources();
         await resourceNotificationHandler!();
+
+        expect(logger.info).toHaveBeenCalledWith(
+          expect.stringContaining("Server 'server-two':"),
+        );
+      });
+    });
+  });
+
+  describe("prompt list caching", () => {
+    describe("basic prompt listing", () => {
+      it("should list prompts when no pagination", async () => {
+        const mockResponse = {
+          prompts: [
+            {
+              name: "code-review",
+              title: "Code Review",
+              description: "Review code for best practices",
+              arguments: [
+                {
+                  name: "code",
+                  description: "The code to review",
+                  required: true,
+                },
+              ],
+            },
+            {
+              name: "summarize",
+              title: "Summarize Text",
+              description: "Create a summary of text",
+            },
+          ],
+        };
+
+        vi.mocked(mockClient.listPrompts).mockResolvedValue(mockResponse);
+
+        const session = new MCPClientSession(
+          mockClient,
+          serverName,
+          undefined,
+          logger,
+        );
+
+        const result = await session.listPrompts();
+
+        expect(result.prompts).toHaveLength(2);
+        expect(result.prompts[0]?.name).toBe("code-review");
+        expect(result.prompts[1]?.name).toBe("summarize");
+        expect(mockClient.listPrompts).toHaveBeenCalledTimes(1);
+        expect(mockClient.listPrompts).toHaveBeenCalledWith(undefined);
+        expect(logger.info).not.toHaveBeenCalled();
+        expect(logger.error).not.toHaveBeenCalled();
+      });
+
+      it("should preserve prompt metadata", async () => {
+        const mockResponse = {
+          prompts: [
+            {
+              name: "test-prompt",
+              description: "Test prompt",
+            },
+          ],
+          _meta: { version: "3.0", generator: "test" },
+        };
+
+        vi.mocked(mockClient.listPrompts).mockResolvedValue(mockResponse);
+
+        const session = new MCPClientSession(
+          mockClient,
+          serverName,
+          undefined,
+          logger,
+        );
+
+        const result = await session.listPrompts();
+
+        expect(result._meta).toEqual({ version: "3.0", generator: "test" });
+        expect(result.prompts).toHaveLength(1);
+      });
+
+      it("should handle empty prompt list", async () => {
+        const mockResponse = {
+          prompts: [],
+        };
+
+        vi.mocked(mockClient.listPrompts).mockResolvedValue(mockResponse);
+
+        const session = new MCPClientSession(
+          mockClient,
+          serverName,
+          undefined,
+          logger,
+        );
+
+        const result = await session.listPrompts();
+
+        expect(result.prompts).toEqual([]);
+        expect(mockClient.listPrompts).toHaveBeenCalledTimes(1);
+        expect(logger.error).not.toHaveBeenCalled();
+      });
+
+      it("should preserve prompt arguments", async () => {
+        const mockResponse = {
+          prompts: [
+            {
+              name: "multi-arg-prompt",
+              description: "Prompt with multiple arguments",
+              arguments: [
+                {
+                  name: "input",
+                  description: "Input text",
+                  required: true,
+                },
+                {
+                  name: "format",
+                  description: "Output format",
+                  required: false,
+                },
+              ],
+            },
+          ],
+        };
+
+        vi.mocked(mockClient.listPrompts).mockResolvedValue(mockResponse);
+
+        const session = new MCPClientSession(
+          mockClient,
+          serverName,
+          undefined,
+          logger,
+        );
+
+        const result = await session.listPrompts();
+
+        expect(result.prompts[0]?.arguments).toHaveLength(2);
+        expect(result.prompts[0]?.arguments?.[0]?.required).toBe(true);
+        expect(result.prompts[0]?.arguments?.[1]?.required).toBe(false);
+      });
+    });
+
+    describe("pagination handling", () => {
+      it("should fetch single page when no cursor", async () => {
+        const mockResponse = {
+          prompts: [
+            {
+              name: "prompt1",
+              description: "First prompt",
+            },
+          ],
+        };
+
+        vi.mocked(mockClient.listPrompts).mockResolvedValue(mockResponse);
+
+        const session = new MCPClientSession(
+          mockClient,
+          serverName,
+          undefined,
+          logger,
+        );
+
+        const result = await session.listPrompts();
+
+        expect(mockClient.listPrompts).toHaveBeenCalledTimes(1);
+        expect(mockClient.listPrompts).toHaveBeenCalledWith(undefined);
+        expect(result.prompts).toHaveLength(1);
+        expect(result.nextCursor).toBeUndefined();
+      });
+
+      it("should fetch all pages when pagination present", async () => {
+        const mockResponse1 = {
+          prompts: [
+            {
+              name: "prompt1",
+              description: "Prompt 1",
+            },
+            {
+              name: "prompt2",
+              description: "Prompt 2",
+            },
+          ],
+          nextCursor: "cursor1",
+        };
+
+        const mockResponse2 = {
+          prompts: [
+            {
+              name: "prompt3",
+              description: "Prompt 3",
+            },
+            {
+              name: "prompt4",
+              description: "Prompt 4",
+            },
+            {
+              name: "prompt5",
+              description: "Prompt 5",
+            },
+          ],
+          nextCursor: "cursor2",
+        };
+
+        const mockResponse3 = {
+          prompts: [
+            {
+              name: "prompt6",
+              description: "Prompt 6",
+            },
+          ],
+          _meta: { lastPage: true },
+        };
+
+        vi.mocked(mockClient.listPrompts)
+          .mockResolvedValueOnce(mockResponse1)
+          .mockResolvedValueOnce(mockResponse2)
+          .mockResolvedValueOnce(mockResponse3);
+
+        const session = new MCPClientSession(
+          mockClient,
+          serverName,
+          undefined,
+          logger,
+        );
+
+        const result = await session.listPrompts();
+
+        // Verify all three calls were made with correct parameters
+        expect(mockClient.listPrompts).toHaveBeenCalledTimes(3);
+        expect(mockClient.listPrompts).toHaveBeenNthCalledWith(1, undefined);
+        expect(mockClient.listPrompts).toHaveBeenNthCalledWith(2, {
+          cursor: "cursor1",
+        });
+        expect(mockClient.listPrompts).toHaveBeenNthCalledWith(3, {
+          cursor: "cursor2",
+        });
+
+        // Verify all prompts are combined
+        expect(result.prompts).toHaveLength(6);
+        expect(result.prompts[0]?.name).toBe("prompt1");
+        expect(result.prompts[2]?.name).toBe("prompt3");
+        expect(result.prompts[5]?.name).toBe("prompt6");
+
+        // Verify no nextCursor in final result
+        expect(result.nextCursor).toBeUndefined();
+
+        // Verify metadata from last response is preserved
+        expect(result._meta).toEqual({ lastPage: true });
+      });
+
+      it("should handle many pages of prompts", async () => {
+        // Create 10 pages of prompts
+        const mockResponses = Array.from({ length: 10 }, (_, i) => ({
+          prompts: [
+            {
+              name: `prompt-${i + 1}`,
+              description: `Prompt ${i + 1}`,
+            },
+          ],
+          nextCursor: i < 9 ? `cursor${i + 1}` : undefined,
+        }));
+
+        const mockFn = vi.mocked(mockClient.listPrompts);
+        mockResponses.forEach((response) => {
+          mockFn.mockResolvedValueOnce(response);
+        });
+
+        const session = new MCPClientSession(
+          mockClient,
+          serverName,
+          undefined,
+          logger,
+        );
+
+        const result = await session.listPrompts();
+
+        expect(mockClient.listPrompts).toHaveBeenCalledTimes(10);
+        expect(result.prompts).toHaveLength(10);
+        expect(result.prompts[0]?.name).toBe("prompt-1");
+        expect(result.prompts[9]?.name).toBe("prompt-10");
+      });
+    });
+
+    describe("caching behavior", () => {
+      it("should cache prompt list after first call", async () => {
+        const mockResponse = {
+          prompts: [
+            {
+              name: "cached-prompt",
+              description: "Cached prompt",
+            },
+          ],
+        };
+
+        vi.mocked(mockClient.listPrompts).mockResolvedValue(mockResponse);
+
+        const session = new MCPClientSession(
+          mockClient,
+          serverName,
+          undefined,
+          logger,
+        );
+
+        // First call should fetch from client
+        const result1 = await session.listPrompts();
+        expect(result1.prompts).toHaveLength(1);
+        expect(mockClient.listPrompts).toHaveBeenCalledTimes(1);
+
+        // Second call should return cached result
+        const result2 = await session.listPrompts();
+        expect(result2.prompts).toHaveLength(1);
+        expect(mockClient.listPrompts).toHaveBeenCalledTimes(1); // Still only 1 call
+
+        // Should log cache hit
+        expect(logger.debug).toHaveBeenCalledWith(
+          `Server '${serverName}': Returning cached prompt list`,
+        );
+      });
+
+      it("should cache complete paginated results", async () => {
+        const mockResponse1 = {
+          prompts: [
+            {
+              name: "prompt-page1",
+              description: "Page 1",
+            },
+          ],
+          nextCursor: "cursor1",
+        };
+
+        const mockResponse2 = {
+          prompts: [
+            {
+              name: "prompt-page2",
+              description: "Page 2",
+            },
+          ],
+        };
+
+        vi.mocked(mockClient.listPrompts)
+          .mockResolvedValueOnce(mockResponse1)
+          .mockResolvedValueOnce(mockResponse2);
+
+        const session = new MCPClientSession(
+          mockClient,
+          serverName,
+          undefined,
+          logger,
+        );
+
+        // First call fetches both pages
+        const result1 = await session.listPrompts();
+        expect(result1.prompts).toHaveLength(2);
+        expect(mockClient.listPrompts).toHaveBeenCalledTimes(2);
+
+        // Second call returns cached result with both pages
+        const result2 = await session.listPrompts();
+        expect(result2.prompts).toHaveLength(2);
+        expect(mockClient.listPrompts).toHaveBeenCalledTimes(2); // No additional calls
+      });
+
+      it("should not refetch on multiple cache hits", async () => {
+        const mockResponse = {
+          prompts: [
+            {
+              name: "test-prompt",
+              description: "Test",
+            },
+          ],
+        };
+
+        vi.mocked(mockClient.listPrompts).mockResolvedValue(mockResponse);
+
+        const session = new MCPClientSession(
+          mockClient,
+          serverName,
+          undefined,
+          logger,
+        );
+
+        // First call fetches
+        await session.listPrompts();
+        expect(mockClient.listPrompts).toHaveBeenCalledTimes(1);
+
+        // Multiple subsequent calls use cache
+        await session.listPrompts();
+        await session.listPrompts();
+        await session.listPrompts();
+        await session.listPrompts();
+
+        expect(mockClient.listPrompts).toHaveBeenCalledTimes(1); // Still only 1 call
+        expect(logger.debug).toHaveBeenCalledTimes(4); // 4 cache hits
+      });
+    });
+
+    describe("cache invalidation", () => {
+      it("should invalidate cache when prompt list changed notification received", async () => {
+        const mockResponse1 = {
+          prompts: [
+            {
+              name: "original-prompt",
+              description: "Original",
+            },
+          ],
+        };
+
+        const mockResponse2 = {
+          prompts: [
+            {
+              name: "updated-prompt1",
+              description: "Updated 1",
+            },
+            {
+              name: "updated-prompt2",
+              description: "Updated 2",
+            },
+            {
+              name: "updated-prompt3",
+              description: "Updated 3",
+            },
+          ],
+        };
+
+        vi.mocked(mockClient.listPrompts)
+          .mockResolvedValueOnce(mockResponse1)
+          .mockResolvedValueOnce(mockResponse2);
+
+        // Capture notification handler
+        let promptNotificationHandler: (() => Promise<void>) | undefined;
+        vi.mocked(mockClient.setNotificationHandler).mockImplementation(
+          (schema, handler) => {
+            if (schema === PromptListChangedNotificationSchema) {
+              promptNotificationHandler = handler as () => Promise<void>;
+            }
+          },
+        );
+
+        const session = new MCPClientSession(
+          mockClient,
+          serverName,
+          undefined,
+          logger,
+        );
+
+        // First call should fetch
+        const result1 = await session.listPrompts();
+        expect(result1.prompts).toHaveLength(1);
+        expect(mockClient.listPrompts).toHaveBeenCalledTimes(1);
+
+        // Second call should use cache
+        const result2 = await session.listPrompts();
+        expect(result2.prompts).toHaveLength(1);
+        expect(mockClient.listPrompts).toHaveBeenCalledTimes(1);
+
+        // Trigger notification
+        expect(promptNotificationHandler).toBeDefined();
+        await promptNotificationHandler!();
+
+        // Should log cache invalidation
+        expect(logger.info).toHaveBeenCalledWith(
+          `Server '${serverName}': Prompt list changed, invalidating cache`,
+        );
+
+        // Next call should fetch fresh data
+        const result3 = await session.listPrompts();
+        expect(result3.prompts).toHaveLength(3);
+        expect(mockClient.listPrompts).toHaveBeenCalledTimes(2);
+      });
+
+      it("should handle multiple cache invalidations", async () => {
+        const mockResponse = {
+          prompts: [
+            {
+              name: "test-prompt",
+              description: "Test",
+            },
+          ],
+        };
+
+        vi.mocked(mockClient.listPrompts).mockResolvedValue(mockResponse);
+
+        // Capture notification handler
+        let promptNotificationHandler: (() => Promise<void>) | undefined;
+        vi.mocked(mockClient.setNotificationHandler).mockImplementation(
+          (schema, handler) => {
+            if (schema === PromptListChangedNotificationSchema) {
+              promptNotificationHandler = handler as () => Promise<void>;
+            }
+          },
+        );
+
+        const session = new MCPClientSession(
+          mockClient,
+          serverName,
+          undefined,
+          logger,
+        );
+
+        // Fetch and cache
+        await session.listPrompts();
+        expect(mockClient.listPrompts).toHaveBeenCalledTimes(1);
+
+        // Invalidate multiple times
+        await promptNotificationHandler!();
+        await promptNotificationHandler!();
+        await promptNotificationHandler!();
+
+        expect(logger.info).toHaveBeenCalledTimes(3);
+
+        // Next call should still fetch fresh
+        await session.listPrompts();
+        expect(mockClient.listPrompts).toHaveBeenCalledTimes(2);
+      });
+    });
+
+    describe("integration scenarios", () => {
+      it("should handle multiple listPrompts calls in sequence", async () => {
+        const mockResponse = {
+          prompts: [
+            {
+              name: "prompt1",
+              description: "Prompt 1",
+            },
+            {
+              name: "prompt2",
+              description: "Prompt 2",
+            },
+          ],
+        };
+
+        vi.mocked(mockClient.listPrompts).mockResolvedValue(mockResponse);
+
+        const session = new MCPClientSession(
+          mockClient,
+          serverName,
+          undefined,
+          logger,
+        );
+
+        const result1 = await session.listPrompts();
+        expect(result1.prompts).toHaveLength(2);
+
+        const result2 = await session.listPrompts();
+        expect(result2.prompts).toHaveLength(2);
+
+        const result3 = await session.listPrompts();
+        expect(result3.prompts).toHaveLength(2);
+
+        // Should only call once due to caching
+        expect(mockClient.listPrompts).toHaveBeenCalledTimes(1);
+
+        // Results should be consistent
+        expect(result1.prompts[0]?.name).toBe(result2.prompts[0]?.name);
+        expect(result2.prompts[0]?.name).toBe(result3.prompts[0]?.name);
+      });
+
+      it("should work correctly with different server names", async () => {
+        const mockResponse = {
+          prompts: [
+            {
+              name: "test-prompt",
+              description: "Test",
+            },
+          ],
+        };
+
+        vi.mocked(mockClient.listPrompts).mockResolvedValue(mockResponse);
+
+        // Capture notification handler
+        let promptNotificationHandler: (() => Promise<void>) | undefined;
+        vi.mocked(mockClient.setNotificationHandler).mockImplementation(
+          (schema, handler) => {
+            if (schema === PromptListChangedNotificationSchema) {
+              promptNotificationHandler = handler as () => Promise<void>;
+            }
+          },
+        );
+
+        const session1 = new MCPClientSession(
+          mockClient,
+          "server-one",
+          undefined,
+          logger,
+        );
+
+        await session1.listPrompts();
+        await promptNotificationHandler!();
+
+        expect(logger.info).toHaveBeenCalledWith(
+          expect.stringContaining("Server 'server-one':"),
+        );
+
+        vi.clearAllMocks();
+
+        const session2 = new MCPClientSession(
+          mockClient,
+          "server-two",
+          undefined,
+          logger,
+        );
+
+        await session2.listPrompts();
+        await promptNotificationHandler!();
 
         expect(logger.info).toHaveBeenCalledWith(
           expect.stringContaining("Server 'server-two':"),

@@ -3,9 +3,11 @@ import type { ILogger } from "../types/interfaces.js";
 import {
   ToolListChangedNotificationSchema,
   ResourceListChangedNotificationSchema,
+  PromptListChangedNotificationSchema,
   type Implementation,
   type ListToolsResult,
   type ListResourcesResult,
+  type ListPromptsResult,
 } from "@modelcontextprotocol/sdk/types.js";
 
 export class MCPClientSession {
@@ -15,6 +17,7 @@ export class MCPClientSession {
   private serverName: string;
   private cachedToolList: ListToolsResult | undefined;
   private cachedResourceList: ListResourcesResult | undefined;
+  private cachedPromptList: ListPromptsResult | undefined;
 
   constructor(
     client: Client,
@@ -54,6 +57,17 @@ export class MCPClientSession {
         this.clearResourceCache();
       },
     );
+
+    // Handle prompts/list_changed notifications
+    this.client.setNotificationHandler(
+      PromptListChangedNotificationSchema,
+      async () => {
+        this.logger.info(
+          `Server '${this.serverName}': Prompt list changed, invalidating cache`,
+        );
+        this.clearPromptCache();
+      },
+    );
   }
 
   getServerVersion(): Implementation | undefined {
@@ -70,6 +84,10 @@ export class MCPClientSession {
 
   private clearResourceCache(): void {
     this.cachedResourceList = undefined;
+  }
+
+  private clearPromptCache(): void {
+    this.cachedPromptList = undefined;
   }
 
   // Wrap listTools to filter results
@@ -163,6 +181,46 @@ export class MCPClientSession {
 
     // Cache the complete response
     this.cachedResourceList = finalResponse;
+
+    return finalResponse;
+  }
+
+  async listPrompts() {
+    // Return cached response if available
+    if (this.cachedPromptList !== undefined) {
+      this.logger.debug(
+        `Server '${this.serverName}': Returning cached prompt list`,
+      );
+      return this.cachedPromptList;
+    }
+
+    // Fetch all pages of prompts
+    const allPrompts: ListPromptsResult["prompts"] = [];
+    let nextCursor: string | undefined = undefined;
+    let response: ListPromptsResult;
+
+    do {
+      // Fetch current page
+      response = await this.client.listPrompts(
+        nextCursor ? { cursor: nextCursor } : undefined,
+      );
+
+      // Accumulate prompts from this page
+      allPrompts.push(...response.prompts);
+
+      // Update cursor for next iteration
+      nextCursor = response.nextCursor;
+    } while (nextCursor !== undefined);
+
+    // Create final response with all accumulated prompts
+    const finalResponse: ListPromptsResult = {
+      ...response, // Preserves _meta from last response
+      prompts: allPrompts,
+      nextCursor: undefined, // No cursor since we fetched everything
+    };
+
+    // Cache the complete response
+    this.cachedPromptList = finalResponse;
 
     return finalResponse;
   }
