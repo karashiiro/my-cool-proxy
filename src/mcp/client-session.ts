@@ -2,6 +2,7 @@ import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { ILogger } from "../types/interfaces.js";
 import {
   ToolListChangedNotificationSchema,
+  type Implementation,
   type ListToolsResult,
 } from "@modelcontextprotocol/sdk/types.js";
 
@@ -39,6 +40,14 @@ export class MCPClientSession {
         this.clearToolCache();
       },
     );
+  }
+
+  getServerVersion(): Implementation | undefined {
+    return this.client.getServerVersion();
+  }
+
+  getInstructions(): string | undefined {
+    return this.client.getInstructions();
   }
 
   private clearToolCache(): void {

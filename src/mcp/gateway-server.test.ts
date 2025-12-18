@@ -11,6 +11,7 @@ import type {
   IMCPClientManager,
 } from "../types/interfaces.js";
 import * as z from "zod";
+import { MCPClientSession } from "./client-session.js";
 
 // Mock logger
 const createMockLogger = (): ILogger => ({
@@ -21,7 +22,7 @@ const createMockLogger = (): ILogger => ({
 
 // Mock client manager
 const createMockClientManager = (
-  clients: Map<string, Client>,
+  clients: Map<string, MCPClientSession>,
 ): IMCPClientManager => ({
   addHttpClient: vi.fn(),
   addStdioClient: vi.fn(),
@@ -38,7 +39,7 @@ async function createTestServer(
     description: string;
     handler: (args: Record<string, unknown>) => Promise<CallToolResult>;
   }>,
-): Promise<{ server: McpServer; client: Client }> {
+): Promise<{ server: McpServer; client: MCPClientSession }> {
   const server = new McpServer(
     {
       name,
@@ -85,7 +86,15 @@ async function createTestServer(
 
   await client.connect(clientTransport);
 
-  return { server, client };
+  // Wrap in MCPClientSession
+  const mcpClientSession = new MCPClientSession(
+    client,
+    name,
+    undefined,
+    createMockLogger(),
+  );
+
+  return { server, client: mcpClientSession };
 }
 
 describe("MCPGatewayServer - execute tool", () => {

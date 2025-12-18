@@ -1,10 +1,10 @@
-import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import type { MCPClientSession } from "../mcp/client-session.js";
 
 export interface ILuaRuntime {
   executeScript(
     script: string,
-    mcpServers: Map<string, Client>,
+    mcpServers: Map<string, MCPClientSession>,
   ): Promise<unknown>;
 }
 
@@ -24,8 +24,8 @@ export interface IMCPClientManager {
     env?: Record<string, string>,
     allowedTools?: string[],
   ): Promise<void>;
-  getClient(name: string, sessionId: string): Promise<Client>;
-  getClientsBySession(sessionId: string): Map<string, Client>;
+  getClient(name: string, sessionId: string): Promise<MCPClientSession>;
+  getClientsBySession(sessionId: string): Map<string, MCPClientSession>;
   close(): Promise<void>;
 }
 

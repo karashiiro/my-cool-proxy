@@ -2,7 +2,6 @@ import { injectable, inject } from "inversify";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { CallToolResultSchema } from "@modelcontextprotocol/sdk/types.js";
-import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import * as z from "zod";
 import type {
   ILuaRuntime,
@@ -12,6 +11,7 @@ import type {
 import { TYPES } from "../types/index.js";
 import { sanitizeLuaIdentifier } from "../utils/lua-identifier.js";
 import { formatSchema } from "../utils/schema-formatter.js";
+import type { MCPClientSession } from "./client-session.js";
 
 interface ServerInfo {
   luaIdentifier: string;
@@ -317,7 +317,9 @@ Example: result = server_name.tool_name({ arg = "value" }):await()`,
     this.logger.info("MCP gateway tools registered");
   }
 
-  private gatherServerInfo(mcpServers: Map<string, Client>): ServerListItem[] {
+  private gatherServerInfo(
+    mcpServers: Map<string, MCPClientSession>,
+  ): ServerListItem[] {
     const serverList: ServerListItem[] = [];
 
     for (const [originalName, client] of mcpServers.entries()) {
@@ -408,7 +410,7 @@ Example: result = server_name.tool_name({ arg = "value" }):await()`,
     return lines.join("\n");
   }
 
-  private async gatherToolInfo(client: Client): Promise<ToolInfo[]> {
+  private async gatherToolInfo(client: MCPClientSession): Promise<ToolInfo[]> {
     const toolsResponse = await client.listTools();
     const tools = toolsResponse.tools || [];
 
@@ -451,9 +453,9 @@ Example: result = server_name.tool_name({ arg = "value" }):await()`,
   }
 
   private findClientByLuaName(
-    mcpServers: Map<string, Client>,
+    mcpServers: Map<string, MCPClientSession>,
     luaName: string,
-  ): Client | null {
+  ): MCPClientSession | null {
     for (const [originalName, client] of mcpServers.entries()) {
       if (sanitizeLuaIdentifier(originalName) === luaName) {
         return client;

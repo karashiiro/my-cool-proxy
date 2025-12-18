@@ -8,7 +8,7 @@ import { MCPClientSession } from "./client-session.js";
 
 @injectable()
 export class MCPClientManager implements IMCPClientManager {
-  private clients = new Map<string, Client>();
+  private clients = new Map<string, MCPClientSession>();
 
   constructor(@inject(TYPES.Logger) private logger: ILogger) {}
 
@@ -51,7 +51,7 @@ export class MCPClientManager implements IMCPClientManager {
       this.logger,
     );
 
-    this.clients.set(key, wrappedClient as unknown as Client);
+    this.clients.set(key, wrappedClient);
 
     // Log configuration
     if (allowedTools !== undefined) {
@@ -106,7 +106,7 @@ export class MCPClientManager implements IMCPClientManager {
       this.logger,
     );
 
-    this.clients.set(key, wrappedClient as unknown as Client);
+    this.clients.set(key, wrappedClient);
 
     // Log configuration
     if (allowedTools !== undefined) {
@@ -120,7 +120,7 @@ export class MCPClientManager implements IMCPClientManager {
     );
   }
 
-  async getClient(name: string, sessionId: string): Promise<Client> {
+  async getClient(name: string, sessionId: string): Promise<MCPClientSession> {
     // TODO: Support creating sessionless clients on-demand
     const client = this.clients.get(`${name}-${sessionId}`);
     if (!client) {
@@ -129,13 +129,13 @@ export class MCPClientManager implements IMCPClientManager {
     return client;
   }
 
-  getClientsBySession(sessionId: string): Map<string, Client> {
+  getClientsBySession(sessionId: string): Map<string, MCPClientSession> {
     return new Map(
       Array.from(this.clients.entries())
         .filter(([key]) => key.endsWith(`-${sessionId}`))
         .map(([key, client]) => {
           const name = key.split(`-${sessionId}`)[0];
-          return [name, client] as [string, Client];
+          return [name, client] as [string, MCPClientSession];
         }),
     );
   }

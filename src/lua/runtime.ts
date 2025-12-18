@@ -1,10 +1,10 @@
 import { injectable, inject } from "inversify";
 import { LuaFactory, LuaEngine } from "wasmoon";
-import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { ILuaRuntime, ILogger } from "../types/interfaces.js";
 import { TYPES } from "../types/index.js";
 import { sanitizeLuaIdentifier } from "../utils/lua-identifier.js";
 import { takeResult } from "@modelcontextprotocol/sdk/experimental";
+import type { MCPClientSession } from "../mcp/client-session.js";
 
 @injectable()
 export class WasmoonRuntime implements ILuaRuntime {
@@ -16,7 +16,7 @@ export class WasmoonRuntime implements ILuaRuntime {
 
   async executeScript(
     script: string,
-    mcpServers: Map<string, Client>,
+    mcpServers: Map<string, MCPClientSession>,
   ): Promise<unknown> {
     const engine = await this.createEngine();
     try {
@@ -57,7 +57,7 @@ export class WasmoonRuntime implements ILuaRuntime {
 
   private async injectMCPServers(
     engine: LuaEngine,
-    mcpServers: Map<string, Client>,
+    mcpServers: Map<string, MCPClientSession>,
   ): Promise<void> {
     for (const [originalServerName, client] of mcpServers.entries()) {
       try {
