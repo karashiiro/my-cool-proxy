@@ -559,6 +559,7 @@ Example: result = server_name.tool_name({ arg = "value" }):await()`,
       case "boolean":
         return "true";
       case "array":
+        // This is Lua syntax for an empty table (array)
         return "{}";
       case "object":
         return "{}";
