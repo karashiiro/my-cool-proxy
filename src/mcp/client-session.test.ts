@@ -20,6 +20,7 @@ describe("MCPClientSession", () => {
     mockClient = {
       listTools: vi.fn(),
       close: vi.fn(),
+      setNotificationHandler: vi.fn(),
       experimental: { someProperty: "test-value" },
     } as unknown as Client;
   });
@@ -597,9 +598,45 @@ describe("MCPClientSession", () => {
     });
   });
 
-  describe("integration scenarios", () => {
-    it("should handle multiple listTools calls with same session", async () => {
-      const mockResponse1 = {
+  describe("tool list caching", () => {
+    it("should cache tool list after first call", async () => {
+      const mockResponse = {
+        tools: [
+          {
+            name: "tool1",
+            description: "Tool 1",
+            inputSchema: { type: "object" as const },
+          },
+        ],
+      };
+
+      vi.mocked(mockClient.listTools).mockResolvedValue(mockResponse);
+
+      const session = new MCPClientSession(
+        mockClient,
+        serverName,
+        undefined,
+        logger,
+      );
+
+      // First call should fetch from client
+      const result1 = await session.listTools();
+      expect(result1).toEqual(mockResponse);
+      expect(mockClient.listTools).toHaveBeenCalledTimes(1);
+
+      // Second call should return cached result
+      const result2 = await session.listTools();
+      expect(result2).toEqual(mockResponse);
+      expect(mockClient.listTools).toHaveBeenCalledTimes(1); // Still only 1 call
+
+      // Should log cache hit
+      expect(logger.debug).toHaveBeenCalledWith(
+        `Server '${serverName}': Returning cached tool list`,
+      );
+    });
+
+    it("should cache filtered tool list", async () => {
+      const mockResponse = {
         tools: [
           {
             name: "tool1",
@@ -609,6 +646,41 @@ describe("MCPClientSession", () => {
           {
             name: "tool2",
             description: "Tool 2",
+            inputSchema: { type: "object" as const },
+          },
+        ],
+      };
+
+      vi.mocked(mockClient.listTools).mockResolvedValue(mockResponse);
+
+      const session = new MCPClientSession(
+        mockClient,
+        serverName,
+        ["tool1"],
+        logger,
+      );
+
+      // First call should fetch and filter
+      const result1 = await session.listTools();
+      expect(result1.tools).toHaveLength(1);
+      expect(result1.tools[0]?.name).toBe("tool1");
+      expect(mockClient.listTools).toHaveBeenCalledTimes(1);
+
+      // Second call should return cached filtered result
+      const result2 = await session.listTools();
+      expect(result2.tools).toHaveLength(1);
+      expect(result2.tools[0]?.name).toBe("tool1");
+      expect(mockClient.listTools).toHaveBeenCalledTimes(1); // Still only 1 call
+    });
+  });
+
+  describe("cache invalidation", () => {
+    it("should invalidate cache when tool list changed notification is received", async () => {
+      const mockResponse1 = {
+        tools: [
+          {
+            name: "tool1",
+            description: "Tool 1",
             inputSchema: { type: "object" as const },
           },
         ],
@@ -626,17 +698,114 @@ describe("MCPClientSession", () => {
             description: "Tool 2",
             inputSchema: { type: "object" as const },
           },
-          {
-            name: "tool3",
-            description: "Tool 3",
-            inputSchema: { type: "object" as const },
-          },
         ],
       };
 
       vi.mocked(mockClient.listTools)
         .mockResolvedValueOnce(mockResponse1)
         .mockResolvedValueOnce(mockResponse2);
+
+      // Mock setNotificationHandler to capture the handler
+      let notificationHandler: (() => Promise<void>) | undefined;
+      vi.mocked(mockClient.setNotificationHandler).mockImplementation(
+        (schema, handler) => {
+          notificationHandler = handler as () => Promise<void>;
+        },
+      );
+
+      const session = new MCPClientSession(
+        mockClient,
+        serverName,
+        undefined,
+        logger,
+      );
+
+      // First call should fetch
+      const result1 = await session.listTools();
+      expect(result1.tools).toHaveLength(1);
+      expect(mockClient.listTools).toHaveBeenCalledTimes(1);
+
+      // Second call should use cache
+      const result2 = await session.listTools();
+      expect(result2.tools).toHaveLength(1);
+      expect(mockClient.listTools).toHaveBeenCalledTimes(1);
+
+      // Trigger notification
+      expect(notificationHandler).toBeDefined();
+      await notificationHandler!();
+
+      // Should log cache invalidation
+      expect(logger.info).toHaveBeenCalledWith(
+        `Server '${serverName}': Tool list changed, invalidating cache`,
+      );
+
+      // Next call should fetch fresh data
+      const result3 = await session.listTools();
+      expect(result3.tools).toHaveLength(2);
+      expect(mockClient.listTools).toHaveBeenCalledTimes(2);
+    });
+
+    it("should handle multiple cache invalidations", async () => {
+      const mockResponse = {
+        tools: [
+          {
+            name: "tool1",
+            description: "Tool 1",
+            inputSchema: { type: "object" as const },
+          },
+        ],
+      };
+
+      vi.mocked(mockClient.listTools).mockResolvedValue(mockResponse);
+
+      // Mock setNotificationHandler to capture the handler
+      let notificationHandler: (() => Promise<void>) | undefined;
+      vi.mocked(mockClient.setNotificationHandler).mockImplementation(
+        (schema, handler) => {
+          notificationHandler = handler as () => Promise<void>;
+        },
+      );
+
+      const session = new MCPClientSession(
+        mockClient,
+        serverName,
+        undefined,
+        logger,
+      );
+
+      // Fetch and cache
+      await session.listTools();
+      expect(mockClient.listTools).toHaveBeenCalledTimes(1);
+
+      // Invalidate multiple times
+      await notificationHandler!();
+      await notificationHandler!();
+      await notificationHandler!();
+
+      // Next call should still fetch fresh
+      await session.listTools();
+      expect(mockClient.listTools).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe("integration scenarios", () => {
+    it("should handle multiple listTools calls with same session", async () => {
+      const mockResponse = {
+        tools: [
+          {
+            name: "tool1",
+            description: "Tool 1",
+            inputSchema: { type: "object" as const },
+          },
+          {
+            name: "tool2",
+            description: "Tool 2",
+            inputSchema: { type: "object" as const },
+          },
+        ],
+      };
+
+      vi.mocked(mockClient.listTools).mockResolvedValue(mockResponse);
 
       const allowedTools = ["tool1", "tool2"];
       const session = new MCPClientSession(
@@ -653,7 +822,8 @@ describe("MCPClientSession", () => {
       expect(result2.tools).toHaveLength(2);
       expect(result2.tools.map((t) => t.name)).toEqual(["tool1", "tool2"]);
 
-      expect(mockClient.listTools).toHaveBeenCalledTimes(2);
+      // Should only call once due to caching
+      expect(mockClient.listTools).toHaveBeenCalledTimes(1);
     });
 
     it("should work correctly with different server names", async () => {
