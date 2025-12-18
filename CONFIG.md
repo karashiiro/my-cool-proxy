@@ -70,13 +70,18 @@ Each server in `mcpClients` is identified by its key (e.g., `"mcp-docs"`), which
 {
   "server-name": {
     "type": "http",
-    "url": "https://example.com/mcp"
+    "url": "https://example.com/mcp",
+    "headers": {
+      "Authorization": "Bearer your-token-here",
+      "X-Custom-Header": "value"
+    }
   }
 }
 ```
 
 - **type** (string): Must be `"http"`
 - **url** (string): HTTP endpoint URL for the MCP server
+- **headers** (object, optional): Custom HTTP headers to send with requests (e.g., for authentication)
 
 **Stdio Transport:**
 
@@ -132,6 +137,13 @@ To add additional MCP servers to your configuration:
     "mcp-docs": {
       "type": "http",
       "url": "https://modelcontextprotocol.io/mcp"
+    },
+    "authenticated-api": {
+      "type": "http",
+      "url": "https://api.example.com/mcp",
+      "headers": {
+        "Authorization": "Bearer secret-token"
+      }
     },
     "my-custom-server": {
       "type": "http",

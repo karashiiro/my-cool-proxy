@@ -13,6 +13,7 @@ export interface IMCPClientManager {
     name: string,
     endpoint: string,
     sessionId: string,
+    headers?: Record<string, string>,
   ): Promise<void>;
   addStdioClient(
     name: string,
@@ -53,6 +54,7 @@ export interface AuthInfo {
 export interface MCPClientConfigHTTP {
   type: "http";
   url: string;
+  headers?: Record<string, string>;
 }
 
 export interface MCPClientConfigStdio {

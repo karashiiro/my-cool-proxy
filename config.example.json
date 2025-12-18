@@ -7,6 +7,13 @@
       "type": "http",
       "url": "https://modelcontextprotocol.io/mcp"
     },
+    "authenticated-api": {
+      "type": "http",
+      "url": "https://api.example.com/mcp",
+      "headers": {
+        "Authorization": "Bearer your-token-here"
+      }
+    },
     "local-server": {
       "type": "stdio",
       "command": "node",

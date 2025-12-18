@@ -15,6 +15,7 @@ export class MCPClientManager implements IMCPClientManager {
     name: string,
     endpoint: string,
     sessionId: string,
+    headers?: Record<string, string>,
   ): Promise<void> {
     const key = `${name}-${sessionId}`;
     if (this.clients.has(key)) {
@@ -34,7 +35,9 @@ export class MCPClientManager implements IMCPClientManager {
       },
     );
 
-    const transport = new StreamableHTTPClientTransport(new URL(endpoint));
+    const transport = new StreamableHTTPClientTransport(new URL(endpoint), {
+      requestInit: headers ? { headers } : undefined,
+    });
     await client.connect(transport);
 
     this.clients.set(key, client);

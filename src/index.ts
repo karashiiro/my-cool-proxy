@@ -44,6 +44,7 @@ async function main() {
           name,
           clientConfig.url,
           sessionId || "default",
+          clientConfig.headers,
         );
       } else if (clientConfig.type === "stdio") {
         await clientPool.addStdioClient(
