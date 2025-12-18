@@ -5,6 +5,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import type { ILogger } from "../types/interfaces.js";
 import * as z from "zod";
+import { MCPClientSession } from "../mcp/client-session.js";
 
 // Mock logger
 const createMockLogger = (): ILogger => ({
@@ -21,7 +22,7 @@ async function createTestServer(
     description: string;
     handler: (args: Record<string, unknown>) => Promise<string>;
   }>,
-): Promise<{ server: McpServer; client: Client }> {
+): Promise<{ server: McpServer; client: MCPClientSession }> {
   const server = new McpServer(
     {
       name,
@@ -71,7 +72,15 @@ async function createTestServer(
 
   await client.connect(clientTransport);
 
-  return { server, client };
+  // Wrap in MCPClientSession
+  const mcpClientSession = new MCPClientSession(
+    client,
+    name,
+    undefined,
+    createMockLogger(),
+  );
+
+  return { server, client: mcpClientSession };
 }
 
 describe("WasmoonRuntime", () => {
@@ -505,7 +514,7 @@ describe("WasmoonRuntime", () => {
       // Create a bad client that throws on listTools
       const badClient = {
         listTools: vi.fn().mockRejectedValue(new Error("Failed to list tools")),
-      } as unknown as Client;
+      } as unknown as MCPClientSession;
 
       cleanupFns.push(async () => {
         await client.close();
