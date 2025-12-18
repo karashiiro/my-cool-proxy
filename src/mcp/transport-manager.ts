@@ -7,6 +7,11 @@ import { TYPES } from "../types/index.js";
 @injectable()
 export class TransportManager implements ITransportManager {
   private transports = new Map<string, StreamableHTTPServerTransport>();
+  // Track the original sessionId for each transport to clean up both entries
+  private transportToSessionId = new WeakMap<
+    StreamableHTTPServerTransport,
+    string
+  >();
 
   constructor(@inject(TYPES.Logger) private logger: ILogger) {}
 
@@ -26,11 +31,24 @@ export class TransportManager implements ITransportManager {
       },
     });
 
+    // Track the original sessionId for cleanup
+    this.transportToSessionId.set(transport, sessionId);
+
     transport.onclose = () => {
       const sid = transport.sessionId;
+      const originalSessionId = this.transportToSessionId.get(transport);
+
+      // Clean up both the generated sessionId and the original sessionId
       if (sid) {
         this.transports.delete(sid);
         this.logger.info(`Transport session closed: ${sid}`);
+      }
+
+      if (originalSessionId && originalSessionId !== sid) {
+        this.transports.delete(originalSessionId);
+        this.logger.info(
+          `Cleaned up original session reference: ${originalSessionId}`,
+        );
       }
     };
 
@@ -40,6 +58,20 @@ export class TransportManager implements ITransportManager {
 
   has(sessionId: string): boolean {
     return this.transports.has(sessionId);
+  }
+
+  getOrCreateForRequest(sessionId?: string): StreamableHTTPServerTransport {
+    // If session ID is provided and we have an existing transport for it, reuse it
+    if (sessionId && this.has(sessionId)) {
+      this.logger.debug(`Reusing transport for session ${sessionId}`);
+      return this.getOrCreate(sessionId);
+    }
+
+    // Otherwise, create a new transport with a unique key
+    // Each new client gets its own transport, even if they don't provide a session ID
+    const newSessionKey = `pending-${Date.now()}-${Math.random()}`;
+    this.logger.info(`Creating new transport for new connection`);
+    return this.getOrCreate(newSessionKey);
   }
 
   remove(sessionId: string): void {

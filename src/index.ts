@@ -29,21 +29,25 @@ async function main() {
     TYPES.TransportManager,
   );
 
-  // Create gateway server
-  const gatewayServer = new MCPGatewayServer(luaRuntime, clientPool, logger);
-
   // Setup Express app
   const app = createMcpExpressApp();
 
-  app.post("/mcp", async (req, res) => {
+  // Handle all HTTP methods (POST for messages, GET for SSE, DELETE for cleanup)
+  app.all("/mcp", async (req, res) => {
     const sessionId = req.headers["mcp-session-id"] as string | undefined;
+
+    // Get or create a transport for this request
+    const transport = transportManager.getOrCreateForRequest(sessionId);
+
+    // Get the session key for client manager (use transport's sessionId once initialized)
+    const clientSession = transport.sessionId || sessionId || "default";
 
     for (const [name, clientConfig] of Object.entries(config.mcpClients)) {
       if (clientConfig.type === "http") {
         await clientPool.addHttpClient(
           name,
           clientConfig.url,
-          sessionId || "default",
+          clientSession,
           clientConfig.headers,
           clientConfig.allowedTools,
         );
@@ -51,7 +55,7 @@ async function main() {
         await clientPool.addStdioClient(
           name,
           clientConfig.command,
-          sessionId || "default",
+          clientSession,
           clientConfig.args,
           clientConfig.env,
           clientConfig.allowedTools,
@@ -65,10 +69,17 @@ async function main() {
       }
     }
 
-    const transport = transportManager.getOrCreate(sessionId || "default");
-
-    // Only connect if this is a new transport
+    // Only connect a new gateway server if this is a new transport
+    // Once connected, the transport handles all subsequent requests automatically
     if (!transport.sessionId) {
+      logger.info(
+        `Creating new gateway server for session ${clientSession} (new transport)`,
+      );
+      const gatewayServer = new MCPGatewayServer(
+        luaRuntime,
+        clientPool,
+        logger,
+      );
       await gatewayServer.getServer().connect(transport);
     }
 
@@ -86,6 +97,7 @@ async function main() {
     logger.info("Shutting down...");
     await transportManager.closeAll();
     await clientPool.close();
+    // Gateway servers will be garbage collected when transports are destroyed
     process.exit(0);
   });
 }

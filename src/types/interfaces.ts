@@ -31,6 +31,7 @@ export interface IMCPClientManager {
 
 export interface ITransportManager {
   getOrCreate(sessionId: string): StreamableHTTPServerTransport;
+  getOrCreateForRequest(sessionId?: string): StreamableHTTPServerTransport;
   has(sessionId: string): boolean;
   remove(sessionId: string): void;
   closeAll(): Promise<void>;

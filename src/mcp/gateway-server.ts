@@ -67,7 +67,7 @@ export class MCPGatewayServer {
         description: `Execute a Lua script that can call tools on available MCP servers.
 MCP servers are available as globals with their Lua identifiers.
 Use list-servers to see available servers and their tools.
-To return a value, assign it to the 'result' global variable.
+To return a value, assign it to the 'result' global variable (WITHOUT 'local' keyword).
 Tool calls return promises - use :await() to get the result.
 Example: result = server_name.tool_name({ arg = "value" }):await()`,
         inputSchema: {
@@ -76,7 +76,7 @@ Example: result = server_name.tool_name({ arg = "value" }):await()`,
             .describe(
               "Lua script to execute. Available servers are accessible as global variables. " +
                 "Tool calls return promises, so use :await() to unwrap them. " +
-                "Set 'result' variable to return a value from the script.",
+                "Set 'result' variable to return a value from the script (do NOT use 'local result').",
             ),
         },
       },
