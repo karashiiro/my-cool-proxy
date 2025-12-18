@@ -3,8 +3,15 @@ import { LuaFactory, LuaEngine } from "wasmoon";
 import type { ILuaRuntime, ILogger } from "../types/interfaces.js";
 import { TYPES } from "../types/index.js";
 import { sanitizeLuaIdentifier } from "../utils/lua-identifier.js";
-import { takeResult } from "@modelcontextprotocol/sdk/experimental";
+import {
+  takeResult,
+  type ResponseMessage,
+} from "@modelcontextprotocol/sdk/experimental";
 import type { MCPClientSession } from "../mcp/client-session.js";
+import {
+  CallToolResultSchema,
+  type CallToolResult,
+} from "@modelcontextprotocol/sdk/types.js";
 
 @injectable()
 export class WasmoonRuntime implements ILuaRuntime {
@@ -84,12 +91,25 @@ export class WasmoonRuntime implements ILuaRuntime {
                   `(Lua: ${sanitizedServerName}.${sanitizedToolName}) with args:`,
                 args,
               );
-              const result = await takeResult(
-                client.experimental.tasks.callToolStream({
-                  name: originalToolName,
-                  arguments: (args as Record<string, unknown>) || {},
-                }),
+
+              const result = await takeResult<
+                CallToolResult,
+                AsyncGenerator<ResponseMessage<CallToolResult>>
+              >(
+                client.experimental.tasks.callToolStream(
+                  {
+                    name: originalToolName,
+                    arguments: (args as Record<string, unknown>) || {},
+                  },
+                  CallToolResultSchema,
+                ),
               );
+
+              if (result.structuredContent) {
+                // Directly return structured content as Lua table
+                return result.structuredContent;
+              }
+
               return result;
             } catch (error) {
               this.logger.error(

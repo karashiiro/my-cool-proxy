@@ -6,6 +6,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import type { ILogger } from "../types/interfaces.js";
 import * as z from "zod";
 import { MCPClientSession } from "../mcp/client-session.js";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 
 // Mock logger
 const createMockLogger = (): ILogger => ({
@@ -20,7 +21,7 @@ async function createTestServer(
   tools: Array<{
     name: string;
     description: string;
-    handler: (args: Record<string, unknown>) => Promise<string>;
+    handler: (args: Record<string, unknown>) => Promise<CallToolResult>;
   }>,
 ): Promise<{ server: McpServer; client: MCPClientSession }> {
   const server = new McpServer(
@@ -45,9 +46,7 @@ async function createTestServer(
       },
       async (args: Record<string, unknown>) => {
         const result = await tool.handler(args);
-        return {
-          content: [{ type: "text" as const, text: result }],
-        };
+        return result;
       },
     );
   }
@@ -240,7 +239,9 @@ describe("WasmoonRuntime", () => {
         {
           name: "test-tool",
           description: "A test tool",
-          handler: async () => "test result",
+          handler: async () => ({
+            content: [{ type: "text" as const, text: "test result" }],
+          }),
         },
       ]);
 
@@ -264,7 +265,9 @@ describe("WasmoonRuntime", () => {
         {
           name: "tool",
           description: "A tool",
-          handler: async () => "result",
+          handler: async () => ({
+            content: [{ type: "text" as const, text: "result" }],
+          }),
         },
       ]);
 
@@ -289,7 +292,9 @@ describe("WasmoonRuntime", () => {
         {
           name: "get-data",
           description: "Get data",
-          handler: async () => "data",
+          handler: async () => ({
+            content: [{ type: "text" as const, text: "data" }],
+          }),
         },
       ]);
 
@@ -313,12 +318,16 @@ describe("WasmoonRuntime", () => {
         {
           name: "get-data",
           description: "Get data",
-          handler: async () => "data",
+          handler: async () => ({
+            content: [{ type: "text" as const, text: "data" }],
+          }),
         },
         {
           name: "process.info",
           description: "Process info",
-          handler: async () => "info",
+          handler: async () => ({
+            content: [{ type: "text" as const, text: "info" }],
+          }),
         },
       ]);
 
@@ -347,7 +356,9 @@ describe("WasmoonRuntime", () => {
           {
             name: "tool1",
             description: "Tool 1",
-            handler: async () => "result1",
+            handler: async () => ({
+              content: [{ type: "text" as const, text: "result1" }],
+            }),
           },
         ],
       );
@@ -357,7 +368,9 @@ describe("WasmoonRuntime", () => {
           {
             name: "tool2",
             description: "Tool 2",
-            handler: async () => "result2",
+            handler: async () => ({
+              content: [{ type: "text" as const, text: "result2" }],
+            }),
           },
         ],
       );
@@ -390,7 +403,9 @@ describe("WasmoonRuntime", () => {
   describe("MCP tool calling", () => {
     it("should call MCP tool with arguments", async () => {
       const handler = vi.fn(async (args: Record<string, unknown>) => {
-        return JSON.stringify(args);
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify(args) }],
+        };
       });
 
       const { server, client } = await createTestServer("server", [
@@ -423,7 +438,9 @@ describe("WasmoonRuntime", () => {
         {
           name: "get-value",
           description: "Get value",
-          handler: async () => '{"result": 123}',
+          handler: async () => ({
+            content: [{ type: "text" as const, text: '{"result": 123}' }],
+          }),
         },
       ]);
 
@@ -445,7 +462,9 @@ describe("WasmoonRuntime", () => {
     });
 
     it("should call tools with empty arguments", async () => {
-      const handler = vi.fn(async () => "pong");
+      const handler = vi.fn(async () => ({
+        content: [{ type: "text" as const, text: "pong" }],
+      }));
 
       const { server, client } = await createTestServer("server", [
         {
@@ -470,6 +489,42 @@ describe("WasmoonRuntime", () => {
       await runtime.executeScript(script, servers);
 
       expect(handler).toHaveBeenCalledWith({});
+    });
+
+    it("should directly return structuredContent if present", async () => {
+      const { server, client } = await createTestServer("data-server", [
+        {
+          name: "fetch-data",
+          description: "Fetch data",
+          handler: async () => {
+            return {
+              content: [],
+              structuredContent: {
+                type: "article",
+                title: "Test Article",
+                body: "This is a test article.",
+              },
+            };
+          },
+        },
+      ]);
+
+      cleanupFns.push(async () => {
+        await client.close();
+        await server.close();
+      });
+
+      const servers = new Map([["data-server", client]]);
+      const script = `
+        result = data_server.fetch_data({}):await()
+      `;
+
+      const result = await runtime.executeScript(script, servers);
+      expect(result).toEqual({
+        type: "article",
+        title: "Test Article",
+        body: "This is a test article.",
+      });
     });
   });
 
@@ -507,7 +562,9 @@ describe("WasmoonRuntime", () => {
         {
           name: "tool",
           description: "A tool",
-          handler: async () => "result",
+          handler: async () => ({
+            content: [{ type: "text" as const, text: "result" }],
+          }),
         },
       ]);
 
@@ -548,7 +605,9 @@ describe("WasmoonRuntime", () => {
           {
             name: "get",
             description: "Get",
-            handler: async () => "data",
+            handler: async () => ({
+              content: [{ type: "text" as const, text: "data" }],
+            }),
           },
         ],
       );
@@ -558,7 +617,9 @@ describe("WasmoonRuntime", () => {
           {
             name: "process",
             description: "Process",
-            handler: async () => "processed",
+            handler: async () => ({
+              content: [{ type: "text" as const, text: "processed" }],
+            }),
           },
         ],
       );
@@ -594,7 +655,9 @@ describe("WasmoonRuntime", () => {
 
     it("should work with Lua control flow", async () => {
       const handler = vi.fn(async (args: Record<string, unknown>) => {
-        return `checked ${args.index}`;
+        return {
+          content: [{ type: "text" as const, text: `checked ${args.index}` }],
+        };
       });
 
       const { server, client } = await createTestServer("server", [
@@ -627,7 +690,9 @@ describe("WasmoonRuntime", () => {
 
     it("should handle nested tables in arguments", async () => {
       const handler = vi.fn(async (args: Record<string, unknown>) => {
-        return JSON.stringify(args);
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify(args) }],
+        };
       });
 
       const { server, client } = await createTestServer("api", [
