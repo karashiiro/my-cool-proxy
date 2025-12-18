@@ -439,7 +439,7 @@ describe("WasmoonRuntime", () => {
           name: "get-value",
           description: "Get value",
           handler: async () => ({
-            content: [{ type: "text" as const, text: '{"result": 123}' }],
+            content: [{ type: "text" as const, text: "Hello, world!" }],
           }),
         },
       ]);
@@ -457,7 +457,7 @@ describe("WasmoonRuntime", () => {
 
       const result = await runtime.executeScript(script, servers);
       expect(result).toEqual({
-        content: [{ type: "text", text: '{"result": 123}' }],
+        content: [{ type: "text", text: "Hello, world!" }],
       });
     });
 
@@ -525,6 +525,30 @@ describe("WasmoonRuntime", () => {
         title: "Test Article",
         body: "This is a test article.",
       });
+    });
+
+    it("should parse JSON results from tool calls", async () => {
+      const { server, client } = await createTestServer("json-server", [
+        {
+          name: "get-json",
+          description: "Get JSON",
+          handler: async () => ({
+            content: [{ type: "text" as const, text: '{"key": "value"}' }],
+          }),
+        },
+      ]);
+      cleanupFns.push(async () => {
+        await client.close();
+        await server.close();
+      });
+
+      const servers = new Map([["json-server", client]]);
+      const script = `
+        result = json_server.get_json({}):await()
+      `;
+
+      const result = await runtime.executeScript(script, servers);
+      expect(result).toEqual({ key: "value" });
     });
   });
 

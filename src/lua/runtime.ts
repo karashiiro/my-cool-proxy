@@ -110,6 +110,18 @@ export class WasmoonRuntime implements ILuaRuntime {
                 return result.structuredContent;
               }
 
+              if (
+                result.content.length === 1 &&
+                result.content[0]?.type === "text"
+              ) {
+                // If single text content, attempt to parse as JSON
+                try {
+                  return JSON.parse(result.content[0].text);
+                } catch {
+                  // ignored
+                }
+              }
+
               return result;
             } catch (error) {
               this.logger.error(
