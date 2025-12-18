@@ -1,6 +1,7 @@
 import { injectable, inject } from "inversify";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import { CallToolResultSchema } from "@modelcontextprotocol/sdk/types.js";
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import * as z from "zod";
 import type {
@@ -88,13 +89,35 @@ Example: result = server_name.tool_name({ arg = "value" }):await()`,
             script,
             mcpServers,
           );
+
+          // Check if result is already a valid CallToolResult
+          const parseResult = CallToolResultSchema.safeParse(result);
+          if (parseResult.success) {
+            // Return the CallToolResult directly to preserve rich content (images, audio, etc.)
+            return parseResult.data;
+          }
+
+          // If result is an object, return it as structuredContent (with JSON in text for backwards compatibility)
+          if (result !== null && typeof result === "object") {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify(result, null, 2),
+                },
+              ],
+              structuredContent: result as Record<string, unknown>,
+            };
+          }
+
+          // Otherwise, wrap the result in a text content block
           return {
             content: [
               {
                 type: "text",
                 text:
                   result !== undefined
-                    ? `Script executed successfully.\n\nResult:\n${JSON.stringify(result, null, 2)}`
+                    ? `Script executed successfully.\n\nResult:\n${result}`
                     : "Script executed successfully. No result returned.",
               },
             ],
