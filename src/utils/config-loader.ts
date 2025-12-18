@@ -58,6 +58,23 @@ export function loadConfig(): ServerConfig {
           `MCP client '${name}' has invalid type. Must be 'http' or 'stdio'`,
         );
       }
+
+      // Validate allowedTools if provided
+      if (clientConfig.allowedTools !== undefined) {
+        if (!Array.isArray(clientConfig.allowedTools)) {
+          throw new Error(
+            `MCP client '${name}' has invalid 'allowedTools'. Must be an array of strings`,
+          );
+        }
+
+        for (const tool of clientConfig.allowedTools) {
+          if (typeof tool !== "string") {
+            throw new Error(
+              `MCP client '${name}' has invalid tool in 'allowedTools'. All items must be strings`,
+            );
+          }
+        }
+      }
     }
 
     // Set defaults for optional fields

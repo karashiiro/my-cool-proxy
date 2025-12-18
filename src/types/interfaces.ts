@@ -14,6 +14,7 @@ export interface IMCPClientManager {
     endpoint: string,
     sessionId: string,
     headers?: Record<string, string>,
+    allowedTools?: string[],
   ): Promise<void>;
   addStdioClient(
     name: string,
@@ -21,6 +22,7 @@ export interface IMCPClientManager {
     sessionId: string,
     args?: string[],
     env?: Record<string, string>,
+    allowedTools?: string[],
   ): Promise<void>;
   getClient(name: string, sessionId: string): Promise<Client>;
   getClientsBySession(sessionId: string): Map<string, Client>;
@@ -55,6 +57,7 @@ export interface MCPClientConfigHTTP {
   type: "http";
   url: string;
   headers?: Record<string, string>;
+  allowedTools?: string[];
 }
 
 export interface MCPClientConfigStdio {
@@ -62,6 +65,7 @@ export interface MCPClientConfigStdio {
   command: string;
   args?: string[];
   env?: Record<string, string>;
+  allowedTools?: string[];
 }
 
 export type MCPClientConfig = MCPClientConfigHTTP | MCPClientConfigStdio;

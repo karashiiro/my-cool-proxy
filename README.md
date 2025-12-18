@@ -57,6 +57,7 @@ Add to your MCP client config (e.g., Claude Desktop):
 ### 5. Use It
 
 The proxy exposes these tools:
+
 - `execute` - Run Lua scripts that can call your configured MCP servers
 - `list-servers` - See available servers
 - `list-server-tools` - See tools for a server
@@ -75,6 +76,7 @@ result = { data = result }
 ## Transport Types
 
 **HTTP** - Connect to remote MCP servers:
+
 ```json
 {
   "type": "http",
@@ -86,6 +88,7 @@ result = { data = result }
 ```
 
 **Stdio** - Launch local MCP servers:
+
 ```json
 {
   "type": "stdio",

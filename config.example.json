@@ -12,7 +12,8 @@
       "url": "https://api.example.com/mcp",
       "headers": {
         "Authorization": "Bearer your-token-here"
-      }
+      },
+      "allowedTools": ["search", "get-document"]
     },
     "local-server": {
       "type": "stdio",
@@ -21,6 +22,12 @@
       "env": {
         "NODE_ENV": "production"
       }
+    },
+    "locked-down-server": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem"],
+      "allowedTools": []
     }
   }
 }

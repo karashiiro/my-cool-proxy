@@ -4,6 +4,7 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import type { ILogger, IMCPClientManager } from "../types/interfaces.js";
 import { TYPES } from "../types/index.js";
+import { MCPClientSession } from "./client-session.js";
 
 @injectable()
 export class MCPClientManager implements IMCPClientManager {
@@ -16,6 +17,7 @@ export class MCPClientManager implements IMCPClientManager {
     endpoint: string,
     sessionId: string,
     headers?: Record<string, string>,
+    allowedTools?: string[],
   ): Promise<void> {
     const key = `${name}-${sessionId}`;
     if (this.clients.has(key)) {
@@ -25,7 +27,8 @@ export class MCPClientManager implements IMCPClientManager {
       return;
     }
 
-    const client = new Client(
+    // Create underlying SDK client
+    const sdkClient = new Client(
       {
         name: "my-cool-proxy",
         version: "1.0.0",
@@ -38,9 +41,24 @@ export class MCPClientManager implements IMCPClientManager {
     const transport = new StreamableHTTPClientTransport(new URL(endpoint), {
       requestInit: headers ? { headers } : undefined,
     });
-    await client.connect(transport);
+    await sdkClient.connect(transport);
 
-    this.clients.set(key, client);
+    // Wrap in MCPClientSession
+    const wrappedClient = new MCPClientSession(
+      sdkClient,
+      name,
+      allowedTools,
+      this.logger,
+    );
+
+    this.clients.set(key, wrappedClient as unknown as Client);
+
+    // Log configuration
+    if (allowedTools !== undefined) {
+      this.logger.info(
+        `MCP client ${name} configured with tool filter: ${allowedTools.length === 0 ? "all tools blocked" : allowedTools.join(", ")}`,
+      );
+    }
 
     this.logger.info(`MCP client ${name} connected to ${endpoint}`);
   }
@@ -51,6 +69,7 @@ export class MCPClientManager implements IMCPClientManager {
     sessionId: string,
     args?: string[],
     env?: Record<string, string>,
+    allowedTools?: string[],
   ): Promise<void> {
     const key = `${name}-${sessionId}`;
     if (this.clients.has(key)) {
@@ -60,7 +79,8 @@ export class MCPClientManager implements IMCPClientManager {
       return;
     }
 
-    const client = new Client(
+    // Create underlying SDK client
+    const sdkClient = new Client(
       {
         name: "my-cool-proxy",
         version: "1.0.0",
@@ -76,9 +96,24 @@ export class MCPClientManager implements IMCPClientManager {
       env,
     });
 
-    await client.connect(transport);
+    await sdkClient.connect(transport);
 
-    this.clients.set(key, client);
+    // Wrap in MCPClientSession
+    const wrappedClient = new MCPClientSession(
+      sdkClient,
+      name,
+      allowedTools,
+      this.logger,
+    );
+
+    this.clients.set(key, wrappedClient as unknown as Client);
+
+    // Log configuration
+    if (allowedTools !== undefined) {
+      this.logger.info(
+        `MCP client ${name} configured with tool filter: ${allowedTools.length === 0 ? "all tools blocked" : allowedTools.join(", ")}`,
+      );
+    }
 
     this.logger.info(
       `MCP client ${name} connected to stdio process: ${command} ${args?.join(" ") || ""}`,

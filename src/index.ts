@@ -45,6 +45,7 @@ async function main() {
           clientConfig.url,
           sessionId || "default",
           clientConfig.headers,
+          clientConfig.allowedTools,
         );
       } else if (clientConfig.type === "stdio") {
         await clientPool.addStdioClient(
@@ -53,6 +54,7 @@ async function main() {
           sessionId || "default",
           clientConfig.args,
           clientConfig.env,
+          clientConfig.allowedTools,
         );
       } else {
         // This should never happen due to config validation, but handle it for safety
