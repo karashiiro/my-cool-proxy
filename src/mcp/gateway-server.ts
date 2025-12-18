@@ -68,10 +68,10 @@ export class MCPGatewayServer {
 MCP servers are available as globals with their Lua identifiers.
 
 Use list-servers to see available servers, list-server-tools to see the tools on a particular
-server, and tool-details to get full information for a single tool. Use tool-details at least once
-for each tool you want to call to understand its inputs and outputs.
+server, and tool-details to get full information for a single tool. You MUST use tool-details
+at least once for each tool you want to call to understand its inputs and outputs.
 
-Where possible, combine multiple tool calls into a single script to avoid returning unnecessary data.
+Wherever possible, combine multiple tool calls into a single script to avoid returning unnecessary data.
 
 To return a value, assign it to the 'result' global variable (WITHOUT 'local' keyword).
 Tool calls return promises - use :await() to get the result.
