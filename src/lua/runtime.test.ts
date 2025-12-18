@@ -4,7 +4,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import type { ILogger } from "../types/interfaces.js";
-import { z } from "zod";
+import * as z from "zod";
 
 // Mock logger
 const createMockLogger = (): ILogger => ({
