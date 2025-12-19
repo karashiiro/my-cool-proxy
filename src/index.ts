@@ -2,7 +2,6 @@ import "reflect-metadata";
 import { createContainer } from "./container/inversify.config.js";
 import { TYPES } from "./types/index.js";
 import type {
-  ILuaRuntime,
   IMCPClientManager,
   ITransportManager,
   ILogger,
@@ -20,9 +19,6 @@ async function main() {
 
   // Initialize MCP client pool
   const clientPool = container.get<IMCPClientManager>(TYPES.MCPClientManager);
-
-  // Initialize Lua runtime with MCP bridge
-  const luaRuntime = container.get<ILuaRuntime>(TYPES.LuaRuntime);
 
   // Initialize transport manager
   const transportManager = container.get<ITransportManager>(
@@ -75,11 +71,7 @@ async function main() {
       logger.info(
         `Creating new gateway server for session ${clientSession} (new transport)`,
       );
-      const gatewayServer = new MCPGatewayServer(
-        luaRuntime,
-        clientPool,
-        logger,
-      );
+      const gatewayServer = container.get(MCPGatewayServer);
       await gatewayServer.getServer().connect(transport);
     }
 

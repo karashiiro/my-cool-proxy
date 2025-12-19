@@ -1,14 +1,6 @@
 import { injectable, inject } from "inversify";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type {
-  CallToolResult,
-  ListResourcesResult,
-  ReadResourceResult,
-  Resource,
-  ListPromptsResult,
-  GetPromptResult,
-  Prompt,
-} from "@modelcontextprotocol/sdk/types.js";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import {
   CallToolResultSchema,
   ListResourcesRequestSchema,
@@ -23,37 +15,10 @@ import type {
   ILogger,
 } from "../types/interfaces.js";
 import { TYPES } from "../types/index.js";
-import { sanitizeLuaIdentifier } from "../utils/lua-identifier.js";
-import { formatSchema } from "../utils/schema-formatter.js";
-import {
-  namespaceResource,
-  parseResourceUri,
-  namespaceGetPromptResultResources,
-} from "../utils/resource-uri.js";
-import { namespacePrompt, parsePromptName } from "../utils/prompt-name.js";
-import type { MCPClientSession } from "./client-session.js";
-
-interface ServerInfo {
-  luaIdentifier: string;
-  serverInfo: {
-    name?: string;
-    description?: string;
-    version?: string;
-    instructions?: string;
-  };
-}
-
-interface ServerError {
-  luaIdentifier: string;
-  error: string;
-}
-
-type ServerListItem = ServerInfo | ServerError;
-
-interface ToolInfo {
-  luaName: string;
-  description: string;
-}
+import { ToolDiscoveryService } from "./tool-discovery-service.js";
+import { ResourceAggregationService } from "./resource-aggregation-service.js";
+import { PromptAggregationService } from "./prompt-aggregation-service.js";
+import { MCPFormatterService } from "./mcp-formatter-service.js";
 
 /**
  * Gateway server that aggregates multiple MCP servers and provides namespaced access.
@@ -88,23 +53,23 @@ interface ToolInfo {
 @injectable()
 export class MCPGatewayServer {
   private server: McpServer;
-  private resourceCache = new Map<
-    string,
-    { resources: Resource[]; timestamp: number }
-  >();
-  private promptCache = new Map<
-    string,
-    { prompts: Prompt[]; timestamp: number }
-  >();
+  private serverId = "my-cool-proxy";
 
   constructor(
     @inject(TYPES.LuaRuntime) private luaRuntime: ILuaRuntime,
     @inject(TYPES.MCPClientManager) private clientPool: IMCPClientManager,
     @inject(TYPES.Logger) private logger: ILogger,
+    @inject(TYPES.ToolDiscoveryService)
+    private toolDiscovery: ToolDiscoveryService,
+    @inject(TYPES.ResourceAggregationService)
+    private resourceAggregation: ResourceAggregationService,
+    @inject(TYPES.PromptAggregationService)
+    private promptAggregation: PromptAggregationService,
+    @inject(TYPES.MCPFormatterService) private formatter: MCPFormatterService,
   ) {
     this.server = new McpServer(
       {
-        name: "my-cool-proxy",
+        name: this.serverId,
         version: "1.0.0",
       },
       {
@@ -119,14 +84,19 @@ export class MCPGatewayServer {
     // Register handler for resource list changes from clients
     this.clientPool.setResourceListChangedHandler(
       (serverName: string, sessionId: string) => {
-        this.handleResourceListChanged(serverName, sessionId);
+        this.resourceAggregation.handleResourceListChanged(
+          serverName,
+          sessionId,
+        );
+        this.server.sendResourceListChanged();
       },
     );
 
     // Register handler for prompt list changes from clients
     this.clientPool.setPromptListChangedHandler(
       (serverName: string, sessionId: string) => {
-        this.handlePromptListChanged(serverName, sessionId);
+        this.promptAggregation.handlePromptListChanged(serverName, sessionId);
+        this.server.sendPromptListChanged();
       },
     );
 
@@ -170,8 +140,6 @@ Example: result(server_name.tool_name({ arg = "value" }):await())`,
             mcpServers,
           );
 
-          // Check if result is already a valid CallToolResult
-          // Only attempt to parse as CallToolResult if it explicitly has a content array
           if (
             result &&
             typeof result === "object" &&
@@ -179,26 +147,18 @@ Example: result(server_name.tool_name({ arg = "value" }):await())`,
             Array.isArray((result as Record<string, unknown>).content)
           ) {
             const parseResult = CallToolResultSchema.safeParse(result);
-            if (parseResult.success) {
-              // Return the CallToolResult directly to preserve rich content (images, audio, etc.)
-              return parseResult.data;
-            }
+            if (parseResult.success) return parseResult.data;
           }
 
-          // If result is an object, return it as structuredContent (with JSON in text for backwards compatibility)
           if (result !== null && typeof result === "object") {
             return {
               content: [
-                {
-                  type: "text",
-                  text: JSON.stringify(result, null, 2),
-                },
+                { type: "text", text: JSON.stringify(result, null, 2) },
               ],
               structuredContent: result as Record<string, unknown>,
             };
           }
 
-          // Otherwise, wrap the result in a text content block
           return {
             content: [
               {
@@ -213,10 +173,7 @@ Example: result(server_name.tool_name({ arg = "value" }):await())`,
         } catch (error) {
           return {
             content: [
-              {
-                type: "text",
-                text: `Script execution failed:\n${error}`,
-              },
+              { type: "text", text: `Script execution failed:\n${error}` },
             ],
             isError: true,
           };
@@ -232,29 +189,8 @@ Example: result(server_name.tool_name({ arg = "value" }):await())`,
           "List all available MCP servers for this session, including their Lua identifiers and server information",
         inputSchema: {},
       },
-      async (_, { sessionId }): Promise<CallToolResult> => {
-        try {
-          const mcpServers = this.clientPool.getClientsBySession(
-            sessionId || "default",
-          );
-          const serverList = this.gatherServerInfo(mcpServers);
-          const formattedOutput = this.formatServerList(
-            sessionId || "default",
-            serverList,
-          );
-
-          return {
-            content: [{ type: "text", text: formattedOutput }],
-          };
-        } catch (error) {
-          return {
-            content: [
-              { type: "text", text: `Failed to list servers: ${error}` },
-            ],
-            isError: true,
-          };
-        }
-      },
+      async (_, { sessionId }) =>
+        this.toolDiscovery.listServers(sessionId || "default"),
     );
 
     // Tool to list tools for a specific MCP server
@@ -269,50 +205,11 @@ Example: result(server_name.tool_name({ arg = "value" }):await())`,
             .describe("The Lua identifier of the MCP server to list tools for"),
         },
       },
-      async ({ luaServerName }, { sessionId }): Promise<CallToolResult> => {
-        try {
-          const mcpServers = this.clientPool.getClientsBySession(
-            sessionId || "default",
-          );
-          const client = this.findClientByLuaName(mcpServers, luaServerName);
-
-          if (!client) {
-            const availableServers = Array.from(mcpServers.keys()).map((name) =>
-              sanitizeLuaIdentifier(name),
-            );
-            const serverList =
-              availableServers.length > 0
-                ? availableServers.join(", ")
-                : "none";
-            return {
-              content: [
-                {
-                  type: "text",
-                  text: `Server '${luaServerName}' not found in session '${sessionId || "default"}'.\n\nAvailable servers: ${serverList}`,
-                },
-              ],
-              isError: true,
-            };
-          }
-
-          const tools = await this.gatherToolInfo(client);
-          const formattedOutput = this.formatToolList(luaServerName, tools);
-
-          return {
-            content: [{ type: "text", text: formattedOutput }],
-          };
-        } catch (error) {
-          return {
-            content: [
-              {
-                type: "text",
-                text: `Failed to list tools for server '${luaServerName}': ${error}`,
-              },
-            ],
-            isError: true,
-          };
-        }
-      },
+      async ({ luaServerName }, { sessionId }) =>
+        this.toolDiscovery.listServerTools(
+          luaServerName,
+          sessionId || "default",
+        ),
     );
 
     // Tool to get detailed info about a specific tool
@@ -328,311 +225,41 @@ Example: result(server_name.tool_name({ arg = "value" }):await())`,
           luaToolName: z.string().describe("The Lua identifier of the tool"),
         },
       },
-      async (
-        { luaServerName, luaToolName },
-        { sessionId },
-      ): Promise<CallToolResult> => {
-        try {
-          const mcpServers = this.clientPool.getClientsBySession(
-            sessionId || "default",
-          );
-          const client = this.findClientByLuaName(mcpServers, luaServerName);
-
-          if (!client) {
-            const availableServers = Array.from(mcpServers.keys()).map((name) =>
-              sanitizeLuaIdentifier(name),
-            );
-            const serverList =
-              availableServers.length > 0
-                ? availableServers.join(", ")
-                : "none";
-            return {
-              content: [
-                {
-                  type: "text",
-                  text: `Server '${luaServerName}' not found.\n\nAvailable servers: ${serverList}`,
-                },
-              ],
-              isError: true,
-            };
-          }
-
-          const toolsResponse = await client.listTools();
-          const tool = toolsResponse.tools.find(
-            (t) => sanitizeLuaIdentifier(t.name) === luaToolName,
-          );
-
-          if (!tool) {
-            const availableTools = toolsResponse.tools.map((t) =>
-              sanitizeLuaIdentifier(t.name),
-            );
-            const toolList =
-              availableTools.length > 0 ? availableTools.join(", ") : "none";
-            return {
-              content: [
-                {
-                  type: "text",
-                  text: `Tool '${luaToolName}' not found on server '${luaServerName}'.\n\nAvailable tools: ${toolList}`,
-                },
-              ],
-              isError: true,
-            };
-          }
-
-          const formattedOutput = this.formatToolDetails(
-            luaServerName,
-            luaToolName,
-            tool,
-          );
-
-          return {
-            content: [{ type: "text", text: formattedOutput }],
-          };
-        } catch (error) {
-          return {
-            content: [
-              {
-                type: "text",
-                text: `Failed to get tool details: ${error}`,
-              },
-            ],
-            isError: true,
-          };
-        }
-      },
+      async ({ luaServerName, luaToolName }, { sessionId }) =>
+        this.toolDiscovery.getToolDetails(
+          luaServerName,
+          luaToolName,
+          sessionId || "default",
+        ),
     );
 
     this.logger.info("MCP gateway tools registered");
 
-    // Register resource handlers
-    this.setupResourceHandlers();
-
-    // Register prompt handlers
-    this.setupPromptHandlers();
-  }
-
-  private setupResourceHandlers(): void {
-    // Handler for listing resources from all connected MCP servers
+    // Register resource and prompt handlers that delegate to aggregation services
     this.server.server.setRequestHandler(
       ListResourcesRequestSchema,
-      async (
-        _request: unknown,
-        { sessionId }: { sessionId?: string },
-      ): Promise<ListResourcesResult> => {
-        const session = sessionId || "default";
-
-        // Check cache first
-        const cached = this.resourceCache.get(session);
-        if (cached) {
-          this.logger.debug(
-            `Returning cached resource list for session '${session}'`,
-          );
-          return {
-            resources: cached.resources,
-          };
-        }
-
-        // Get all clients for this session
-        const clients = this.clientPool.getClientsBySession(session);
-
-        if (clients.size === 0) {
-          this.logger.info(`No clients available for session '${session}'`);
-          return { resources: [] };
-        }
-
-        // Fetch resources from all clients in parallel
-        const resourcePromises = Array.from(clients.entries()).map(
-          async ([name, client]) => {
-            try {
-              const result = await client.listResources();
-              return { name, resources: result.resources };
-            } catch (error) {
-              this.logger.error(
-                `Failed to list resources from server '${name}':`,
-                error as Error,
-              );
-              return { name, resources: [] };
-            }
-          },
-        );
-
-        const results = await Promise.all(resourcePromises);
-
-        // Aggregate and namespace all resources
-        const allResources: Resource[] = [];
-        for (const { name, resources } of results) {
-          for (const resource of resources) {
-            allResources.push(namespaceResource(name, resource));
-          }
-        }
-
-        // Cache the aggregated result
-        this.resourceCache.set(session, {
-          resources: allResources,
-          timestamp: Date.now(),
-        });
-
-        this.logger.info(
-          `Aggregated ${allResources.length} resources from ${clients.size} servers for session '${session}'`,
-        );
-
-        return {
-          resources: allResources,
-        };
-      },
+      async (_request: unknown, { sessionId }: { sessionId?: string }) =>
+        this.resourceAggregation.listResources(sessionId || "default"),
     );
 
-    // Handler for reading a specific resource
     this.server.server.setRequestHandler(
       ReadResourceRequestSchema,
       async (
         request: { params: { uri: string } },
         { sessionId }: { sessionId?: string },
-      ): Promise<ReadResourceResult> => {
-        const session = sessionId || "default";
-        const { uri } = request.params;
-
-        // Parse the namespaced URI
-        const parsed = parseResourceUri(uri);
-        if (!parsed) {
-          throw new Error(
-            `Invalid resource URI format: '${uri}'. Expected format: mcp://{server-name}/{uri}`,
-          );
-        }
-
-        const { serverName, originalUri } = parsed;
-
-        // Get all clients for this session
-        const clients = this.clientPool.getClientsBySession(session);
-
-        // Find the client matching the server name
-        const client = clients.get(serverName);
-        if (!client) {
-          const availableServers = Array.from(clients.keys()).join(", ");
-          throw new Error(
-            `Server '${serverName}' not found in session '${session}'. Available servers: ${availableServers || "none"}`,
-          );
-        }
-
-        // Read the resource from the client
-        try {
-          const result = await client.readResource({ uri: originalUri });
-          this.logger.debug(
-            `Read resource '${originalUri}' from server '${serverName}'`,
-          );
-          return result;
-        } catch (error) {
-          this.logger.error(
-            `Failed to read resource '${originalUri}' from server '${serverName}':`,
-            error as Error,
-          );
-          throw error;
-        }
-      },
+      ) =>
+        this.resourceAggregation.readResource(
+          request.params.uri,
+          sessionId || "default",
+        ),
     );
 
-    this.logger.info("MCP gateway resource handlers registered");
-  }
-
-  private handleResourceListChanged(
-    serverName: string,
-    sessionId: string,
-  ): void {
-    this.logger.info(
-      `Resource list changed for server '${serverName}' in session '${sessionId}'`,
-    );
-
-    // Clear aggregated cache for this session
-    this.resourceCache.delete(sessionId);
-
-    // Notify our own clients that the resource list has changed
-    this.server.sendResourceListChanged();
-  }
-
-  private handlePromptListChanged(serverName: string, sessionId: string): void {
-    this.logger.info(
-      `Prompt list changed for server '${serverName}' in session '${sessionId}'`,
-    );
-
-    // Clear aggregated cache for this session
-    this.promptCache.delete(sessionId);
-
-    // Notify our own clients that the prompt list has changed
-    this.server.sendPromptListChanged();
-  }
-
-  private setupPromptHandlers(): void {
-    // Handler for listing prompts from all connected MCP servers
     this.server.server.setRequestHandler(
       ListPromptsRequestSchema,
-      async (
-        _request: unknown,
-        { sessionId }: { sessionId?: string },
-      ): Promise<ListPromptsResult> => {
-        const session = sessionId || "default";
-
-        // Check cache first
-        const cached = this.promptCache.get(session);
-        if (cached) {
-          this.logger.debug(
-            `Returning cached prompt list for session '${session}'`,
-          );
-          return {
-            prompts: cached.prompts,
-          };
-        }
-
-        // Get all clients for this session
-        const clients = this.clientPool.getClientsBySession(session);
-
-        if (clients.size === 0) {
-          this.logger.info(`No clients available for session '${session}'`);
-          return { prompts: [] };
-        }
-
-        // Fetch prompts from all clients in parallel
-        const promptPromises = Array.from(clients.entries()).map(
-          async ([name, client]) => {
-            try {
-              const result = await client.listPrompts();
-              return { name, prompts: result.prompts };
-            } catch (error) {
-              this.logger.error(
-                `Failed to list prompts from server '${name}':`,
-                error as Error,
-              );
-              return { name, prompts: [] };
-            }
-          },
-        );
-
-        const results = await Promise.all(promptPromises);
-
-        // Aggregate and namespace all prompts
-        const allPrompts: Prompt[] = [];
-        for (const { name, prompts } of results) {
-          for (const prompt of prompts) {
-            allPrompts.push(namespacePrompt(name, prompt));
-          }
-        }
-
-        // Cache the aggregated result
-        this.promptCache.set(session, {
-          prompts: allPrompts,
-          timestamp: Date.now(),
-        });
-
-        this.logger.info(
-          `Aggregated ${allPrompts.length} prompts from ${clients.size} servers for session '${session}'`,
-        );
-
-        return {
-          prompts: allPrompts,
-        };
-      },
+      async (_request: unknown, { sessionId }: { sessionId?: string }) =>
+        this.promptAggregation.listPrompts(sessionId || "default"),
     );
 
-    // Handler for getting a specific prompt
     this.server.server.setRequestHandler(
       GetPromptRequestSchema,
       async (
@@ -640,309 +267,16 @@ Example: result(server_name.tool_name({ arg = "value" }):await())`,
           params: { name: string; arguments?: Record<string, string> };
         },
         { sessionId }: { sessionId?: string },
-      ): Promise<GetPromptResult> => {
-        const session = sessionId || "default";
-        const { name, arguments: promptArgs } = request.params;
-
-        // Parse the namespaced name
-        const parsed = parsePromptName(name);
-        if (!parsed) {
-          throw new Error(
-            `Invalid prompt name format: '${name}'. Expected format: {server-name}/{prompt-name}`,
-          );
-        }
-
-        const { serverName, originalName } = parsed;
-
-        // Get all clients for this session
-        const clients = this.clientPool.getClientsBySession(session);
-
-        // Find the client matching the server name
-        const client = clients.get(serverName);
-        if (!client) {
-          const availableServers = Array.from(clients.keys()).join(", ");
-          throw new Error(
-            `Server '${serverName}' not found in session '${session}'. Available servers: ${availableServers || "none"}`,
-          );
-        }
-
-        // Get the prompt from the client
-        try {
-          const result = await client.getPrompt({
-            name: originalName,
-            arguments: promptArgs,
-          });
-          this.logger.debug(
-            `Got prompt '${originalName}' from server '${serverName}'`,
-          );
-
-          // Namespace any resource URIs in the prompt messages
-          return namespaceGetPromptResultResources(serverName, result);
-        } catch (error) {
-          this.logger.error(
-            `Failed to get prompt '${originalName}' from server '${serverName}':`,
-            error as Error,
-          );
-          throw error;
-        }
-      },
+      ) =>
+        this.promptAggregation.getPrompt(
+          request.params.name,
+          request.params.arguments,
+          sessionId || "default",
+        ),
     );
-
-    this.logger.info("MCP gateway prompt handlers registered");
   }
 
-  private gatherServerInfo(
-    mcpServers: Map<string, MCPClientSession>,
-  ): ServerListItem[] {
-    const serverList: ServerListItem[] = [];
-
-    for (const [originalName, client] of mcpServers.entries()) {
-      const luaIdentifier = sanitizeLuaIdentifier(originalName);
-
-      try {
-        const serverInfo = client.getServerVersion();
-        let instructions: string | undefined;
-
-        try {
-          instructions = client.getInstructions();
-        } catch {
-          instructions = undefined;
-        }
-
-        serverList.push({
-          luaIdentifier,
-          serverInfo: {
-            name: serverInfo?.name,
-            description: serverInfo?.description,
-            version: serverInfo?.version,
-            instructions,
-          },
-        });
-      } catch (error) {
-        this.logger.error(
-          `Failed to get info for server '${originalName}':`,
-          error as Error,
-        );
-        serverList.push({
-          luaIdentifier,
-          error: `Failed to retrieve server info: ${error}`,
-        });
-      }
-    }
-
-    return serverList;
-  }
-
-  private formatServerList(sessionId: string, serverList: ServerListItem[]) {
-    const lines = [
-      `Session: ${sessionId}`,
-      `Available MCP Servers: ${serverList.length}`,
-      "",
-    ];
-
-    if (serverList.length === 0) {
-      lines.push("No servers available in this session.");
-      lines.push(
-        "💡 Tip: Servers are configured when the session is initialized.",
-      );
-      return lines.join("\n");
-    }
-
-    for (const server of serverList) {
-      if ("error" in server) {
-        lines.push(
-          `❌ ${server.luaIdentifier}`,
-          `   Error: ${server.error}`,
-          "",
-        );
-        continue;
-      }
-
-      lines.push(`📦 ${server.luaIdentifier}`);
-
-      const fields: Array<[string, string | undefined]> = [
-        ["Name", server.serverInfo.name],
-        ["Version", server.serverInfo.version],
-        [
-          "Description",
-          server.serverInfo.description || "(No description provided)",
-        ],
-        ["Instructions", server.serverInfo.instructions],
-      ];
-
-      for (const [label, value] of fields) {
-        if (value) lines.push(`   ${label}: ${value}`);
-      }
-
-      lines.push("");
-    }
-
-    lines.push(
-      "💡 Tip: Use list-server-tools to see available tools for each server",
-    );
-
-    return lines.join("\n");
-  }
-
-  private async gatherToolInfo(client: MCPClientSession): Promise<ToolInfo[]> {
-    const toolsResponse = await client.listTools();
-    const tools = toolsResponse.tools || [];
-
-    return tools.map((tool) => ({
-      luaName: sanitizeLuaIdentifier(tool.name),
-      description: tool.description || "",
-    }));
-  }
-
-  private formatToolList(luaServerName: string, tools: ToolInfo[]): string {
-    const lines = [
-      `Server: ${luaServerName}`,
-      `Available Tools: ${tools.length}`,
-      "",
-    ];
-
-    if (tools.length === 0) {
-      lines.push("No tools available on this server.");
-      return lines.join("\n");
-    }
-
-    for (const tool of tools) {
-      lines.push(`🔧 ${tool.luaName}`);
-
-      const description = tool.description || "(No description provided)";
-      const truncated =
-        description.length > 100
-          ? `${description.slice(0, 100)}...`
-          : description;
-      lines.push(`   ${truncated}`);
-
-      lines.push("");
-    }
-
-    lines.push(
-      `💡 Tip: Use tool-details with luaServerName="${luaServerName}" to see full schemas`,
-    );
-
-    return lines.join("\n");
-  }
-
-  private findClientByLuaName(
-    mcpServers: Map<string, MCPClientSession>,
-    luaName: string,
-  ): MCPClientSession | null {
-    for (const [originalName, client] of mcpServers.entries()) {
-      if (sanitizeLuaIdentifier(originalName) === luaName) {
-        return client;
-      }
-    }
-    return null;
-  }
-
-  private formatToolDetails(
-    luaServerName: string,
-    luaToolName: string,
-    tool: {
-      name: string;
-      description?: string;
-      inputSchema?: unknown;
-      outputSchema?: unknown;
-    },
-  ): string {
-    const lines = [`Server: ${luaServerName}`, `Tool: ${luaToolName}`, ""];
-
-    if (tool.description) {
-      lines.push("Description:", tool.description, "");
-    } else {
-      lines.push("Description:", "(No description provided)", "");
-    }
-
-    if (tool.inputSchema) {
-      lines.push("Input Schema:");
-      const schemaLines = formatSchema(tool.inputSchema);
-      if (schemaLines.length === 0) {
-        lines.push("  (No input parameters)", "");
-      } else {
-        lines.push(...schemaLines);
-        lines.push("");
-      }
-    }
-
-    if (tool.outputSchema) {
-      lines.push("Output Schema:");
-      const schemaLines = formatSchema(tool.outputSchema);
-      if (schemaLines.length === 0) {
-        lines.push("  (No output schema defined)", "");
-      } else {
-        lines.push(...schemaLines);
-        lines.push("");
-      }
-    }
-
-    // Add usage example
-    lines.push("Usage Example:");
-    lines.push(`  local result = ${luaServerName}.${luaToolName}({`);
-
-    // Try to generate example args from schema
-    const exampleArgs = this.generateExampleArgs(tool.inputSchema);
-    if (exampleArgs.length > 0) {
-      lines.push(...exampleArgs.map((arg) => `    ${arg}`));
-    } else {
-      lines.push("    -- No required parameters");
-    }
-
-    lines.push("  }):await()");
-    lines.push("");
-
-    return lines.join("\n");
-  }
-
-  private generateExampleArgs(schema: unknown): string[] {
-    if (!schema || typeof schema !== "object") {
-      return [];
-    }
-
-    const schemaObj = schema as {
-      properties?: Record<string, unknown>;
-      required?: string[];
-    };
-
-    if (!schemaObj.properties) {
-      return [];
-    }
-
-    const required = new Set(schemaObj.required || []);
-    const args: string[] = [];
-
-    for (const [fieldName, fieldSchema] of Object.entries(
-      schemaObj.properties,
-    )) {
-      if (required.has(fieldName)) {
-        const fieldSchemaObj = fieldSchema as { type?: string };
-        const exampleValue = this.getExampleValue(fieldSchemaObj.type);
-        args.push(`${fieldName} = ${exampleValue},`);
-      }
-    }
-
-    return args;
-  }
-
-  private getExampleValue(type?: string): string {
-    switch (type) {
-      case "string":
-        return '"example"';
-      case "number":
-        return "42";
-      case "boolean":
-        return "true";
-      case "array":
-        // This is Lua syntax for an empty table (array)
-        return "{}";
-      case "object":
-        return "{}";
-      default:
-        return '"value"';
-    }
-  }
+  // handlers registered above via delegation
 
   getServer(): McpServer {
     return this.server;

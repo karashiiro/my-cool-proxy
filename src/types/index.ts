@@ -6,4 +6,8 @@ export const TYPES = {
   AuthStrategy: Symbol.for("AuthStrategy"),
   ServerConfig: Symbol.for("ServerConfig"),
   Logger: Symbol.for("Logger"),
+  ToolDiscoveryService: Symbol.for("ToolDiscoveryService"),
+  ResourceAggregationService: Symbol.for("ResourceAggregationService"),
+  PromptAggregationService: Symbol.for("PromptAggregationService"),
+  MCPFormatterService: Symbol.for("MCPFormatterService"),
 };

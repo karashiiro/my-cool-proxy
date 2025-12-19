@@ -88,3 +88,25 @@ export interface ILogger {
   error(message: string, error?: Error): void;
   debug(message: string, meta?: unknown): void;
 }
+
+export interface ServerInfo {
+  luaIdentifier: string;
+  serverInfo: {
+    name?: string;
+    description?: string;
+    version?: string;
+    instructions?: string;
+  };
+}
+
+export interface ServerError {
+  luaIdentifier: string;
+  error: string;
+}
+
+export type ServerListItem = ServerInfo | ServerError;
+
+export interface ToolInfo {
+  luaName: string;
+  description: string;
+}

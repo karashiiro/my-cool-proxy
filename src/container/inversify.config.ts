@@ -12,6 +12,11 @@ import { WasmoonRuntime } from "../lua/runtime.js";
 import { MCPClientManager } from "../mcp/client-manager.js";
 import { TransportManager } from "../mcp/transport-manager.js";
 import { ConsoleLogger } from "../utils/logger.js";
+import { MCPGatewayServer } from "../mcp/gateway-server.js";
+import { ToolDiscoveryService } from "../mcp/tool-discovery-service.js";
+import { ResourceAggregationService } from "../mcp/resource-aggregation-service.js";
+import { PromptAggregationService } from "../mcp/prompt-aggregation-service.js";
+import { MCPFormatterService } from "../mcp/mcp-formatter-service.js";
 
 export function createContainer(config: ServerConfig): Container {
   const container = new Container();
@@ -39,6 +44,27 @@ export function createContainer(config: ServerConfig): Container {
     .bind<ITransportManager>(TYPES.TransportManager)
     .to(TransportManager)
     .inSingletonScope();
+
+  // Bind refactored MCP services
+  container
+    .bind(TYPES.MCPFormatterService)
+    .to(MCPFormatterService)
+    .inSingletonScope();
+  container
+    .bind(TYPES.ToolDiscoveryService)
+    .to(ToolDiscoveryService)
+    .inSingletonScope();
+  container
+    .bind(TYPES.ResourceAggregationService)
+    .to(ResourceAggregationService)
+    .inSingletonScope();
+  container
+    .bind(TYPES.PromptAggregationService)
+    .to(PromptAggregationService)
+    .inSingletonScope();
+
+  // Bind gateway server class so it can be resolved from container
+  container.bind(MCPGatewayServer).to(MCPGatewayServer).inTransientScope();
 
   return container;
 }
