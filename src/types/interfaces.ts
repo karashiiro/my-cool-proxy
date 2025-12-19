@@ -26,6 +26,9 @@ export interface IMCPClientManager {
   ): Promise<void>;
   getClient(name: string, sessionId: string): Promise<MCPClientSession>;
   getClientsBySession(sessionId: string): Map<string, MCPClientSession>;
+  setResourceListChangedHandler(
+    handler: (serverName: string, sessionId: string) => void,
+  ): void;
   close(): Promise<void>;
 }
 

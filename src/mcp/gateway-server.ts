@@ -1,7 +1,16 @@
 import { injectable, inject } from "inversify";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { CallToolResultSchema } from "@modelcontextprotocol/sdk/types.js";
+import type {
+  CallToolResult,
+  ListResourcesResult,
+  ReadResourceResult,
+  Resource,
+} from "@modelcontextprotocol/sdk/types.js";
+import {
+  CallToolResultSchema,
+  ListResourcesRequestSchema,
+  ReadResourceRequestSchema,
+} from "@modelcontextprotocol/sdk/types.js";
 import * as z from "zod";
 import type {
   ILuaRuntime,
@@ -11,6 +20,7 @@ import type {
 import { TYPES } from "../types/index.js";
 import { sanitizeLuaIdentifier } from "../utils/lua-identifier.js";
 import { formatSchema } from "../utils/schema-formatter.js";
+import { namespaceResource, parseResourceUri } from "../utils/resource-uri.js";
 import type { MCPClientSession } from "./client-session.js";
 
 interface ServerInfo {
@@ -38,6 +48,10 @@ interface ToolInfo {
 @injectable()
 export class MCPGatewayServer {
   private server: McpServer;
+  private resourceCache = new Map<
+    string,
+    { resources: Resource[]; timestamp: number }
+  >();
 
   constructor(
     @inject(TYPES.LuaRuntime) private luaRuntime: ILuaRuntime,
@@ -52,7 +66,15 @@ export class MCPGatewayServer {
       {
         capabilities: {
           tools: {},
+          resources: {},
         },
+      },
+    );
+
+    // Register handler for resource list changes from clients
+    this.clientPool.setResourceListChangedHandler(
+      (serverName: string, sessionId: string) => {
+        this.handleResourceListChanged(serverName, sessionId);
       },
     );
 
@@ -329,6 +351,147 @@ Example: result = server_name.tool_name({ arg = "value" }):await()`,
     );
 
     this.logger.info("MCP gateway tools registered");
+
+    // Register resource handlers
+    this.setupResourceHandlers();
+  }
+
+  private setupResourceHandlers(): void {
+    // Handler for listing resources from all connected MCP servers
+    this.server.server.setRequestHandler(
+      ListResourcesRequestSchema,
+      async (
+        _request: unknown,
+        { sessionId }: { sessionId?: string },
+      ): Promise<ListResourcesResult> => {
+        const session = sessionId || "default";
+
+        // Check cache first
+        const cached = this.resourceCache.get(session);
+        if (cached) {
+          this.logger.debug(
+            `Returning cached resource list for session '${session}'`,
+          );
+          return {
+            resources: cached.resources,
+          };
+        }
+
+        // Get all clients for this session
+        const clients = this.clientPool.getClientsBySession(session);
+
+        if (clients.size === 0) {
+          this.logger.info(`No clients available for session '${session}'`);
+          return { resources: [] };
+        }
+
+        // Fetch resources from all clients in parallel
+        const resourcePromises = Array.from(clients.entries()).map(
+          async ([name, client]) => {
+            try {
+              const result = await client.listResources();
+              return { name, resources: result.resources };
+            } catch (error) {
+              this.logger.error(
+                `Failed to list resources from server '${name}':`,
+                error as Error,
+              );
+              return { name, resources: [] };
+            }
+          },
+        );
+
+        const results = await Promise.all(resourcePromises);
+
+        // Aggregate and namespace all resources
+        const allResources: Resource[] = [];
+        for (const { name, resources } of results) {
+          for (const resource of resources) {
+            allResources.push(namespaceResource(name, resource));
+          }
+        }
+
+        // Cache the aggregated result
+        this.resourceCache.set(session, {
+          resources: allResources,
+          timestamp: Date.now(),
+        });
+
+        this.logger.info(
+          `Aggregated ${allResources.length} resources from ${clients.size} servers for session '${session}'`,
+        );
+
+        return {
+          resources: allResources,
+        };
+      },
+    );
+
+    // Handler for reading a specific resource
+    this.server.server.setRequestHandler(
+      ReadResourceRequestSchema,
+      async (
+        request: { params: { uri: string } },
+        { sessionId }: { sessionId?: string },
+      ): Promise<ReadResourceResult> => {
+        const session = sessionId || "default";
+        const { uri } = request.params;
+
+        // Parse the namespaced URI
+        const parsed = parseResourceUri(uri);
+        if (!parsed) {
+          throw new Error(
+            `Invalid resource URI format: '${uri}'. Expected format: mcp://{server-name}/{uri}`,
+          );
+        }
+
+        const { serverName, originalUri } = parsed;
+
+        // Get all clients for this session
+        const clients = this.clientPool.getClientsBySession(session);
+
+        // Find the client matching the server name
+        const client = clients.get(serverName);
+        if (!client) {
+          const availableServers = Array.from(clients.keys()).join(", ");
+          throw new Error(
+            `Server '${serverName}' not found in session '${session}'. Available servers: ${availableServers || "none"}`,
+          );
+        }
+
+        // Read the resource from the client
+        try {
+          const result = await client.readResource({ uri: originalUri });
+          this.logger.debug(
+            `Read resource '${originalUri}' from server '${serverName}'`,
+          );
+          return result;
+        } catch (error) {
+          this.logger.error(
+            `Failed to read resource '${originalUri}' from server '${serverName}':`,
+            error as Error,
+          );
+          throw error;
+        }
+      },
+    );
+
+    this.logger.info("MCP gateway resource handlers registered");
+  }
+
+  private handleResourceListChanged(
+    serverName: string,
+    sessionId: string,
+  ): void {
+    this.logger.info(
+      `Resource list changed for server '${serverName}' in session '${sessionId}'`,
+    );
+
+    // Clear aggregated cache for this session
+    this.resourceCache.delete(sessionId);
+
+    // Notify our own clients that the resource list has changed
+    this.server.sendResourceListChanged();
   }
 
   private gatherServerInfo(

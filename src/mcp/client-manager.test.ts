@@ -108,6 +108,7 @@ describe("MCPClientManager", () => {
         name,
         undefined,
         logger,
+        undefined,
       );
 
       // Should log successful connection
@@ -160,6 +161,7 @@ describe("MCPClientManager", () => {
         name,
         allowedTools,
         logger,
+        undefined,
       );
 
       // Should log tool filter configuration
@@ -270,6 +272,7 @@ describe("MCPClientManager", () => {
         name,
         undefined,
         logger,
+        undefined,
       );
 
       // Should log successful connection
@@ -321,6 +324,7 @@ describe("MCPClientManager", () => {
         name,
         allowedTools,
         logger,
+        undefined,
       );
 
       // Should log tool filter configuration

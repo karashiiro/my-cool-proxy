@@ -9,8 +9,18 @@ import { MCPClientSession } from "./client-session.js";
 @injectable()
 export class MCPClientManager implements IMCPClientManager {
   private clients = new Map<string, MCPClientSession>();
+  private onResourceListChanged?: (
+    serverName: string,
+    sessionId: string,
+  ) => void;
 
   constructor(@inject(TYPES.Logger) private logger: ILogger) {}
+
+  setResourceListChangedHandler(
+    handler: (serverName: string, sessionId: string) => void,
+  ): void {
+    this.onResourceListChanged = handler;
+  }
 
   async addHttpClient(
     name: string,
@@ -49,6 +59,9 @@ export class MCPClientManager implements IMCPClientManager {
       name,
       allowedTools,
       this.logger,
+      this.onResourceListChanged
+        ? (serverName) => this.onResourceListChanged!(serverName, sessionId)
+        : undefined,
     );
 
     this.clients.set(key, wrappedClient);
@@ -104,6 +117,9 @@ export class MCPClientManager implements IMCPClientManager {
       name,
       allowedTools,
       this.logger,
+      this.onResourceListChanged
+        ? (serverName) => this.onResourceListChanged!(serverName, sessionId)
+        : undefined,
     );
 
     this.clients.set(key, wrappedClient);
