@@ -4,20 +4,28 @@ import type {
   GetPromptResult,
   Prompt,
 } from "@modelcontextprotocol/sdk/types.js";
-import type { IMCPClientManager, ILogger } from "../types/interfaces.js";
+import type {
+  IMCPClientManager,
+  ILogger,
+  ICacheService,
+} from "../types/interfaces.js";
 import { TYPES } from "../types/index.js";
 import { namespacePrompt, parsePromptName } from "../utils/prompt-name.js";
 import { namespaceGetPromptResultResources } from "../utils/resource-uri.js";
 import type { MCPClientSession } from "./client-session.js";
+import { createCache } from "../services/cache-service.js";
 
 @injectable()
 export class PromptAggregationService {
-  private cache = new Map<string, { prompts: Prompt[]; timestamp: number }>();
+  private cache: ICacheService<Prompt[]>;
 
   constructor(
     @inject(TYPES.MCPClientManager) private clientPool: IMCPClientManager,
     @inject(TYPES.Logger) private logger: ILogger,
-  ) {}
+  ) {
+    // Create a cache instance for this service
+    this.cache = createCache<Prompt[]>(logger);
+  }
 
   async listPrompts(sessionId: string): Promise<ListPromptsResult> {
     const session = sessionId || "default";
@@ -27,7 +35,7 @@ export class PromptAggregationService {
       this.logger.debug(
         `Returning cached prompt list for session '${session}'`,
       );
-      return { prompts: cached.prompts };
+      return { prompts: cached };
     }
 
     const clients = this.clientPool.getClientsBySession(session);
@@ -61,7 +69,7 @@ export class PromptAggregationService {
       }
     }
 
-    this.cache.set(session, { prompts: allPrompts, timestamp: Date.now() });
+    this.cache.set(session, allPrompts);
 
     this.logger.info(
       `Aggregated ${allPrompts.length} prompts from ${clients.size} servers for session '${session}'`,

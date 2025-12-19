@@ -13,4 +13,5 @@ export const TYPES = {
   MCPGatewayServer: Symbol.for("MCPGatewayServer"),
   MCPSessionController: Symbol.for("MCPSessionController"),
   ShutdownHandler: Symbol.for("ShutdownHandler"),
+  CacheService: Symbol.for("CacheService"),
 };

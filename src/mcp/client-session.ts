@@ -1,5 +1,5 @@
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import type { ILogger } from "../types/interfaces.js";
+import type { ILogger, ICacheService } from "../types/interfaces.js";
 import {
   ToolListChangedNotificationSchema,
   ResourceListChangedNotificationSchema,
@@ -9,15 +9,16 @@ import {
   type ListResourcesResult,
   type ListPromptsResult,
 } from "@modelcontextprotocol/sdk/types.js";
+import { createCache } from "../services/cache-service.js";
 
 export class MCPClientSession {
   private client: Client;
   private allowedTools: string[] | undefined;
   private logger: ILogger;
   private serverName: string;
-  private cachedToolList: ListToolsResult | undefined;
-  private cachedResourceList: ListResourcesResult | undefined;
-  private cachedPromptList: ListPromptsResult | undefined;
+  private toolCache: ICacheService<ListToolsResult>;
+  private resourceCache: ICacheService<ListResourcesResult>;
+  private promptCache: ICacheService<ListPromptsResult>;
   private onResourceListChanged?: (serverName: string) => void;
   private onPromptListChanged?: (serverName: string) => void;
 
@@ -35,7 +36,11 @@ export class MCPClientSession {
     this.logger = logger;
     this.onResourceListChanged = onResourceListChanged;
     this.onPromptListChanged = onPromptListChanged;
-    this.cachedToolList = undefined;
+
+    // Initialize cache instances
+    this.toolCache = createCache<ListToolsResult>(logger);
+    this.resourceCache = createCache<ListResourcesResult>(logger);
+    this.promptCache = createCache<ListPromptsResult>(logger);
 
     // Register notification handler for tool list changes
     this.setupNotificationHandlers();
@@ -95,25 +100,27 @@ export class MCPClientSession {
   }
 
   private clearToolCache(): void {
-    this.cachedToolList = undefined;
+    this.toolCache.clear();
   }
 
   private clearResourceCache(): void {
-    this.cachedResourceList = undefined;
+    this.resourceCache.clear();
   }
 
   private clearPromptCache(): void {
-    this.cachedPromptList = undefined;
+    this.promptCache.clear();
   }
 
   // Wrap listTools to filter results
   async listTools() {
     // Return cached response if available
-    if (this.cachedToolList !== undefined) {
+    const cacheKey = "tools"; // Single entry cache
+    const cached = this.toolCache.get(cacheKey);
+    if (cached !== undefined) {
       this.logger.debug(
         `Server '${this.serverName}': Returning cached tool list`,
       );
-      return this.cachedToolList;
+      return cached;
     }
 
     // Fetch fresh tool list from server
@@ -156,18 +163,20 @@ export class MCPClientSession {
     }
 
     // Cache the filtered response
-    this.cachedToolList = filteredResponse;
+    this.toolCache.set("tools", filteredResponse);
 
     return filteredResponse;
   }
 
   async listResources() {
     // Return cached response if available
-    if (this.cachedResourceList !== undefined) {
+    const cacheKey = "resources"; // Single entry cache
+    const cached = this.resourceCache.get(cacheKey);
+    if (cached !== undefined) {
       this.logger.debug(
         `Server '${this.serverName}': Returning cached resource list`,
       );
-      return this.cachedResourceList;
+      return cached;
     }
 
     // Fetch all pages of resources
@@ -196,18 +205,20 @@ export class MCPClientSession {
     };
 
     // Cache the complete response
-    this.cachedResourceList = finalResponse;
+    this.resourceCache.set("resources", finalResponse);
 
     return finalResponse;
   }
 
   async listPrompts() {
     // Return cached response if available
-    if (this.cachedPromptList !== undefined) {
+    const cacheKey = "prompts"; // Single entry cache
+    const cached = this.promptCache.get(cacheKey);
+    if (cached !== undefined) {
       this.logger.debug(
         `Server '${this.serverName}': Returning cached prompt list`,
       );
-      return this.cachedPromptList;
+      return cached;
     }
 
     // Fetch all pages of prompts
@@ -236,7 +247,7 @@ export class MCPClientSession {
     };
 
     // Cache the complete response
-    this.cachedPromptList = finalResponse;
+    this.promptCache.set("prompts", finalResponse);
 
     return finalResponse;
   }

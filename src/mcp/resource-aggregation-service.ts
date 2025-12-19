@@ -4,22 +4,27 @@ import type {
   ReadResourceResult,
   Resource,
 } from "@modelcontextprotocol/sdk/types.js";
-import type { IMCPClientManager, ILogger } from "../types/interfaces.js";
+import type {
+  IMCPClientManager,
+  ILogger,
+  ICacheService,
+} from "../types/interfaces.js";
 import { TYPES } from "../types/index.js";
 import { namespaceResource, parseResourceUri } from "../utils/resource-uri.js";
 import type { MCPClientSession } from "./client-session.js";
+import { createCache } from "../services/cache-service.js";
 
 @injectable()
 export class ResourceAggregationService {
-  private cache = new Map<
-    string,
-    { resources: Resource[]; timestamp: number }
-  >();
+  private cache: ICacheService<Resource[]>;
 
   constructor(
     @inject(TYPES.MCPClientManager) private clientPool: IMCPClientManager,
     @inject(TYPES.Logger) private logger: ILogger,
-  ) {}
+  ) {
+    // Create a cache instance for this service
+    this.cache = createCache<Resource[]>(logger);
+  }
 
   async listResources(sessionId: string): Promise<ListResourcesResult> {
     const session = sessionId || "default";
@@ -29,7 +34,7 @@ export class ResourceAggregationService {
       this.logger.debug(
         `Returning cached resource list for session '${session}'`,
       );
-      return { resources: cached.resources };
+      return { resources: cached };
     }
 
     const clients = this.clientPool.getClientsBySession(session);
@@ -63,7 +68,7 @@ export class ResourceAggregationService {
       }
     }
 
-    this.cache.set(session, { resources: allResources, timestamp: Date.now() });
+    this.cache.set(session, allResources);
 
     this.logger.info(
       `Aggregated ${allResources.length} resources from ${clients.size} servers for session '${session}'`,

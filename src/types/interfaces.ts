@@ -119,3 +119,11 @@ export interface IMCPSessionController {
 export interface IShutdownHandler {
   shutdown(): Promise<void>;
 }
+
+export interface ICacheService<T> {
+  get(key: string): T | undefined;
+  set(key: string, value: T): void;
+  delete(key: string): void;
+  clear(): void;
+  has(key: string): boolean;
+}
