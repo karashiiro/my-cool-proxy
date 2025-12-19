@@ -257,6 +257,91 @@ async function createTestServerWithPrompts(
   return { server, client: mcpClientSession };
 }
 
+// Helper to create a test MCP server with both tools AND resources
+async function createTestServerWithToolsAndResources(
+  name: string,
+  tools: Array<{
+    name: string;
+    description: string;
+    handler: (args: Record<string, unknown>) => Promise<CallToolResult>;
+  }>,
+  resources: Resource[],
+  readHandlers: Record<string, (uri: string) => Promise<ReadResourceResult>>,
+): Promise<{ server: McpServer; client: MCPClientSession }> {
+  const server = new McpServer(
+    {
+      name,
+      version: "1.0.0",
+    },
+    {
+      capabilities: {
+        tools: {},
+        resources: {},
+      },
+    },
+  );
+
+  // Register tools
+  for (const tool of tools) {
+    server.registerTool(
+      tool.name,
+      {
+        description: tool.description,
+        inputSchema: z.any(),
+      },
+      async (args: Record<string, unknown>) => {
+        return await tool.handler(args);
+      },
+    );
+  }
+
+  // Register resources
+  for (const resource of resources) {
+    const handler = readHandlers[resource.uri];
+    if (handler) {
+      server.registerResource(
+        resource.name,
+        resource.uri,
+        {
+          description: resource.description,
+          mimeType: resource.mimeType,
+        },
+        async (uri) => handler(uri.toString()),
+      );
+    }
+  }
+
+  // Create linked transports
+  const [clientTransport, serverTransport] =
+    InMemoryTransport.createLinkedPair();
+
+  // Connect server
+  await server.connect(serverTransport);
+
+  // Create and connect client
+  const client = new Client(
+    {
+      name: "test-client",
+      version: "1.0.0",
+    },
+    {
+      capabilities: {},
+    },
+  );
+
+  await client.connect(clientTransport);
+
+  // Wrap in MCPClientSession
+  const mcpClientSession = new MCPClientSession(
+    client,
+    name,
+    undefined,
+    createMockLogger(),
+  );
+
+  return { server, client: mcpClientSession };
+}
+
 describe("MCPGatewayServer - execute tool", () => {
   let gatewayServer: MCPGatewayServer;
   let luaRuntime: ILuaRuntime;
@@ -1319,6 +1404,130 @@ describe("MCPGatewayServer - Resource Aggregation", () => {
           uri: "mcp://non-existent-server/file:///test.txt",
         }),
       ).rejects.toThrow(/not found/);
+    });
+  });
+
+  describe("Tool results with resource links", () => {
+    it("should handle tool that returns resource link and subsequent resource read", async () => {
+      // Create a server with both a tool AND a resource
+      const { server, client } = await createTestServerWithToolsAndResources(
+        "data-server",
+        [
+          {
+            name: "get-report-link",
+            description: "Get a link to the report resource",
+            handler: async () => ({
+              content: [
+                {
+                  type: "text",
+                  text: "Here is the report resource:",
+                },
+                {
+                  type: "resource_link",
+                  name: "Report",
+                  uri: "file:///data/report.json",
+                  description: "Data report",
+                  mimeType: "application/json",
+                },
+              ],
+            }),
+          },
+        ],
+        [
+          {
+            uri: "file:///data/report.json",
+            name: "Report",
+            description: "Data report",
+            mimeType: "application/json",
+          },
+        ],
+        {
+          "file:///data/report.json": async () => ({
+            contents: [
+              {
+                uri: "file:///data/report.json",
+                mimeType: "application/json",
+                text: '{"sales": 1000, "users": 50}',
+              },
+            ],
+          }),
+        },
+      );
+
+      cleanupFns.push(async () => {
+        await client.close();
+        await server.close();
+      });
+
+      const clients = new Map([["data-server", client]]);
+      const clientManager = createMockClientManager(clients);
+      gatewayServer = new MCPGatewayServer(luaRuntime, clientManager, logger);
+      gateway = gatewayServer.getServer();
+
+      const [clientTransport, serverTransport] =
+        InMemoryTransport.createLinkedPair();
+      await gateway.connect(serverTransport);
+
+      gatewayClient = new Client(
+        { name: "test-gateway-client", version: "1.0.0" },
+        { capabilities: {} },
+      );
+      await gatewayClient.connect(clientTransport);
+
+      // Step 1: Call the tool to get the resource link
+      const script = `
+        result = data_server.get_report_link({}):await()
+      `;
+
+      const toolResult = await gatewayClient.callTool({
+        name: "execute",
+        arguments: { script },
+      });
+
+      // Verify the tool result contains the resource reference
+      expect(Array.isArray(toolResult.content)).toBe(true);
+      const content = toolResult.content as Array<unknown>;
+      expect(content.length).toBeGreaterThan(0);
+
+      // Find the resource_link content block
+      const resourceLinkBlock = content.find(
+        (block: unknown) =>
+          typeof block === "object" &&
+          block !== null &&
+          "type" in block &&
+          block.type === "resource_link",
+      );
+      expect(resourceLinkBlock).toBeDefined();
+
+      // Extract the URI from the resource_link block (flat structure!)
+      let resourceUri: string | undefined;
+      if (
+        resourceLinkBlock &&
+        typeof resourceLinkBlock === "object" &&
+        "uri" in resourceLinkBlock
+      ) {
+        resourceUri = resourceLinkBlock.uri as string;
+      }
+
+      expect(resourceUri).toBeDefined();
+
+      // Step 2: Verify the URI is automatically namespaced!
+      // The gateway should have automatically rewritten the URI from
+      // "file:///data/report.json" to "mcp://data-server/file:///data/report.json"
+      expect(resourceUri).toBe("mcp://data-server/file:///data/report.json");
+
+      // Step 3: Now we can directly use this URI to read the resource!
+      // No manual namespacing needed - the gateway did it for us!
+      const readResult = await gatewayClient.readResource({
+        uri: resourceUri!,
+      });
+
+      expect(readResult.contents).toHaveLength(1);
+      expect(readResult.contents[0]).toMatchObject({
+        uri: "file:///data/report.json",
+        mimeType: "application/json",
+        text: '{"sales": 1000, "users": 50}',
+      });
     });
   });
 

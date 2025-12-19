@@ -51,6 +51,31 @@ interface ToolInfo {
   description: string;
 }
 
+/**
+ * Gateway server that aggregates multiple MCP servers and provides namespaced access.
+ *
+ * Resource/Prompt URI Namespacing Architecture:
+ * ============================================
+ *
+ * This gateway handles transformation between namespaced (client-facing) and
+ * un-namespaced (server-facing) URIs in different places:
+ *
+ * 1. Resources/Prompts → Client (Outbound):
+ *    - listResources(): Namespaces URIs here (e.g., file:/// → mcp://server-name/file:///)
+ *    - listPrompts(): Namespaces names here (e.g., prompt → server-name/prompt)
+ *
+ * 2. Client → Resources/Prompts (Inbound):
+ *    - readResource(): Parses namespaced URI and routes to correct server
+ *    - getPrompt(): Parses namespaced name and routes to correct server
+ *
+ * 3. Tool Results → Client (Outbound, via Lua):
+ *    - Resource URIs in CallToolResult content blocks are namespaced in the
+ *      Lua runtime (NOT here!) because the runtime has the per-tool-call server
+ *      context. See WasmoonRuntime.injectMCPServers() for details.
+ *
+ * This separation ensures we always have the necessary context to namespace
+ * correctly, even when Lua scripts call tools from multiple servers.
+ */
 @injectable()
 export class MCPGatewayServer {
   private server: McpServer;

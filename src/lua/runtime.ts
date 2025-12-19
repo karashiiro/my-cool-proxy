@@ -12,6 +12,7 @@ import {
   CallToolResultSchema,
   type CallToolResult,
 } from "@modelcontextprotocol/sdk/types.js";
+import { namespaceCallToolResultResources } from "../utils/resource-uri.js";
 
 @injectable()
 export class WasmoonRuntime implements ILuaRuntime {
@@ -105,24 +106,38 @@ export class WasmoonRuntime implements ILuaRuntime {
                 ),
               );
 
-              if (result.structuredContent) {
+              // IMPORTANT: Namespace resource URIs in tool results here!
+              // This MUST happen at the tool call level because:
+              // 1. We have the server context (originalServerName) here
+              // 2. Lua scripts can call tools from multiple servers
+              // 3. By the time results reach the gateway server, we've lost which
+              //    server each resource came from
+              // This ensures clients can directly use resource URIs from tool results
+              // without manual namespacing (e.g., file:///data.json becomes
+              // mcp://data-server/file:///data.json)
+              const namespacedResult = namespaceCallToolResultResources(
+                originalServerName,
+                result,
+              );
+
+              if (namespacedResult.structuredContent) {
                 // Directly return structured content as Lua table
-                return result.structuredContent;
+                return namespacedResult.structuredContent;
               }
 
               if (
-                result.content.length === 1 &&
-                result.content[0]?.type === "text"
+                namespacedResult.content.length === 1 &&
+                namespacedResult.content[0]?.type === "text"
               ) {
                 // If single text content, attempt to parse as JSON
                 try {
-                  return JSON.parse(result.content[0].text);
+                  return JSON.parse(namespacedResult.content[0].text);
                 } catch {
                   // ignored
                 }
               }
 
-              return result;
+              return namespacedResult;
             } catch (error) {
               this.logger.error(
                 `Error calling ${originalServerName}.${originalToolName}:`,
