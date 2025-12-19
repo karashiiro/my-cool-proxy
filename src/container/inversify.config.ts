@@ -21,6 +21,13 @@ import { PromptAggregationService } from "../mcp/prompt-aggregation-service.js";
 import { MCPFormatterService } from "../mcp/mcp-formatter-service.js";
 import { MCPSessionController } from "../controllers/mcp-session-controller.js";
 import { ShutdownHandler } from "../handlers/shutdown-handler.js";
+import type { ITool } from "../tools/base-tool.js";
+import { ExecuteLuaTool } from "../tools/execute-lua-tool.js";
+import { ListServersTool } from "../tools/list-servers-tool.js";
+import { ListServerToolsTool } from "../tools/list-server-tools-tool.js";
+import { ToolDetailsTool } from "../tools/tool-details-tool.js";
+import type { IToolRegistry } from "../tools/tool-registry.js";
+import { ToolRegistry } from "../tools/tool-registry.js";
 
 export function createContainer(config: ServerConfig): Container {
   const container = new Container();
@@ -65,6 +72,27 @@ export function createContainer(config: ServerConfig): Container {
   container
     .bind(TYPES.PromptAggregationService)
     .to(PromptAggregationService)
+    .inSingletonScope();
+
+  // Bind all tools
+  container.bind<ITool>(TYPES.Tool).to(ExecuteLuaTool);
+  container.bind<ITool>(TYPES.Tool).to(ListServersTool);
+  container.bind<ITool>(TYPES.Tool).to(ListServerToolsTool);
+  container.bind<ITool>(TYPES.Tool).to(ToolDetailsTool);
+
+  // Bind tool registry and populate it with all registered tools
+  container
+    .bind<IToolRegistry>(TYPES.ToolRegistry)
+    .toDynamicValue(() => {
+      const registry = new ToolRegistry();
+      const tools = container.getAll<ITool>(TYPES.Tool);
+
+      for (const tool of tools) {
+        registry.register(tool);
+      }
+
+      return registry;
+    })
     .inSingletonScope();
 
   // Bind gateway server (singleton - shared across all sessions)

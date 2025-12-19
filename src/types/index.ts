@@ -14,4 +14,6 @@ export const TYPES = {
   MCPSessionController: Symbol.for("MCPSessionController"),
   ShutdownHandler: Symbol.for("ShutdownHandler"),
   CacheService: Symbol.for("CacheService"),
+  Tool: Symbol.for("Tool"),
+  ToolRegistry: Symbol.for("ToolRegistry"),
 };

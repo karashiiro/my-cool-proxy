@@ -23,6 +23,12 @@ import { ToolDiscoveryService } from "./tool-discovery-service.js";
 import { ResourceAggregationService } from "./resource-aggregation-service.js";
 import { PromptAggregationService } from "./prompt-aggregation-service.js";
 import { MCPFormatterService } from "./mcp-formatter-service.js";
+import { ExecuteLuaTool } from "../tools/execute-lua-tool.js";
+import { ListServersTool } from "../tools/list-servers-tool.js";
+import { ListServerToolsTool } from "../tools/list-server-tools-tool.js";
+import { ToolDetailsTool } from "../tools/tool-details-tool.js";
+import { ToolRegistry } from "../tools/tool-registry.js";
+import type { IToolRegistry } from "../tools/tool-registry.js";
 
 // Mock logger
 const createMockLogger = (): ILogger => ({
@@ -43,6 +49,27 @@ const createMockClientManager = (
   setPromptListChangedHandler: vi.fn(),
   close: vi.fn(),
 });
+
+// Helper to create a tool registry with all tools
+const createToolRegistry = (
+  luaRuntime: ILuaRuntime,
+  clientManager: IMCPClientManager,
+  logger: ILogger,
+): IToolRegistry => {
+  const toolDiscovery = new ToolDiscoveryService(
+    clientManager,
+    logger,
+    new MCPFormatterService(),
+  );
+
+  const registry = new ToolRegistry();
+  registry.register(new ExecuteLuaTool(luaRuntime, clientManager, logger));
+  registry.register(new ListServersTool(toolDiscovery));
+  registry.register(new ListServerToolsTool(toolDiscovery));
+  registry.register(new ToolDetailsTool(toolDiscovery));
+
+  return registry;
+};
 
 // Helper to create a test MCP server with tools
 async function createTestServer(
@@ -411,17 +438,11 @@ describe("MCPGatewayServer - execute tool", () => {
       const servers = new Map([["image-server", client]]);
       clientManager = createMockClientManager(servers);
       gatewayServer = new MCPGatewayServer(
-        luaRuntime,
+        createToolRegistry(luaRuntime, clientManager, logger),
         clientManager,
         logger,
-        new ToolDiscoveryService(
-          clientManager,
-          logger,
-          new MCPFormatterService(),
-        ),
         new ResourceAggregationService(clientManager, logger),
         new PromptAggregationService(clientManager, logger),
-        new MCPFormatterService(),
       );
       gateway = gatewayServer.getServer();
 
@@ -483,17 +504,11 @@ describe("MCPGatewayServer - execute tool", () => {
       const servers = new Map([["audio-server", client]]);
       clientManager = createMockClientManager(servers);
       gatewayServer = new MCPGatewayServer(
-        luaRuntime,
+        createToolRegistry(luaRuntime, clientManager, logger),
         clientManager,
         logger,
-        new ToolDiscoveryService(
-          clientManager,
-          logger,
-          new MCPFormatterService(),
-        ),
         new ResourceAggregationService(clientManager, logger),
         new PromptAggregationService(clientManager, logger),
-        new MCPFormatterService(),
       );
       gateway = gatewayServer.getServer();
 
@@ -555,17 +570,11 @@ describe("MCPGatewayServer - execute tool", () => {
       const servers = new Map([["multi-server", client]]);
       clientManager = createMockClientManager(servers);
       gatewayServer = new MCPGatewayServer(
-        luaRuntime,
+        createToolRegistry(luaRuntime, clientManager, logger),
         clientManager,
         logger,
-        new ToolDiscoveryService(
-          clientManager,
-          logger,
-          new MCPFormatterService(),
-        ),
         new ResourceAggregationService(clientManager, logger),
         new PromptAggregationService(clientManager, logger),
-        new MCPFormatterService(),
       );
       gateway = gatewayServer.getServer();
 
@@ -621,17 +630,11 @@ describe("MCPGatewayServer - execute tool", () => {
       const servers = new Map([["error-server", client]]);
       clientManager = createMockClientManager(servers);
       gatewayServer = new MCPGatewayServer(
-        luaRuntime,
+        createToolRegistry(luaRuntime, clientManager, logger),
         clientManager,
         logger,
-        new ToolDiscoveryService(
-          clientManager,
-          logger,
-          new MCPFormatterService(),
-        ),
         new ResourceAggregationService(clientManager, logger),
         new PromptAggregationService(clientManager, logger),
-        new MCPFormatterService(),
       );
       gateway = gatewayServer.getServer();
 
@@ -667,17 +670,11 @@ describe("MCPGatewayServer - execute tool", () => {
     it("should convert object result to structuredContent", async () => {
       clientManager = createMockClientManager(new Map());
       gatewayServer = new MCPGatewayServer(
-        luaRuntime,
+        createToolRegistry(luaRuntime, clientManager, logger),
         clientManager,
         logger,
-        new ToolDiscoveryService(
-          clientManager,
-          logger,
-          new MCPFormatterService(),
-        ),
         new ResourceAggregationService(clientManager, logger),
         new PromptAggregationService(clientManager, logger),
-        new MCPFormatterService(),
       );
       gateway = gatewayServer.getServer();
 
@@ -722,17 +719,11 @@ describe("MCPGatewayServer - execute tool", () => {
     it("should convert nested object to structuredContent", async () => {
       clientManager = createMockClientManager(new Map());
       gatewayServer = new MCPGatewayServer(
-        luaRuntime,
+        createToolRegistry(luaRuntime, clientManager, logger),
         clientManager,
         logger,
-        new ToolDiscoveryService(
-          clientManager,
-          logger,
-          new MCPFormatterService(),
-        ),
         new ResourceAggregationService(clientManager, logger),
         new PromptAggregationService(clientManager, logger),
-        new MCPFormatterService(),
       );
       gateway = gatewayServer.getServer();
 
@@ -784,17 +775,11 @@ describe("MCPGatewayServer - execute tool", () => {
     it("should handle empty object", async () => {
       clientManager = createMockClientManager(new Map());
       gatewayServer = new MCPGatewayServer(
-        luaRuntime,
+        createToolRegistry(luaRuntime, clientManager, logger),
         clientManager,
         logger,
-        new ToolDiscoveryService(
-          clientManager,
-          logger,
-          new MCPFormatterService(),
-        ),
         new ResourceAggregationService(clientManager, logger),
         new PromptAggregationService(clientManager, logger),
-        new MCPFormatterService(),
       );
       gateway = gatewayServer.getServer();
 
@@ -832,17 +817,11 @@ describe("MCPGatewayServer - execute tool", () => {
     it("should handle string results", async () => {
       clientManager = createMockClientManager(new Map());
       gatewayServer = new MCPGatewayServer(
-        luaRuntime,
+        createToolRegistry(luaRuntime, clientManager, logger),
         clientManager,
         logger,
-        new ToolDiscoveryService(
-          clientManager,
-          logger,
-          new MCPFormatterService(),
-        ),
         new ResourceAggregationService(clientManager, logger),
         new PromptAggregationService(clientManager, logger),
-        new MCPFormatterService(),
       );
       gateway = gatewayServer.getServer();
 
@@ -877,17 +856,11 @@ describe("MCPGatewayServer - execute tool", () => {
     it("should handle number results", async () => {
       clientManager = createMockClientManager(new Map());
       gatewayServer = new MCPGatewayServer(
-        luaRuntime,
+        createToolRegistry(luaRuntime, clientManager, logger),
         clientManager,
         logger,
-        new ToolDiscoveryService(
-          clientManager,
-          logger,
-          new MCPFormatterService(),
-        ),
         new ResourceAggregationService(clientManager, logger),
         new PromptAggregationService(clientManager, logger),
-        new MCPFormatterService(),
       );
       gateway = gatewayServer.getServer();
 
@@ -922,17 +895,11 @@ describe("MCPGatewayServer - execute tool", () => {
     it("should handle boolean results", async () => {
       clientManager = createMockClientManager(new Map());
       gatewayServer = new MCPGatewayServer(
-        luaRuntime,
+        createToolRegistry(luaRuntime, clientManager, logger),
         clientManager,
         logger,
-        new ToolDiscoveryService(
-          clientManager,
-          logger,
-          new MCPFormatterService(),
-        ),
         new ResourceAggregationService(clientManager, logger),
         new PromptAggregationService(clientManager, logger),
-        new MCPFormatterService(),
       );
       gateway = gatewayServer.getServer();
 
@@ -967,17 +934,11 @@ describe("MCPGatewayServer - execute tool", () => {
     it("should handle nil/undefined results", async () => {
       clientManager = createMockClientManager(new Map());
       gatewayServer = new MCPGatewayServer(
-        luaRuntime,
+        createToolRegistry(luaRuntime, clientManager, logger),
         clientManager,
         logger,
-        new ToolDiscoveryService(
-          clientManager,
-          logger,
-          new MCPFormatterService(),
-        ),
         new ResourceAggregationService(clientManager, logger),
         new PromptAggregationService(clientManager, logger),
-        new MCPFormatterService(),
       );
       gateway = gatewayServer.getServer();
 
@@ -1040,17 +1001,11 @@ describe("MCPGatewayServer - execute tool", () => {
       const servers = new Map([["rich-server", client]]);
       clientManager = createMockClientManager(servers);
       gatewayServer = new MCPGatewayServer(
-        luaRuntime,
+        createToolRegistry(luaRuntime, clientManager, logger),
         clientManager,
         logger,
-        new ToolDiscoveryService(
-          clientManager,
-          logger,
-          new MCPFormatterService(),
-        ),
         new ResourceAggregationService(clientManager, logger),
         new PromptAggregationService(clientManager, logger),
-        new MCPFormatterService(),
       );
       gateway = gatewayServer.getServer();
 
@@ -1107,17 +1062,11 @@ describe("MCPGatewayServer - execute tool", () => {
       const servers = new Map([["api", client]]);
       clientManager = createMockClientManager(servers);
       gatewayServer = new MCPGatewayServer(
-        luaRuntime,
+        createToolRegistry(luaRuntime, clientManager, logger),
         clientManager,
         logger,
-        new ToolDiscoveryService(
-          clientManager,
-          logger,
-          new MCPFormatterService(),
-        ),
         new ResourceAggregationService(clientManager, logger),
         new PromptAggregationService(clientManager, logger),
-        new MCPFormatterService(),
       );
       gateway = gatewayServer.getServer();
 
@@ -1165,17 +1114,11 @@ describe("MCPGatewayServer - execute tool", () => {
     it("should handle Lua script errors gracefully", async () => {
       clientManager = createMockClientManager(new Map());
       gatewayServer = new MCPGatewayServer(
-        luaRuntime,
+        createToolRegistry(luaRuntime, clientManager, logger),
         clientManager,
         logger,
-        new ToolDiscoveryService(
-          clientManager,
-          logger,
-          new MCPFormatterService(),
-        ),
         new ResourceAggregationService(clientManager, logger),
         new PromptAggregationService(clientManager, logger),
-        new MCPFormatterService(),
       );
       gateway = gatewayServer.getServer();
 
@@ -1211,17 +1154,11 @@ describe("MCPGatewayServer - execute tool", () => {
     it("should handle invalid CallToolResult objects", async () => {
       clientManager = createMockClientManager(new Map());
       gatewayServer = new MCPGatewayServer(
-        luaRuntime,
+        createToolRegistry(luaRuntime, clientManager, logger),
         clientManager,
         logger,
-        new ToolDiscoveryService(
-          clientManager,
-          logger,
-          new MCPFormatterService(),
-        ),
         new ResourceAggregationService(clientManager, logger),
         new PromptAggregationService(clientManager, logger),
-        new MCPFormatterService(),
       );
       gateway = gatewayServer.getServer();
 
@@ -1373,17 +1310,11 @@ describe("MCPGatewayServer - Resource Aggregation", () => {
       ]);
       const clientManager = createMockClientManager(clients);
       gatewayServer = new MCPGatewayServer(
-        luaRuntime,
+        createToolRegistry(luaRuntime, clientManager, logger),
         clientManager,
         logger,
-        new ToolDiscoveryService(
-          clientManager,
-          logger,
-          new MCPFormatterService(),
-        ),
         new ResourceAggregationService(clientManager, logger),
         new PromptAggregationService(clientManager, logger),
-        new MCPFormatterService(),
       );
       gateway = gatewayServer.getServer();
 
@@ -1425,17 +1356,11 @@ describe("MCPGatewayServer - Resource Aggregation", () => {
       const clients = new Map();
       const clientManager = createMockClientManager(clients);
       gatewayServer = new MCPGatewayServer(
-        luaRuntime,
+        createToolRegistry(luaRuntime, clientManager, logger),
         clientManager,
         logger,
-        new ToolDiscoveryService(
-          clientManager,
-          logger,
-          new MCPFormatterService(),
-        ),
         new ResourceAggregationService(clientManager, logger),
         new PromptAggregationService(clientManager, logger),
-        new MCPFormatterService(),
       );
       gateway = gatewayServer.getServer();
 
@@ -1487,17 +1412,11 @@ describe("MCPGatewayServer - Resource Aggregation", () => {
       const clients = new Map([["test-server", client1]]);
       const clientManager = createMockClientManager(clients);
       gatewayServer = new MCPGatewayServer(
-        luaRuntime,
+        createToolRegistry(luaRuntime, clientManager, logger),
         clientManager,
         logger,
-        new ToolDiscoveryService(
-          clientManager,
-          logger,
-          new MCPFormatterService(),
-        ),
         new ResourceAggregationService(clientManager, logger),
         new PromptAggregationService(clientManager, logger),
-        new MCPFormatterService(),
       );
       gateway = gatewayServer.getServer();
 
@@ -1557,17 +1476,11 @@ describe("MCPGatewayServer - Resource Aggregation", () => {
       const clients = new Map([["docs-server", client]]);
       const clientManager = createMockClientManager(clients);
       gatewayServer = new MCPGatewayServer(
-        luaRuntime,
+        createToolRegistry(luaRuntime, clientManager, logger),
         clientManager,
         logger,
-        new ToolDiscoveryService(
-          clientManager,
-          logger,
-          new MCPFormatterService(),
-        ),
         new ResourceAggregationService(clientManager, logger),
         new PromptAggregationService(clientManager, logger),
-        new MCPFormatterService(),
       );
       gateway = gatewayServer.getServer();
 
@@ -1598,17 +1511,11 @@ describe("MCPGatewayServer - Resource Aggregation", () => {
       const clients = new Map();
       const clientManager = createMockClientManager(clients);
       gatewayServer = new MCPGatewayServer(
-        luaRuntime,
+        createToolRegistry(luaRuntime, clientManager, logger),
         clientManager,
         logger,
-        new ToolDiscoveryService(
-          clientManager,
-          logger,
-          new MCPFormatterService(),
-        ),
         new ResourceAggregationService(clientManager, logger),
         new PromptAggregationService(clientManager, logger),
-        new MCPFormatterService(),
       );
       gateway = gatewayServer.getServer();
 
@@ -1632,17 +1539,11 @@ describe("MCPGatewayServer - Resource Aggregation", () => {
       const clients = new Map();
       const clientManager = createMockClientManager(clients);
       gatewayServer = new MCPGatewayServer(
-        luaRuntime,
+        createToolRegistry(luaRuntime, clientManager, logger),
         clientManager,
         logger,
-        new ToolDiscoveryService(
-          clientManager,
-          logger,
-          new MCPFormatterService(),
-        ),
         new ResourceAggregationService(clientManager, logger),
         new PromptAggregationService(clientManager, logger),
-        new MCPFormatterService(),
       );
       gateway = gatewayServer.getServer();
 
@@ -1720,17 +1621,11 @@ describe("MCPGatewayServer - Resource Aggregation", () => {
       const clients = new Map([["data-server", client]]);
       const clientManager = createMockClientManager(clients);
       gatewayServer = new MCPGatewayServer(
-        luaRuntime,
+        createToolRegistry(luaRuntime, clientManager, logger),
         clientManager,
         logger,
-        new ToolDiscoveryService(
-          clientManager,
-          logger,
-          new MCPFormatterService(),
-        ),
         new ResourceAggregationService(clientManager, logger),
         new PromptAggregationService(clientManager, logger),
-        new MCPFormatterService(),
       );
       gateway = gatewayServer.getServer();
 
@@ -1834,17 +1729,11 @@ describe("MCPGatewayServer - Resource Aggregation", () => {
       const clients = new Map([["special-server", client]]);
       const clientManager = createMockClientManager(clients);
       gatewayServer = new MCPGatewayServer(
-        luaRuntime,
+        createToolRegistry(luaRuntime, clientManager, logger),
         clientManager,
         logger,
-        new ToolDiscoveryService(
-          clientManager,
-          logger,
-          new MCPFormatterService(),
-        ),
         new ResourceAggregationService(clientManager, logger),
         new PromptAggregationService(clientManager, logger),
-        new MCPFormatterService(),
       );
       gateway = gatewayServer.getServer();
 
@@ -1929,17 +1818,11 @@ describe("MCPGatewayServer - Resource Aggregation", () => {
       ]);
       const clientManager = createMockClientManager(clients);
       gatewayServer = new MCPGatewayServer(
-        luaRuntime,
+        createToolRegistry(luaRuntime, clientManager, logger),
         clientManager,
         logger,
-        new ToolDiscoveryService(
-          clientManager,
-          logger,
-          new MCPFormatterService(),
-        ),
         new ResourceAggregationService(clientManager, logger),
         new PromptAggregationService(clientManager, logger),
-        new MCPFormatterService(),
       );
       gateway = gatewayServer.getServer();
 
@@ -2106,17 +1989,11 @@ describe("MCPGatewayServer - Resource Aggregation", () => {
 
         const clientManager = createMockClientManager(clients);
         gatewayServer = new MCPGatewayServer(
-          luaRuntime,
+          createToolRegistry(luaRuntime, clientManager, logger),
           clientManager,
           logger,
-          new ToolDiscoveryService(
-            clientManager,
-            logger,
-            new MCPFormatterService(),
-          ),
           new ResourceAggregationService(clientManager, logger),
           new PromptAggregationService(clientManager, logger),
-          new MCPFormatterService(),
         );
         gateway = gatewayServer.getServer();
 
@@ -2171,17 +2048,11 @@ describe("MCPGatewayServer - Resource Aggregation", () => {
 
         const clientManager = createMockClientManager(clients);
         gatewayServer = new MCPGatewayServer(
-          luaRuntime,
+          createToolRegistry(luaRuntime, clientManager, logger),
           clientManager,
           logger,
-          new ToolDiscoveryService(
-            clientManager,
-            logger,
-            new MCPFormatterService(),
-          ),
           new ResourceAggregationService(clientManager, logger),
           new PromptAggregationService(clientManager, logger),
-          new MCPFormatterService(),
         );
         gateway = gatewayServer.getServer();
 
@@ -2267,17 +2138,11 @@ describe("MCPGatewayServer - Resource Aggregation", () => {
 
         const clientManager = createMockClientManager(clients);
         gatewayServer = new MCPGatewayServer(
-          luaRuntime,
+          createToolRegistry(luaRuntime, clientManager, logger),
           clientManager,
           logger,
-          new ToolDiscoveryService(
-            clientManager,
-            logger,
-            new MCPFormatterService(),
-          ),
           new ResourceAggregationService(clientManager, logger),
           new PromptAggregationService(clientManager, logger),
-          new MCPFormatterService(),
         );
         gateway = gatewayServer.getServer();
 
@@ -2371,17 +2236,11 @@ describe("MCPGatewayServer - Resource Aggregation", () => {
 
         const clientManager = createMockClientManager(clients);
         gatewayServer = new MCPGatewayServer(
-          luaRuntime,
+          createToolRegistry(luaRuntime, clientManager, logger),
           clientManager,
           logger,
-          new ToolDiscoveryService(
-            clientManager,
-            logger,
-            new MCPFormatterService(),
-          ),
           new ResourceAggregationService(clientManager, logger),
           new PromptAggregationService(clientManager, logger),
-          new MCPFormatterService(),
         );
         gateway = gatewayServer.getServer();
 
@@ -2469,17 +2328,11 @@ describe("MCPGatewayServer - Resource Aggregation", () => {
 
         const clientManager = createMockClientManager(clients);
         gatewayServer = new MCPGatewayServer(
-          luaRuntime,
+          createToolRegistry(luaRuntime, clientManager, logger),
           clientManager,
           logger,
-          new ToolDiscoveryService(
-            clientManager,
-            logger,
-            new MCPFormatterService(),
-          ),
           new ResourceAggregationService(clientManager, logger),
           new PromptAggregationService(clientManager, logger),
-          new MCPFormatterService(),
         );
         gateway = gatewayServer.getServer();
 
@@ -2529,17 +2382,11 @@ describe("MCPGatewayServer - Resource Aggregation", () => {
 
         const clientManager = createMockClientManager(clients);
         gatewayServer = new MCPGatewayServer(
-          luaRuntime,
+          createToolRegistry(luaRuntime, clientManager, logger),
           clientManager,
           logger,
-          new ToolDiscoveryService(
-            clientManager,
-            logger,
-            new MCPFormatterService(),
-          ),
           new ResourceAggregationService(clientManager, logger),
           new PromptAggregationService(clientManager, logger),
-          new MCPFormatterService(),
         );
         gateway = gatewayServer.getServer();
 
@@ -2594,17 +2441,11 @@ describe("MCPGatewayServer - Resource Aggregation", () => {
 
         const clientManager = createMockClientManager(clients);
         gatewayServer = new MCPGatewayServer(
-          luaRuntime,
+          createToolRegistry(luaRuntime, clientManager, logger),
           clientManager,
           logger,
-          new ToolDiscoveryService(
-            clientManager,
-            logger,
-            new MCPFormatterService(),
-          ),
           new ResourceAggregationService(clientManager, logger),
           new PromptAggregationService(clientManager, logger),
-          new MCPFormatterService(),
         );
         gateway = gatewayServer.getServer();
 
