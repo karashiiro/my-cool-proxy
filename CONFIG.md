@@ -35,7 +35,6 @@ CONFIG_PATH=/path/to/custom-config.json pnpm dev
 {
   "port": 3000,
   "host": "localhost",
-  "useOAuth": false,
   "mcpClients": {
     "mcp-docs": {
       "type": "http",
@@ -57,7 +56,6 @@ CONFIG_PATH=/path/to/custom-config.json pnpm dev
 
 - **port** (number, required): Port number for the server to listen on
 - **host** (string, required): Hostname to bind to
-- **useOAuth** (boolean, optional): Enable OAuth authentication (default: false)
 - **mcpClients** (object, required): Map of MCP server configurations, keyed by server name
 
 #### MCP Client Configuration
@@ -111,7 +109,6 @@ The following environment variables can override config file values:
 
 - `PORT` - Override the port number
 - `HOST` - Override the hostname
-- `USE_OAUTH` - Override OAuth setting (set to "true" or "false")
 - `CONFIG_PATH` - Specify a custom config file path
 
 ### Example
@@ -127,7 +124,7 @@ This will use the config from `config.json` but override port and host.
 Configuration values are merged in this order (later values override earlier ones):
 
 1. Config file (`config.json` or `CONFIG_PATH`)
-2. Environment variables (`PORT`, `HOST`, `USE_OAUTH`)
+2. Environment variables (`PORT`, `HOST`)
 
 ## Adding MCP Servers
 

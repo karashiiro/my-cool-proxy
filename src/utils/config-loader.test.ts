@@ -30,7 +30,6 @@ describe("loadConfig", () => {
     const testConfig: ServerConfig = {
       port: 4000,
       host: "0.0.0.0",
-      useOAuth: true,
       mcpClients: {
         test: { type: "http", url: "http://test.com" },
       },
@@ -41,20 +40,6 @@ describe("loadConfig", () => {
 
     const config = loadConfig();
     expect(config).toEqual(testConfig);
-  });
-
-  it("should set default for useOAuth if not specified", () => {
-    const testConfig = {
-      port: 4000,
-      host: "0.0.0.0",
-      mcpClients: {},
-    };
-
-    writeFileSync(testConfigPath, JSON.stringify(testConfig));
-    process.env.CONFIG_PATH = testConfigPath;
-
-    const config = loadConfig();
-    expect(config.useOAuth).toBe(false);
   });
 
   it("should throw error if config file not found", () => {
@@ -237,12 +222,10 @@ describe("mergeEnvConfig", () => {
   it("should keep config values when no env vars are set", () => {
     delete process.env.PORT;
     delete process.env.HOST;
-    delete process.env.USE_OAUTH;
 
     const baseConfig: ServerConfig = {
       port: 3000,
       host: "localhost",
-      useOAuth: false,
       mcpClients: {},
     };
 
@@ -256,7 +239,6 @@ describe("mergeEnvConfig", () => {
     const baseConfig: ServerConfig = {
       port: 3000,
       host: "localhost",
-      useOAuth: false,
       mcpClients: {},
     };
 
@@ -270,7 +252,6 @@ describe("mergeEnvConfig", () => {
     const baseConfig: ServerConfig = {
       port: 3000,
       host: "localhost",
-      useOAuth: false,
       mcpClients: {},
     };
 
@@ -278,43 +259,13 @@ describe("mergeEnvConfig", () => {
     expect(result.host).toBe("0.0.0.0");
   });
 
-  it("should override useOAuth from USE_OAUTH env var", () => {
-    process.env.USE_OAUTH = "true";
-
-    const baseConfig: ServerConfig = {
-      port: 3000,
-      host: "localhost",
-      useOAuth: false,
-      mcpClients: {},
-    };
-
-    const result = mergeEnvConfig(baseConfig);
-    expect(result.useOAuth).toBe(true);
-  });
-
-  it("should set useOAuth to false when USE_OAUTH is 'false'", () => {
-    process.env.USE_OAUTH = "false";
-
-    const baseConfig: ServerConfig = {
-      port: 3000,
-      host: "localhost",
-      useOAuth: true,
-      mcpClients: {},
-    };
-
-    const result = mergeEnvConfig(baseConfig);
-    expect(result.useOAuth).toBe(false);
-  });
-
   it("should override all config values from env vars", () => {
     process.env.PORT = "9000";
     process.env.HOST = "example.com";
-    process.env.USE_OAUTH = "true";
 
     const baseConfig: ServerConfig = {
       port: 3000,
       host: "localhost",
-      useOAuth: false,
       mcpClients: { test: { type: "http", url: "http://test.com" } },
     };
 
@@ -322,7 +273,6 @@ describe("mergeEnvConfig", () => {
     expect(result).toEqual({
       port: 9000,
       host: "example.com",
-      useOAuth: true,
       mcpClients: { test: { type: "http", url: "http://test.com" } },
     });
   });
@@ -331,7 +281,6 @@ describe("mergeEnvConfig", () => {
     const baseConfig: ServerConfig = {
       port: 3000,
       host: "localhost",
-      useOAuth: false,
       mcpClients: {
         server1: { type: "http", url: "http://server1.com" },
         server2: { type: "stdio", command: "node", args: ["server.js"] },

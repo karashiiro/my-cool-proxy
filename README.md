@@ -68,7 +68,6 @@ Edit `config.json` to add your MCP servers:
 {
   "port": 3000,
   "host": "localhost",
-  "useOAuth": false,
   "mcpClients": {
     "my-server": {
       "type": "http",

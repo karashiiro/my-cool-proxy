@@ -80,7 +80,6 @@ export type MCPClientConfig = MCPClientConfigHTTP | MCPClientConfigStdio;
 export interface ServerConfig {
   port: number;
   host: string;
-  useOAuth: boolean;
   mcpClients: Record<string, MCPClientConfig>;
 }
 

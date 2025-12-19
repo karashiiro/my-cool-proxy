@@ -77,9 +77,6 @@ export function loadConfig(): ServerConfig {
       }
     }
 
-    // Set defaults for optional fields
-    config.useOAuth = config.useOAuth ?? false;
-
     return config;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
@@ -104,9 +101,5 @@ export function mergeEnvConfig(config: ServerConfig): ServerConfig {
     ...config,
     port: process.env.PORT ? parseInt(process.env.PORT) : config.port,
     host: process.env.HOST || config.host,
-    useOAuth:
-      process.env.USE_OAUTH !== undefined
-        ? process.env.USE_OAUTH === "true"
-        : config.useOAuth,
   };
 }
