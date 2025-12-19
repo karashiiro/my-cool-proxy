@@ -263,14 +263,12 @@ describe("MCPGatewayServer - execute tool", () => {
   let clientManager: IMCPClientManager;
   let logger: ILogger;
   let gateway: McpServer;
+  let gatewayClient: Client;
   const cleanupFns: Array<() => Promise<void>> = [];
 
   beforeEach(() => {
     logger = createMockLogger();
     luaRuntime = new WasmoonRuntime(logger);
-    clientManager = createMockClientManager(new Map());
-    gatewayServer = new MCPGatewayServer(luaRuntime, clientManager, logger);
-    gateway = gatewayServer.getServer();
   });
 
   afterEach(async () => {
@@ -279,7 +277,12 @@ describe("MCPGatewayServer - execute tool", () => {
       await cleanup();
     }
     cleanupFns.length = 0;
-    await gateway.close();
+    if (gatewayClient) {
+      await gatewayClient.close();
+    }
+    if (gateway) {
+      await gateway.close();
+    }
   });
 
   describe("CallToolResult passthrough", () => {
@@ -307,25 +310,40 @@ describe("MCPGatewayServer - execute tool", () => {
       });
 
       const servers = new Map([["image-server", client]]);
+      clientManager = createMockClientManager(servers);
+      gatewayServer = new MCPGatewayServer(luaRuntime, clientManager, logger);
+      gateway = gatewayServer.getServer();
+
+      // Connect to gateway
+      const [clientTransport, serverTransport] =
+        InMemoryTransport.createLinkedPair();
+      await gateway.connect(serverTransport);
+
+      gatewayClient = new Client(
+        { name: "test-gateway-client", version: "1.0.0" },
+        { capabilities: {} },
+      );
+      await gatewayClient.connect(clientTransport);
 
       const script = `
         result = image_server.generate_image({}):await()
       `;
 
-      // Execute the script through the Lua runtime
-      const luaResult = await luaRuntime.executeScript(script, servers);
+      // Execute the script through the gateway server
+      const result = await gatewayClient.callTool({
+        name: "execute",
+        arguments: { script },
+      });
 
       // The result should have image content preserved
-      expect(luaResult).toEqual({
-        content: [
-          { type: "text", text: "Here's your image:" },
-          {
-            type: "image",
-            data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
-            mimeType: "image/png",
-          },
-        ],
-      });
+      expect(result.content).toEqual([
+        { type: "text", text: "Here's your image:" },
+        {
+          type: "image",
+          data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+          mimeType: "image/png",
+        },
+      ]);
     });
 
     it("should pass through CallToolResult with audio content", async () => {
@@ -352,23 +370,39 @@ describe("MCPGatewayServer - execute tool", () => {
       });
 
       const servers = new Map([["audio-server", client]]);
+      clientManager = createMockClientManager(servers);
+      gatewayServer = new MCPGatewayServer(luaRuntime, clientManager, logger);
+      gateway = gatewayServer.getServer();
+
+      // Connect to gateway
+      const [clientTransport, serverTransport] =
+        InMemoryTransport.createLinkedPair();
+      await gateway.connect(serverTransport);
+
+      gatewayClient = new Client(
+        { name: "test-gateway-client", version: "1.0.0" },
+        { capabilities: {} },
+      );
+      await gatewayClient.connect(clientTransport);
 
       const script = `
         result = audio_server.generate_audio({}):await()
       `;
 
-      const luaResult = await luaRuntime.executeScript(script, servers);
-
-      expect(luaResult).toEqual({
-        content: [
-          { type: "text", text: "Here's your audio:" },
-          {
-            type: "audio",
-            data: "SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA",
-            mimeType: "audio/mp3",
-          },
-        ],
+      // Execute the script through the gateway server
+      const result = await gatewayClient.callTool({
+        name: "execute",
+        arguments: { script },
       });
+
+      expect(result.content).toEqual([
+        { type: "text", text: "Here's your audio:" },
+        {
+          type: "audio",
+          data: "SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA",
+          mimeType: "audio/mp3",
+        },
+      ]);
     });
 
     it("should pass through CallToolResult with multiple content blocks", async () => {
@@ -396,24 +430,40 @@ describe("MCPGatewayServer - execute tool", () => {
       });
 
       const servers = new Map([["multi-server", client]]);
+      clientManager = createMockClientManager(servers);
+      gatewayServer = new MCPGatewayServer(luaRuntime, clientManager, logger);
+      gateway = gatewayServer.getServer();
+
+      // Connect to gateway
+      const [clientTransport, serverTransport] =
+        InMemoryTransport.createLinkedPair();
+      await gateway.connect(serverTransport);
+
+      gatewayClient = new Client(
+        { name: "test-gateway-client", version: "1.0.0" },
+        { capabilities: {} },
+      );
+      await gatewayClient.connect(clientTransport);
 
       const script = `
         result = multi_server.multi_content({}):await()
       `;
 
-      const luaResult = await luaRuntime.executeScript(script, servers);
-
-      expect(luaResult).toEqual({
-        content: [
-          { type: "text", text: "First text" },
-          { type: "text", text: "Second text" },
-          {
-            type: "image",
-            data: "/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAIBAQIBAQICAgICAgICAwUDAwMDAwYEBAMFBwYHBwcGBwcICQsJCAgKCAcHCg0KCgsMDAwMBwkODw0MDgsMDAz/2wBDAQICAgMDAwYDAwYMCAcIDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAz/wAARCAABAAEDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlbaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD9/KKKKAP/2Q==",
-            mimeType: "image/jpeg",
-          },
-        ],
+      // Execute the script through the gateway server
+      const result = await gatewayClient.callTool({
+        name: "execute",
+        arguments: { script },
       });
+
+      expect(result.content).toEqual([
+        { type: "text", text: "First text" },
+        { type: "text", text: "Second text" },
+        {
+          type: "image",
+          data: "/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAIBAQIBAQICAgICAgICAwUDAwMDAwYEBAMFBwYHBwcGBwcICQsJCAgKCAcHCg0KCgsMDAwMBwkODw0MDgsMDAz/2wBDAQICAgMDAwYDAwYMCAcIDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAz/wAARCAABAAEDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlbaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD9/KKKKAP/2Q==",
+          mimeType: "image/jpeg",
+        },
+      ]);
     });
 
     it("should pass through CallToolResult with isError flag", async () => {
@@ -434,22 +484,55 @@ describe("MCPGatewayServer - execute tool", () => {
       });
 
       const servers = new Map([["error-server", client]]);
+      clientManager = createMockClientManager(servers);
+      gatewayServer = new MCPGatewayServer(luaRuntime, clientManager, logger);
+      gateway = gatewayServer.getServer();
+
+      // Connect to gateway
+      const [clientTransport, serverTransport] =
+        InMemoryTransport.createLinkedPair();
+      await gateway.connect(serverTransport);
+
+      gatewayClient = new Client(
+        { name: "test-gateway-client", version: "1.0.0" },
+        { capabilities: {} },
+      );
+      await gatewayClient.connect(clientTransport);
 
       const script = `
         result = error_server.failing_tool({}):await()
       `;
 
-      const luaResult = await luaRuntime.executeScript(script, servers);
-
-      expect(luaResult).toEqual({
-        content: [{ type: "text", text: "Tool failed: invalid input" }],
-        isError: true,
+      // Execute the script through the gateway server
+      const result = await gatewayClient.callTool({
+        name: "execute",
+        arguments: { script },
       });
+
+      expect(result.content).toEqual([
+        { type: "text", text: "Tool failed: invalid input" },
+      ]);
+      expect(result.isError).toBe(true);
     });
   });
 
   describe("Object to structuredContent conversion", () => {
     it("should convert object result to structuredContent", async () => {
+      clientManager = createMockClientManager(new Map());
+      gatewayServer = new MCPGatewayServer(luaRuntime, clientManager, logger);
+      gateway = gatewayServer.getServer();
+
+      // Connect to gateway
+      const [clientTransport, serverTransport] =
+        InMemoryTransport.createLinkedPair();
+      await gateway.connect(serverTransport);
+
+      gatewayClient = new Client(
+        { name: "test-gateway-client", version: "1.0.0" },
+        { capabilities: {} },
+      );
+      await gatewayClient.connect(clientTransport);
+
       const script = `
         result = {
           name = "claude",
@@ -458,20 +541,41 @@ describe("MCPGatewayServer - execute tool", () => {
         }
       `;
 
-      const luaResult = await luaRuntime.executeScript(script, new Map());
+      // Execute the script through the gateway server
+      const result = await gatewayClient.callTool({
+        name: "execute",
+        arguments: { script },
+      });
 
-      expect(luaResult).toEqual({
+      // The object should be converted to structuredContent by the gateway
+      expect(Array.isArray(result.content)).toBe(true);
+      expect(result.content).toHaveLength(1);
+      const content = (result.content as Array<unknown>)[0];
+      expect(content).toHaveProperty("type", "text");
+      expect(result).toHaveProperty("structuredContent");
+      expect(result.structuredContent).toEqual({
         name: "claude",
         level: 9000,
         items: ["sword", "shield"],
       });
-
-      // This object should be converted to structuredContent by the gateway
-      expect(typeof luaResult).toBe("object");
-      expect(luaResult).not.toBeNull();
     });
 
     it("should convert nested object to structuredContent", async () => {
+      clientManager = createMockClientManager(new Map());
+      gatewayServer = new MCPGatewayServer(luaRuntime, clientManager, logger);
+      gateway = gatewayServer.getServer();
+
+      // Connect to gateway
+      const [clientTransport, serverTransport] =
+        InMemoryTransport.createLinkedPair();
+      await gateway.connect(serverTransport);
+
+      gatewayClient = new Client(
+        { name: "test-gateway-client", version: "1.0.0" },
+        { capabilities: {} },
+      );
+      await gatewayClient.connect(clientTransport);
+
       const script = `
         result = {
           user = {
@@ -484,9 +588,18 @@ describe("MCPGatewayServer - execute tool", () => {
         }
       `;
 
-      const luaResult = await luaRuntime.executeScript(script, new Map());
+      // Execute the script through the gateway server
+      const result = await gatewayClient.callTool({
+        name: "execute",
+        arguments: { script },
+      });
 
-      expect(luaResult).toEqual({
+      expect(Array.isArray(result.content)).toBe(true);
+      expect(result.content).toHaveLength(1);
+      const content = (result.content as Array<unknown>)[0];
+      expect(content).toHaveProperty("type", "text");
+      expect(result).toHaveProperty("structuredContent");
+      expect(result.structuredContent).toEqual({
         user: {
           name: "alice",
           stats: {
@@ -498,51 +611,179 @@ describe("MCPGatewayServer - execute tool", () => {
     });
 
     it("should handle empty object", async () => {
+      clientManager = createMockClientManager(new Map());
+      gatewayServer = new MCPGatewayServer(luaRuntime, clientManager, logger);
+      gateway = gatewayServer.getServer();
+
+      // Connect to gateway
+      const [clientTransport, serverTransport] =
+        InMemoryTransport.createLinkedPair();
+      await gateway.connect(serverTransport);
+
+      gatewayClient = new Client(
+        { name: "test-gateway-client", version: "1.0.0" },
+        { capabilities: {} },
+      );
+      await gatewayClient.connect(clientTransport);
+
       const script = `
         result = {}
       `;
 
-      const luaResult = await luaRuntime.executeScript(script, new Map());
+      // Execute the script through the gateway server
+      const result = await gatewayClient.callTool({
+        name: "execute",
+        arguments: { script },
+      });
 
-      expect(luaResult).toEqual({});
+      expect(Array.isArray(result.content)).toBe(true);
+      expect(result.content).toHaveLength(1);
+      const content = (result.content as Array<unknown>)[0];
+      expect(content).toHaveProperty("type", "text");
+      expect(result).toHaveProperty("structuredContent");
+      expect(result.structuredContent).toEqual({});
     });
   });
 
   describe("Primitive value handling", () => {
     it("should handle string results", async () => {
+      clientManager = createMockClientManager(new Map());
+      gatewayServer = new MCPGatewayServer(luaRuntime, clientManager, logger);
+      gateway = gatewayServer.getServer();
+
+      // Connect to gateway
+      const [clientTransport, serverTransport] =
+        InMemoryTransport.createLinkedPair();
+      await gateway.connect(serverTransport);
+
+      gatewayClient = new Client(
+        { name: "test-gateway-client", version: "1.0.0" },
+        { capabilities: {} },
+      );
+      await gatewayClient.connect(clientTransport);
+
       const script = `
         result = "hello world"
       `;
 
-      const luaResult = await luaRuntime.executeScript(script, new Map());
-      expect(luaResult).toBe("hello world");
+      // Execute the script through the gateway server
+      const result = await gatewayClient.callTool({
+        name: "execute",
+        arguments: { script },
+      });
+
+      expect(Array.isArray(result.content)).toBe(true);
+      expect(result.content).toHaveLength(1);
+      const content = (result.content as Array<unknown>)[0];
+      expect(content).toHaveProperty("type", "text");
+      if (content && typeof content === "object" && "text" in content) {
+        expect(content.text).toContain("hello world");
+      }
     });
 
     it("should handle number results", async () => {
+      clientManager = createMockClientManager(new Map());
+      gatewayServer = new MCPGatewayServer(luaRuntime, clientManager, logger);
+      gateway = gatewayServer.getServer();
+
+      // Connect to gateway
+      const [clientTransport, serverTransport] =
+        InMemoryTransport.createLinkedPair();
+      await gateway.connect(serverTransport);
+
+      gatewayClient = new Client(
+        { name: "test-gateway-client", version: "1.0.0" },
+        { capabilities: {} },
+      );
+      await gatewayClient.connect(clientTransport);
+
       const script = `
         result = 42
       `;
 
-      const luaResult = await luaRuntime.executeScript(script, new Map());
-      expect(luaResult).toBe(42);
+      // Execute the script through the gateway server
+      const result = await gatewayClient.callTool({
+        name: "execute",
+        arguments: { script },
+      });
+
+      expect(Array.isArray(result.content)).toBe(true);
+      expect(result.content).toHaveLength(1);
+      const content = (result.content as Array<unknown>)[0];
+      expect(content).toHaveProperty("type", "text");
+      if (content && typeof content === "object" && "text" in content) {
+        expect(content.text).toContain("42");
+      }
     });
 
     it("should handle boolean results", async () => {
+      clientManager = createMockClientManager(new Map());
+      gatewayServer = new MCPGatewayServer(luaRuntime, clientManager, logger);
+      gateway = gatewayServer.getServer();
+
+      // Connect to gateway
+      const [clientTransport, serverTransport] =
+        InMemoryTransport.createLinkedPair();
+      await gateway.connect(serverTransport);
+
+      gatewayClient = new Client(
+        { name: "test-gateway-client", version: "1.0.0" },
+        { capabilities: {} },
+      );
+      await gatewayClient.connect(clientTransport);
+
       const script = `
         result = true
       `;
 
-      const luaResult = await luaRuntime.executeScript(script, new Map());
-      expect(luaResult).toBe(true);
+      // Execute the script through the gateway server
+      const result = await gatewayClient.callTool({
+        name: "execute",
+        arguments: { script },
+      });
+
+      expect(Array.isArray(result.content)).toBe(true);
+      expect(result.content).toHaveLength(1);
+      const content = (result.content as Array<unknown>)[0];
+      expect(content).toHaveProperty("type", "text");
+      if (content && typeof content === "object" && "text" in content) {
+        expect(content.text).toContain("true");
+      }
     });
 
     it("should handle nil/undefined results", async () => {
+      clientManager = createMockClientManager(new Map());
+      gatewayServer = new MCPGatewayServer(luaRuntime, clientManager, logger);
+      gateway = gatewayServer.getServer();
+
+      // Connect to gateway
+      const [clientTransport, serverTransport] =
+        InMemoryTransport.createLinkedPair();
+      await gateway.connect(serverTransport);
+
+      gatewayClient = new Client(
+        { name: "test-gateway-client", version: "1.0.0" },
+        { capabilities: {} },
+      );
+      await gatewayClient.connect(clientTransport);
+
       const script = `
         -- No result set
       `;
 
-      const luaResult = await luaRuntime.executeScript(script, new Map());
-      expect(luaResult).toBeNull();
+      // Execute the script through the gateway server
+      const result = await gatewayClient.callTool({
+        name: "execute",
+        arguments: { script },
+      });
+
+      expect(Array.isArray(result.content)).toBe(true);
+      expect(result.content).toHaveLength(1);
+      const content = (result.content as Array<unknown>)[0];
+      expect(content).toHaveProperty("type", "text");
+      if (content && typeof content === "object" && "text" in content) {
+        expect(content.text).toContain("null");
+      }
     });
   });
 
@@ -572,26 +813,42 @@ describe("MCPGatewayServer - execute tool", () => {
       });
 
       const servers = new Map([["rich-server", client]]);
+      clientManager = createMockClientManager(servers);
+      gatewayServer = new MCPGatewayServer(luaRuntime, clientManager, logger);
+      gateway = gatewayServer.getServer();
+
+      // Connect to gateway
+      const [clientTransport, serverTransport] =
+        InMemoryTransport.createLinkedPair();
+      await gateway.connect(serverTransport);
+
+      gatewayClient = new Client(
+        { name: "test-gateway-client", version: "1.0.0" },
+        { capabilities: {} },
+      );
+      await gatewayClient.connect(clientTransport);
 
       const script = `
         -- Return the tool result directly
         result = rich_server.get_report({}):await()
       `;
 
-      const luaResult = await luaRuntime.executeScript(script, servers);
+      // Execute the script through the gateway server
+      const result = await gatewayClient.callTool({
+        name: "execute",
+        arguments: { script },
+      });
 
       // Should preserve all content blocks
-      expect(luaResult).toEqual({
-        content: [
-          { type: "text", text: "Sales Report Q4 2024" },
-          {
-            type: "image",
-            data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
-            mimeType: "image/png",
-          },
-          { type: "text", text: "Revenue: $1M" },
-        ],
-      });
+      expect(result.content).toEqual([
+        { type: "text", text: "Sales Report Q4 2024" },
+        {
+          type: "image",
+          data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+          mimeType: "image/png",
+        },
+        { type: "text", text: "Revenue: $1M" },
+      ]);
     });
 
     it("should use structuredContent when processing tool results into objects", async () => {
@@ -611,6 +868,20 @@ describe("MCPGatewayServer - execute tool", () => {
       });
 
       const servers = new Map([["api", client]]);
+      clientManager = createMockClientManager(servers);
+      gatewayServer = new MCPGatewayServer(luaRuntime, clientManager, logger);
+      gateway = gatewayServer.getServer();
+
+      // Connect to gateway
+      const [clientTransport, serverTransport] =
+        InMemoryTransport.createLinkedPair();
+      await gateway.connect(serverTransport);
+
+      gatewayClient = new Client(
+        { name: "test-gateway-client", version: "1.0.0" },
+        { capabilities: {} },
+      );
+      await gatewayClient.connect(clientTransport);
 
       const script = `
         -- Process the tool result and return a custom object
@@ -622,28 +893,78 @@ describe("MCPGatewayServer - execute tool", () => {
         }
       `;
 
-      const luaResult = await luaRuntime.executeScript(script, servers);
+      // Execute the script through the gateway server
+      const result = await gatewayClient.callTool({
+        name: "execute",
+        arguments: { script },
+      });
 
-      // Should be an object (will use structuredContent)
-      expect(typeof luaResult).toBe("object");
-      expect(luaResult).toHaveProperty("raw");
-      expect(luaResult).toHaveProperty("processed", true);
-      expect(luaResult).toHaveProperty("timestamp", 1234567890);
+      // Should be an object wrapped in structuredContent
+      expect(Array.isArray(result.content)).toBe(true);
+      expect(result.content).toHaveLength(1);
+      const content = (result.content as Array<unknown>)[0];
+      expect(content).toHaveProperty("type", "text");
+      expect(result).toHaveProperty("structuredContent");
+      expect(typeof result.structuredContent).toBe("object");
+      expect(result.structuredContent).toHaveProperty("raw");
+      expect(result.structuredContent).toHaveProperty("processed", true);
+      expect(result.structuredContent).toHaveProperty("timestamp", 1234567890);
     });
   });
 
   describe("Error handling in execute tool", () => {
     it("should handle Lua script errors gracefully", async () => {
+      clientManager = createMockClientManager(new Map());
+      gatewayServer = new MCPGatewayServer(luaRuntime, clientManager, logger);
+      gateway = gatewayServer.getServer();
+
+      // Connect to gateway
+      const [clientTransport, serverTransport] =
+        InMemoryTransport.createLinkedPair();
+      await gateway.connect(serverTransport);
+
+      gatewayClient = new Client(
+        { name: "test-gateway-client", version: "1.0.0" },
+        { capabilities: {} },
+      );
+      await gatewayClient.connect(clientTransport);
+
       const script = `
         error("intentional error")
       `;
 
-      await expect(
-        luaRuntime.executeScript(script, new Map()),
-      ).rejects.toThrow();
+      // Execute the script through the gateway server - should return error result
+      const result = await gatewayClient.callTool({
+        name: "execute",
+        arguments: { script },
+      });
+
+      expect(result.isError).toBe(true);
+      expect(Array.isArray(result.content)).toBe(true);
+      expect(result.content).toHaveLength(1);
+      const content = (result.content as Array<unknown>)[0];
+      expect(content).toHaveProperty("type", "text");
+      if (content && typeof content === "object" && "text" in content) {
+        expect(content.text).toContain("Script execution failed");
+      }
     });
 
     it("should handle invalid CallToolResult objects", async () => {
+      clientManager = createMockClientManager(new Map());
+      gatewayServer = new MCPGatewayServer(luaRuntime, clientManager, logger);
+      gateway = gatewayServer.getServer();
+
+      // Connect to gateway
+      const [clientTransport, serverTransport] =
+        InMemoryTransport.createLinkedPair();
+      await gateway.connect(serverTransport);
+
+      gatewayClient = new Client(
+        { name: "test-gateway-client", version: "1.0.0" },
+        { capabilities: {} },
+      );
+      await gatewayClient.connect(clientTransport);
+
       const script = `
         -- Return something that looks like CallToolResult but isn't valid
         result = {
@@ -651,10 +972,19 @@ describe("MCPGatewayServer - execute tool", () => {
         }
       `;
 
-      const luaResult = await luaRuntime.executeScript(script, new Map());
+      // Execute the script through the gateway server
+      const result = await gatewayClient.callTool({
+        name: "execute",
+        arguments: { script },
+      });
 
       // Should fall back to structuredContent since it's not a valid CallToolResult
-      expect(luaResult).toEqual({
+      expect(Array.isArray(result.content)).toBe(true);
+      expect(result.content).toHaveLength(1);
+      const content = (result.content as Array<unknown>)[0];
+      expect(content).toHaveProperty("type", "text");
+      expect(result).toHaveProperty("structuredContent");
+      expect(result.structuredContent).toEqual({
         content: "not an array",
       });
     });
