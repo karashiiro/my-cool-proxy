@@ -1,5 +1,6 @@
 import type { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { MCPClientSession } from "../mcp/client-session.js";
+import type { Request, Response } from "express";
 
 export interface ILuaRuntime {
   executeScript(
@@ -109,4 +110,12 @@ export type ServerListItem = ServerInfo | ServerError;
 export interface ToolInfo {
   luaName: string;
   description: string;
+}
+
+export interface IMCPSessionController {
+  handleRequest(req: Request, res: Response): Promise<void>;
+}
+
+export interface IShutdownHandler {
+  shutdown(): Promise<void>;
 }

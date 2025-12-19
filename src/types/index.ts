@@ -10,4 +10,7 @@ export const TYPES = {
   ResourceAggregationService: Symbol.for("ResourceAggregationService"),
   PromptAggregationService: Symbol.for("PromptAggregationService"),
   MCPFormatterService: Symbol.for("MCPFormatterService"),
+  MCPGatewayServer: Symbol.for("MCPGatewayServer"),
+  MCPSessionController: Symbol.for("MCPSessionController"),
+  ShutdownHandler: Symbol.for("ShutdownHandler"),
 };

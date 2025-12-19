@@ -7,6 +7,8 @@ import type {
   ITransportManager,
   ILogger,
   ServerConfig,
+  IMCPSessionController,
+  IShutdownHandler,
 } from "../types/interfaces.js";
 import { WasmoonRuntime } from "../lua/runtime.js";
 import { MCPClientManager } from "../mcp/client-manager.js";
@@ -17,6 +19,8 @@ import { ToolDiscoveryService } from "../mcp/tool-discovery-service.js";
 import { ResourceAggregationService } from "../mcp/resource-aggregation-service.js";
 import { PromptAggregationService } from "../mcp/prompt-aggregation-service.js";
 import { MCPFormatterService } from "../mcp/mcp-formatter-service.js";
+import { MCPSessionController } from "../controllers/mcp-session-controller.js";
+import { ShutdownHandler } from "../handlers/shutdown-handler.js";
 
 export function createContainer(config: ServerConfig): Container {
   const container = new Container();
@@ -63,8 +67,23 @@ export function createContainer(config: ServerConfig): Container {
     .to(PromptAggregationService)
     .inSingletonScope();
 
-  // Bind gateway server class so it can be resolved from container
-  container.bind(MCPGatewayServer).to(MCPGatewayServer).inTransientScope();
+  // Bind gateway server (singleton - shared across all sessions)
+  container
+    .bind(TYPES.MCPGatewayServer)
+    .to(MCPGatewayServer)
+    .inSingletonScope();
+
+  // Bind session controller
+  container
+    .bind<IMCPSessionController>(TYPES.MCPSessionController)
+    .to(MCPSessionController)
+    .inSingletonScope();
+
+  // Bind shutdown handler
+  container
+    .bind<IShutdownHandler>(TYPES.ShutdownHandler)
+    .to(ShutdownHandler)
+    .inSingletonScope();
 
   return container;
 }
