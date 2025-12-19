@@ -25,11 +25,10 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: "pnpm"
 
-      - name: Enable corepack (provides pnpm)
-        run: corepack enable
-
-      - name: Ensure pnpm is available
-        run: pnpm -v || corepack prepare pnpm@latest --activate
+      - name: Enable corepack and prepare pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@latest --activate
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
