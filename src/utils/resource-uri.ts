@@ -1,6 +1,7 @@
 import type {
   Resource,
   CallToolResult,
+  GetPromptResult,
 } from "@modelcontextprotocol/sdk/types.js";
 
 /**
@@ -156,5 +157,90 @@ export function namespaceCallToolResultResources(
   return {
     ...result,
     content: namespacedContent,
+  };
+}
+
+/**
+ * Namespace resource URIs in a GetPromptResult's message content blocks.
+ * This walks through all messages and their content blocks, namespacing any resource URIs.
+ *
+ * @param serverName - The name of the MCP server that returned this result
+ * @param result - The GetPromptResult to process
+ * @returns A new GetPromptResult with namespaced resource URIs
+ *
+ * @example
+ * const promptResult = {
+ *   messages: [
+ *     {
+ *       role: "user",
+ *       content: {
+ *         type: "resource_link",
+ *         name: "Doc",
+ *         uri: "file:///docs/README.md"
+ *       }
+ *     }
+ *   ]
+ * };
+ * namespaceGetPromptResultResources("docs-server", promptResult)
+ * // Returns result with URI: "mcp://docs-server/file:///docs/README.md"
+ */
+export function namespaceGetPromptResultResources(
+  serverName: string,
+  result: GetPromptResult,
+): GetPromptResult {
+  // Clone the result and namespace content in each message
+  const namespacedMessages = result.messages.map((message) => {
+    const content = message.content;
+
+    // Skip if content is not an object
+    if (
+      typeof content !== "object" ||
+      content === null ||
+      !("type" in content)
+    ) {
+      return message;
+    }
+
+    // Handle resource_link content blocks (flat structure)
+    if (content.type === "resource_link" && "uri" in content) {
+      return {
+        ...message,
+        content: {
+          ...content,
+          uri: namespaceResourceUri(serverName, content.uri as string),
+        },
+      };
+    }
+
+    // Handle embedded resource content blocks (nested structure)
+    if (
+      content.type === "resource" &&
+      "resource" in content &&
+      typeof content.resource === "object" &&
+      content.resource !== null &&
+      "uri" in content.resource
+    ) {
+      return {
+        ...message,
+        content: {
+          ...content,
+          resource: {
+            ...content.resource,
+            uri: namespaceResourceUri(
+              serverName,
+              content.resource.uri as string,
+            ),
+          },
+        },
+      };
+    }
+
+    // Return message unchanged if no resource URIs found
+    return message;
+  });
+
+  return {
+    ...result,
+    messages: namespacedMessages,
   };
 }

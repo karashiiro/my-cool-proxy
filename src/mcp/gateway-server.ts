@@ -25,7 +25,11 @@ import type {
 import { TYPES } from "../types/index.js";
 import { sanitizeLuaIdentifier } from "../utils/lua-identifier.js";
 import { formatSchema } from "../utils/schema-formatter.js";
-import { namespaceResource, parseResourceUri } from "../utils/resource-uri.js";
+import {
+  namespaceResource,
+  parseResourceUri,
+  namespaceGetPromptResultResources,
+} from "../utils/resource-uri.js";
 import { namespacePrompt, parsePromptName } from "../utils/prompt-name.js";
 import type { MCPClientSession } from "./client-session.js";
 
@@ -72,6 +76,11 @@ interface ToolInfo {
  *    - Resource URIs in CallToolResult content blocks are namespaced in the
  *      Lua runtime (NOT here!) because the runtime has the per-tool-call server
  *      context. See WasmoonRuntime.injectMCPServers() for details.
+ *
+ * 4. Prompt Messages → Client (Outbound):
+ *    - getPrompt(): Namespaces resource URIs in prompt message content blocks
+ *      before returning to the client. Prompts can include resource_link or
+ *      embedded resource content blocks.
  *
  * This separation ensures we always have the necessary context to namespace
  * correctly, even when Lua scripts call tools from multiple servers.
@@ -666,7 +675,9 @@ Example: result = server_name.tool_name({ arg = "value" }):await()`,
           this.logger.debug(
             `Got prompt '${originalName}' from server '${serverName}'`,
           );
-          return result;
+
+          // Namespace any resource URIs in the prompt messages
+          return namespaceGetPromptResultResources(serverName, result);
         } catch (error) {
           this.logger.error(
             `Failed to get prompt '${originalName}' from server '${serverName}':`,
