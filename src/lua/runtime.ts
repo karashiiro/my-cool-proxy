@@ -26,14 +26,17 @@ export class WasmoonRuntime implements ILuaRuntime {
     script: string,
     mcpServers: Map<string, MCPClientSession>,
   ): Promise<unknown> {
-    const engine = await this.createEngine();
+    let finalResult: unknown;
+    const engine = await this.createEngine((result: unknown) => {
+      finalResult = result;
+    });
+
     try {
       // Inject MCP servers as Lua globals
       await this.injectMCPServers(engine, mcpServers);
 
       await engine.doString(script);
-      const result = engine.global.get("result");
-      return result;
+      return finalResult;
     } catch (error) {
       this.logger.error("Lua script execution failed", error as Error);
       throw error;
@@ -42,7 +45,9 @@ export class WasmoonRuntime implements ILuaRuntime {
     }
   }
 
-  private async createEngine(): Promise<LuaEngine> {
+  private async createEngine(
+    resultCallback: (result: unknown) => void,
+  ): Promise<LuaEngine> {
     const engine = await this.factory.createEngine();
 
     // Remove dangerous OS access
@@ -59,6 +64,11 @@ export class WasmoonRuntime implements ILuaRuntime {
 
     // Remove debug facilities
     engine.global.set("debug", undefined);
+
+    // Add a function to return the final result
+    engine.global.set("result", (res: unknown) => {
+      resultCallback(res);
+    });
 
     return engine;
   }

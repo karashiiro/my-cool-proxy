@@ -103,7 +103,7 @@ describe("WasmoonRuntime", () => {
   describe("basic Lua execution", () => {
     it("should execute simple Lua script and return result", async () => {
       const script = `
-        result = 42
+        result(42)
       `;
 
       const result = await runtime.executeScript(script, new Map());
@@ -112,7 +112,7 @@ describe("WasmoonRuntime", () => {
 
     it("should execute Lua math operations", async () => {
       const script = `
-        result = 10 + 5 * 2
+        result(10 + 5 * 2)
       `;
 
       const result = await runtime.executeScript(script, new Map());
@@ -121,7 +121,7 @@ describe("WasmoonRuntime", () => {
 
     it("should return string results", async () => {
       const script = `
-        result = "hello world"
+        result("hello world")
       `;
 
       const result = await runtime.executeScript(script, new Map());
@@ -130,7 +130,7 @@ describe("WasmoonRuntime", () => {
 
     it("should return table results", async () => {
       const script = `
-        result = { name = "test", value = 123 }
+        result({ name = "test", value = 123 })
       `;
 
       const result = await runtime.executeScript(script, new Map());
@@ -144,14 +144,14 @@ describe("WasmoonRuntime", () => {
       `;
 
       const result = await runtime.executeScript(script, new Map());
-      expect(result).toBeNull();
+      expect(result).toBeUndefined();
     });
   });
 
   describe("sandboxing", () => {
     it("should not have access to os module", async () => {
       const script = `
-        result = os
+        result(os)
       `;
 
       const result = await runtime.executeScript(script, new Map());
@@ -160,7 +160,7 @@ describe("WasmoonRuntime", () => {
 
     it("should not have access to io module", async () => {
       const script = `
-        result = io
+        result(io)
       `;
 
       const result = await runtime.executeScript(script, new Map());
@@ -169,7 +169,7 @@ describe("WasmoonRuntime", () => {
 
     it("should not have access to require", async () => {
       const script = `
-        result = require
+        result(require)
       `;
 
       const result = await runtime.executeScript(script, new Map());
@@ -178,7 +178,7 @@ describe("WasmoonRuntime", () => {
 
     it("should not have access to dofile", async () => {
       const script = `
-        result = dofile
+        result(dofile)
       `;
 
       const result = await runtime.executeScript(script, new Map());
@@ -187,7 +187,7 @@ describe("WasmoonRuntime", () => {
 
     it("should not have access to loadfile", async () => {
       const script = `
-        result = loadfile
+        result(loadfile)
       `;
 
       const result = await runtime.executeScript(script, new Map());
@@ -196,7 +196,7 @@ describe("WasmoonRuntime", () => {
 
     it("should not have access to debug module", async () => {
       const script = `
-        result = debug
+        result(debug)
       `;
 
       const result = await runtime.executeScript(script, new Map());
@@ -205,7 +205,7 @@ describe("WasmoonRuntime", () => {
 
     it("should have access to safe modules like math", async () => {
       const script = `
-        result = math.floor(3.7)
+        result(math.floor(3.7))
       `;
 
       const result = await runtime.executeScript(script, new Map());
@@ -214,7 +214,7 @@ describe("WasmoonRuntime", () => {
 
     it("should have access to safe modules like string", async () => {
       const script = `
-        result = string.upper("hello")
+        result(string.upper("hello"))
       `;
 
       const result = await runtime.executeScript(script, new Map());
@@ -225,7 +225,7 @@ describe("WasmoonRuntime", () => {
       const script = `
         local t = {1, 2, 3}
         table.insert(t, 4)
-        result = #t
+        result(#t)
       `;
 
       const result = await runtime.executeScript(script, new Map());
@@ -253,7 +253,7 @@ describe("WasmoonRuntime", () => {
       const servers = new Map([["test-server", client]]);
 
       const script = `
-        result = test_server ~= nil
+        result(test_server ~= nil)
       `;
 
       const result = await runtime.executeScript(script, servers);
@@ -280,7 +280,7 @@ describe("WasmoonRuntime", () => {
 
       const script = `
         -- Should be accessible as test_server (hyphen → underscore)
-        result = test_server ~= nil
+        result(test_server ~= nil)
       `;
 
       const result = await runtime.executeScript(script, servers);
@@ -306,7 +306,7 @@ describe("WasmoonRuntime", () => {
       const servers = new Map([["my-server", client]]);
 
       const script = `
-        result = type(my_server.get_data) == "function"
+        result(type(my_server.get_data) == "function")
       `;
 
       const result = await runtime.executeScript(script, servers);
@@ -342,7 +342,7 @@ describe("WasmoonRuntime", () => {
         -- Tools should have sanitized names
         local hasGetData = type(server.get_data) == "function"
         local hasProcessInfo = type(server.process_info) == "function"
-        result = hasGetData and hasProcessInfo
+        result(hasGetData and hasProcessInfo)
       `;
 
       const result = await runtime.executeScript(script, servers);
@@ -392,7 +392,7 @@ describe("WasmoonRuntime", () => {
       ]);
 
       const script = `
-        result = (server1 ~= nil) and (server2 ~= nil)
+        result((server1 ~= nil) and (server2 ~= nil))
       `;
 
       const result = await runtime.executeScript(script, servers);
@@ -425,7 +425,7 @@ describe("WasmoonRuntime", () => {
 
       const script = `
         local result_obj = server.test_tool({ arg1 = "value1", arg2 = 42 }):await()
-        result = true
+        result(true)
       `;
 
       await runtime.executeScript(script, servers);
@@ -452,7 +452,7 @@ describe("WasmoonRuntime", () => {
       const servers = new Map([["api", client]]);
 
       const script = `
-        result = api.get_value({})
+        result(api.get_value({}))
       `;
 
       const result = await runtime.executeScript(script, servers);
@@ -483,7 +483,7 @@ describe("WasmoonRuntime", () => {
 
       const script = `
         server.ping({}):await()
-        result = true
+        result(true)
       `;
 
       await runtime.executeScript(script, servers);
@@ -516,7 +516,7 @@ describe("WasmoonRuntime", () => {
 
       const servers = new Map([["data-server", client]]);
       const script = `
-        result = data_server.fetch_data({}):await()
+        result(data_server.fetch_data({}):await())
       `;
 
       const result = await runtime.executeScript(script, servers);
@@ -544,7 +544,7 @@ describe("WasmoonRuntime", () => {
 
       const servers = new Map([["json-server", client]]);
       const script = `
-        result = json_server.get_json({}):await()
+        result(json_server.get_json({}):await())
       `;
 
       const result = await runtime.executeScript(script, servers);
@@ -563,7 +563,7 @@ describe("WasmoonRuntime", () => {
 
     it("should throw error for undefined variables", async () => {
       const script = `
-        result = undefined_variable
+        result(undefined_variable)
       `;
 
       // Lua allows undefined variables and returns nil, not an error
@@ -609,7 +609,7 @@ describe("WasmoonRuntime", () => {
 
       const script = `
         -- Good server should still be accessible
-        result = good_server ~= nil
+        result(good_server ~= nil)
       `;
 
       const result = await runtime.executeScript(script, servers);
@@ -667,7 +667,7 @@ describe("WasmoonRuntime", () => {
       const script = `
         local data = api.get({}):await()
         local processed = processor.process({ input = data }):await()
-        result = { data = data, processed = processed }
+        result({ data = data, processed = processed })
       `;
 
       const result = await runtime.executeScript(script, servers);
@@ -704,7 +704,7 @@ describe("WasmoonRuntime", () => {
         for i = 1, 3 do
           results[i] = server.check({ index = i }):await()
         end
-        result = #results
+        result(#results)
       `;
 
       const result = await runtime.executeScript(script, servers);
@@ -742,7 +742,7 @@ describe("WasmoonRuntime", () => {
             }
           }
         }):await()
-        result = true
+        result(true)
       `;
 
       await runtime.executeScript(script, servers);

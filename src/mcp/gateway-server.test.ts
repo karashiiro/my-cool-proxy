@@ -9,6 +9,8 @@ import type {
   Resource,
   ReadResourceResult,
   GetPromptResult,
+  ContentBlock,
+  TextContent,
 } from "@modelcontextprotocol/sdk/types.js";
 import type {
   ILogger,
@@ -342,6 +344,14 @@ async function createTestServerWithToolsAndResources(
   return { server, client: mcpClientSession };
 }
 
+function assertTextContentBlock(
+  content: ContentBlock | undefined,
+): asserts content is TextContent {
+  if (content?.type !== "text") {
+    throw new Error("Expected text content block");
+  }
+}
+
 describe("MCPGatewayServer - execute tool", () => {
   let gatewayServer: MCPGatewayServer;
   let luaRuntime: ILuaRuntime;
@@ -411,7 +421,7 @@ describe("MCPGatewayServer - execute tool", () => {
       await gatewayClient.connect(clientTransport);
 
       const script = `
-        result = image_server.generate_image({}):await()
+        result(image_server.generate_image({}):await())
       `;
 
       // Execute the script through the gateway server
@@ -471,7 +481,7 @@ describe("MCPGatewayServer - execute tool", () => {
       await gatewayClient.connect(clientTransport);
 
       const script = `
-        result = audio_server.generate_audio({}):await()
+        result(audio_server.generate_audio({}):await())
       `;
 
       // Execute the script through the gateway server
@@ -531,7 +541,7 @@ describe("MCPGatewayServer - execute tool", () => {
       await gatewayClient.connect(clientTransport);
 
       const script = `
-        result = multi_server.multi_content({}):await()
+        result(multi_server.multi_content({}):await())
       `;
 
       // Execute the script through the gateway server
@@ -585,7 +595,7 @@ describe("MCPGatewayServer - execute tool", () => {
       await gatewayClient.connect(clientTransport);
 
       const script = `
-        result = error_server.failing_tool({}):await()
+        result(error_server.failing_tool({}):await())
       `;
 
       // Execute the script through the gateway server
@@ -619,11 +629,11 @@ describe("MCPGatewayServer - execute tool", () => {
       await gatewayClient.connect(clientTransport);
 
       const script = `
-        result = {
+        result({
           name = "claude",
           level = 9000,
           items = { "sword", "shield" }
-        }
+        })
       `;
 
       // Execute the script through the gateway server
@@ -635,7 +645,7 @@ describe("MCPGatewayServer - execute tool", () => {
       // The object should be converted to structuredContent by the gateway
       expect(Array.isArray(result.content)).toBe(true);
       expect(result.content).toHaveLength(1);
-      const content = (result.content as Array<unknown>)[0];
+      const content = (result.content as Array<ContentBlock>)[0];
       expect(content).toHaveProperty("type", "text");
       expect(result).toHaveProperty("structuredContent");
       expect(result.structuredContent).toEqual({
@@ -662,7 +672,7 @@ describe("MCPGatewayServer - execute tool", () => {
       await gatewayClient.connect(clientTransport);
 
       const script = `
-        result = {
+        result({
           user = {
             name = "alice",
             stats = {
@@ -670,7 +680,7 @@ describe("MCPGatewayServer - execute tool", () => {
               mp = 50
             }
           }
-        }
+        })
       `;
 
       // Execute the script through the gateway server
@@ -681,7 +691,7 @@ describe("MCPGatewayServer - execute tool", () => {
 
       expect(Array.isArray(result.content)).toBe(true);
       expect(result.content).toHaveLength(1);
-      const content = (result.content as Array<unknown>)[0];
+      const content = (result.content as Array<ContentBlock>)[0];
       expect(content).toHaveProperty("type", "text");
       expect(result).toHaveProperty("structuredContent");
       expect(result.structuredContent).toEqual({
@@ -712,7 +722,7 @@ describe("MCPGatewayServer - execute tool", () => {
       await gatewayClient.connect(clientTransport);
 
       const script = `
-        result = {}
+        result({})
       `;
 
       // Execute the script through the gateway server
@@ -723,7 +733,7 @@ describe("MCPGatewayServer - execute tool", () => {
 
       expect(Array.isArray(result.content)).toBe(true);
       expect(result.content).toHaveLength(1);
-      const content = (result.content as Array<unknown>)[0];
+      const content = (result.content as Array<ContentBlock>)[0];
       expect(content).toHaveProperty("type", "text");
       expect(result).toHaveProperty("structuredContent");
       expect(result.structuredContent).toEqual({});
@@ -748,7 +758,7 @@ describe("MCPGatewayServer - execute tool", () => {
       await gatewayClient.connect(clientTransport);
 
       const script = `
-        result = "hello world"
+        result("hello world")
       `;
 
       // Execute the script through the gateway server
@@ -759,11 +769,9 @@ describe("MCPGatewayServer - execute tool", () => {
 
       expect(Array.isArray(result.content)).toBe(true);
       expect(result.content).toHaveLength(1);
-      const content = (result.content as Array<unknown>)[0];
-      expect(content).toHaveProperty("type", "text");
-      if (content && typeof content === "object" && "text" in content) {
-        expect(content.text).toContain("hello world");
-      }
+      const content = (result.content as Array<ContentBlock>)[0];
+      assertTextContentBlock(content);
+      expect(content.text).toContain("hello world");
     });
 
     it("should handle number results", async () => {
@@ -783,7 +791,7 @@ describe("MCPGatewayServer - execute tool", () => {
       await gatewayClient.connect(clientTransport);
 
       const script = `
-        result = 42
+        result(42)
       `;
 
       // Execute the script through the gateway server
@@ -794,11 +802,9 @@ describe("MCPGatewayServer - execute tool", () => {
 
       expect(Array.isArray(result.content)).toBe(true);
       expect(result.content).toHaveLength(1);
-      const content = (result.content as Array<unknown>)[0];
-      expect(content).toHaveProperty("type", "text");
-      if (content && typeof content === "object" && "text" in content) {
-        expect(content.text).toContain("42");
-      }
+      const content = (result.content as Array<ContentBlock>)[0];
+      assertTextContentBlock(content);
+      expect(content.text).toContain("42");
     });
 
     it("should handle boolean results", async () => {
@@ -818,7 +824,7 @@ describe("MCPGatewayServer - execute tool", () => {
       await gatewayClient.connect(clientTransport);
 
       const script = `
-        result = true
+        result(true)
       `;
 
       // Execute the script through the gateway server
@@ -829,11 +835,9 @@ describe("MCPGatewayServer - execute tool", () => {
 
       expect(Array.isArray(result.content)).toBe(true);
       expect(result.content).toHaveLength(1);
-      const content = (result.content as Array<unknown>)[0];
-      expect(content).toHaveProperty("type", "text");
-      if (content && typeof content === "object" && "text" in content) {
-        expect(content.text).toContain("true");
-      }
+      const content = (result.content as Array<ContentBlock>)[0];
+      assertTextContentBlock(content);
+      expect(content.text).toContain("true");
     });
 
     it("should handle nil/undefined results", async () => {
@@ -864,11 +868,11 @@ describe("MCPGatewayServer - execute tool", () => {
 
       expect(Array.isArray(result.content)).toBe(true);
       expect(result.content).toHaveLength(1);
-      const content = (result.content as Array<unknown>)[0];
-      expect(content).toHaveProperty("type", "text");
-      if (content && typeof content === "object" && "text" in content) {
-        expect(content.text).toContain("null");
-      }
+      const content = (result.content as Array<ContentBlock>)[0];
+      assertTextContentBlock(content);
+      expect(content.text).toContain(
+        "Script executed successfully. No result returned.",
+      );
     });
   });
 
@@ -915,7 +919,7 @@ describe("MCPGatewayServer - execute tool", () => {
 
       const script = `
         -- Return the tool result directly
-        result = rich_server.get_report({}):await()
+        result(rich_server.get_report({}):await())
       `;
 
       // Execute the script through the gateway server
@@ -971,11 +975,11 @@ describe("MCPGatewayServer - execute tool", () => {
       const script = `
         -- Process the tool result and return a custom object
         local response = api.get_data({}):await()
-        result = {
+        result({
           raw = response,
           processed = true,
           timestamp = 1234567890
-        }
+        })
       `;
 
       // Execute the script through the gateway server
@@ -987,7 +991,7 @@ describe("MCPGatewayServer - execute tool", () => {
       // Should be an object wrapped in structuredContent
       expect(Array.isArray(result.content)).toBe(true);
       expect(result.content).toHaveLength(1);
-      const content = (result.content as Array<unknown>)[0];
+      const content = (result.content as Array<ContentBlock>)[0];
       expect(content).toHaveProperty("type", "text");
       expect(result).toHaveProperty("structuredContent");
       expect(typeof result.structuredContent).toBe("object");
@@ -1027,11 +1031,9 @@ describe("MCPGatewayServer - execute tool", () => {
       expect(result.isError).toBe(true);
       expect(Array.isArray(result.content)).toBe(true);
       expect(result.content).toHaveLength(1);
-      const content = (result.content as Array<unknown>)[0];
-      expect(content).toHaveProperty("type", "text");
-      if (content && typeof content === "object" && "text" in content) {
-        expect(content.text).toContain("Script execution failed");
-      }
+      const content = (result.content as Array<ContentBlock>)[0];
+      assertTextContentBlock(content);
+      expect(content.text).toContain("Script execution failed");
     });
 
     it("should handle invalid CallToolResult objects", async () => {
@@ -1052,9 +1054,9 @@ describe("MCPGatewayServer - execute tool", () => {
 
       const script = `
         -- Return something that looks like CallToolResult but isn't valid
-        result = {
+        result({
           content = "not an array"
-        }
+        })
       `;
 
       // Execute the script through the gateway server
@@ -1066,7 +1068,7 @@ describe("MCPGatewayServer - execute tool", () => {
       // Should fall back to structuredContent since it's not a valid CallToolResult
       expect(Array.isArray(result.content)).toBe(true);
       expect(result.content).toHaveLength(1);
-      const content = (result.content as Array<unknown>)[0];
+      const content = (result.content as Array<ContentBlock>)[0];
       expect(content).toHaveProperty("type", "text");
       expect(result).toHaveProperty("structuredContent");
       expect(result.structuredContent).toEqual({
@@ -1476,7 +1478,7 @@ describe("MCPGatewayServer - Resource Aggregation", () => {
 
       // Step 1: Call the tool to get the resource link
       const script = `
-        result = data_server.get_report_link({}):await()
+        result(data_server.get_report_link({}):await())
       `;
 
       const toolResult = await gatewayClient.callTool({
@@ -1486,7 +1488,7 @@ describe("MCPGatewayServer - Resource Aggregation", () => {
 
       // Verify the tool result contains the resource reference
       expect(Array.isArray(toolResult.content)).toBe(true);
-      const content = toolResult.content as Array<unknown>;
+      const content = toolResult.content as Array<ContentBlock>;
       expect(content.length).toBeGreaterThan(0);
 
       // Find the resource_link content block

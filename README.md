@@ -22,7 +22,7 @@ Rather than loading all tools and tool descriptions into the context upfront, th
 ```lua
 local raw_data = api_server.fetch({ id = 123 }):await()
 local processed = processor.transform({ input = raw_data }):await()
-result = processed
+result(processed)
 ```
 
 **Conditional logic:**
@@ -30,9 +30,9 @@ result = processed
 ```lua
 local status = checker.validate({}):await()
 if status.ok then
-  result = processor.run({}):await()
+  result(processor.run({}):await())
 else
-  result = error_handler.notify({ error = status.message }):await()
+  result(error_handler.notify({ error = status.message }):await())
 end
 ```
 
@@ -43,7 +43,7 @@ local results = {}
 for i = 1, 5 do
   results[i] = worker.process({ index = i }):await()
 end
-result = { total = #results, data = results }
+result({ total = #results, data = results })
 ```
 
 ## Quick Start
@@ -113,7 +113,7 @@ Example Lua script:
 local result = my_server.some_tool({ arg = "value" }):await()
 
 -- Return data
-result = { data = result }
+result({ data = result })
 ```
 
 ## Transport Types

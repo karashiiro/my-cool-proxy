@@ -147,16 +147,16 @@ at least once for each tool you want to call to understand its inputs and output
 
 Wherever possible, combine multiple tool calls into a single script to avoid returning unnecessary data.
 
-To return a value, assign it to the 'result' global variable (WITHOUT 'local' keyword).
+To return a value, call the global result() function with the value as an argument.
 Tool calls return promises - use :await() to get the result.
-Example: result = server_name.tool_name({ arg = "value" }):await()`,
+Example: result(server_name.tool_name({ arg = "value" }):await())`,
         inputSchema: {
           script: z
             .string()
             .describe(
               "Lua script to execute. Available servers are accessible as global variables. " +
                 "Tool calls return promises, so use :await() to unwrap them. " +
-                "Set 'result' variable to return a value from the script (do NOT use 'local result').",
+                "Call the global result() function to return a value from the script.",
             ),
         },
       },
