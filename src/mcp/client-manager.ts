@@ -13,6 +13,7 @@ export class MCPClientManager implements IMCPClientManager {
     serverName: string,
     sessionId: string,
   ) => void;
+  private onPromptListChanged?: (serverName: string, sessionId: string) => void;
 
   constructor(@inject(TYPES.Logger) private logger: ILogger) {}
 
@@ -20,6 +21,12 @@ export class MCPClientManager implements IMCPClientManager {
     handler: (serverName: string, sessionId: string) => void,
   ): void {
     this.onResourceListChanged = handler;
+  }
+
+  setPromptListChangedHandler(
+    handler: (serverName: string, sessionId: string) => void,
+  ): void {
+    this.onPromptListChanged = handler;
   }
 
   async addHttpClient(
@@ -61,6 +68,9 @@ export class MCPClientManager implements IMCPClientManager {
       this.logger,
       this.onResourceListChanged
         ? (serverName) => this.onResourceListChanged!(serverName, sessionId)
+        : undefined,
+      this.onPromptListChanged
+        ? (serverName) => this.onPromptListChanged!(serverName, sessionId)
         : undefined,
     );
 
@@ -119,6 +129,9 @@ export class MCPClientManager implements IMCPClientManager {
       this.logger,
       this.onResourceListChanged
         ? (serverName) => this.onResourceListChanged!(serverName, sessionId)
+        : undefined,
+      this.onPromptListChanged
+        ? (serverName) => this.onPromptListChanged!(serverName, sessionId)
         : undefined,
     );
 

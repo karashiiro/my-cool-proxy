@@ -19,6 +19,7 @@ export class MCPClientSession {
   private cachedResourceList: ListResourcesResult | undefined;
   private cachedPromptList: ListPromptsResult | undefined;
   private onResourceListChanged?: (serverName: string) => void;
+  private onPromptListChanged?: (serverName: string) => void;
 
   constructor(
     client: Client,
@@ -26,12 +27,14 @@ export class MCPClientSession {
     allowedTools: string[] | undefined,
     logger: ILogger,
     onResourceListChanged?: (serverName: string) => void,
+    onPromptListChanged?: (serverName: string) => void,
   ) {
     this.client = client;
     this.serverName = serverName;
     this.allowedTools = allowedTools;
     this.logger = logger;
     this.onResourceListChanged = onResourceListChanged;
+    this.onPromptListChanged = onPromptListChanged;
     this.cachedToolList = undefined;
 
     // Register notification handler for tool list changes
@@ -74,6 +77,11 @@ export class MCPClientSession {
           `Server '${this.serverName}': Prompt list changed, invalidating cache`,
         );
         this.clearPromptCache();
+
+        // Notify gateway server if callback is provided
+        if (this.onPromptListChanged) {
+          this.onPromptListChanged(this.serverName);
+        }
       },
     );
   }
@@ -235,6 +243,13 @@ export class MCPClientSession {
 
   async readResource(params: { uri: string }) {
     return this.client.readResource(params);
+  }
+
+  async getPrompt(params: {
+    name: string;
+    arguments?: Record<string, string>;
+  }) {
+    return this.client.getPrompt(params);
   }
 
   // Pass through other methods we need

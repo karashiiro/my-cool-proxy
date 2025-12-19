@@ -5,11 +5,16 @@ import type {
   ListResourcesResult,
   ReadResourceResult,
   Resource,
+  ListPromptsResult,
+  GetPromptResult,
+  Prompt,
 } from "@modelcontextprotocol/sdk/types.js";
 import {
   CallToolResultSchema,
   ListResourcesRequestSchema,
   ReadResourceRequestSchema,
+  ListPromptsRequestSchema,
+  GetPromptRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import * as z from "zod";
 import type {
@@ -21,6 +26,7 @@ import { TYPES } from "../types/index.js";
 import { sanitizeLuaIdentifier } from "../utils/lua-identifier.js";
 import { formatSchema } from "../utils/schema-formatter.js";
 import { namespaceResource, parseResourceUri } from "../utils/resource-uri.js";
+import { namespacePrompt, parsePromptName } from "../utils/prompt-name.js";
 import type { MCPClientSession } from "./client-session.js";
 
 interface ServerInfo {
@@ -52,6 +58,10 @@ export class MCPGatewayServer {
     string,
     { resources: Resource[]; timestamp: number }
   >();
+  private promptCache = new Map<
+    string,
+    { prompts: Prompt[]; timestamp: number }
+  >();
 
   constructor(
     @inject(TYPES.LuaRuntime) private luaRuntime: ILuaRuntime,
@@ -67,6 +77,7 @@ export class MCPGatewayServer {
         capabilities: {
           tools: {},
           resources: {},
+          prompts: {},
         },
       },
     );
@@ -75,6 +86,13 @@ export class MCPGatewayServer {
     this.clientPool.setResourceListChangedHandler(
       (serverName: string, sessionId: string) => {
         this.handleResourceListChanged(serverName, sessionId);
+      },
+    );
+
+    // Register handler for prompt list changes from clients
+    this.clientPool.setPromptListChangedHandler(
+      (serverName: string, sessionId: string) => {
+        this.handlePromptListChanged(serverName, sessionId);
       },
     );
 
@@ -354,6 +372,9 @@ Example: result = server_name.tool_name({ arg = "value" }):await()`,
 
     // Register resource handlers
     this.setupResourceHandlers();
+
+    // Register prompt handlers
+    this.setupPromptHandlers();
   }
 
   private setupResourceHandlers(): void {
@@ -492,6 +513,146 @@ Example: result = server_name.tool_name({ arg = "value" }):await()`,
 
     // Notify our own clients that the resource list has changed
     this.server.sendResourceListChanged();
+  }
+
+  private handlePromptListChanged(serverName: string, sessionId: string): void {
+    this.logger.info(
+      `Prompt list changed for server '${serverName}' in session '${sessionId}'`,
+    );
+
+    // Clear aggregated cache for this session
+    this.promptCache.delete(sessionId);
+
+    // Notify our own clients that the prompt list has changed
+    this.server.sendPromptListChanged();
+  }
+
+  private setupPromptHandlers(): void {
+    // Handler for listing prompts from all connected MCP servers
+    this.server.server.setRequestHandler(
+      ListPromptsRequestSchema,
+      async (
+        _request: unknown,
+        { sessionId }: { sessionId?: string },
+      ): Promise<ListPromptsResult> => {
+        const session = sessionId || "default";
+
+        // Check cache first
+        const cached = this.promptCache.get(session);
+        if (cached) {
+          this.logger.debug(
+            `Returning cached prompt list for session '${session}'`,
+          );
+          return {
+            prompts: cached.prompts,
+          };
+        }
+
+        // Get all clients for this session
+        const clients = this.clientPool.getClientsBySession(session);
+
+        if (clients.size === 0) {
+          this.logger.info(`No clients available for session '${session}'`);
+          return { prompts: [] };
+        }
+
+        // Fetch prompts from all clients in parallel
+        const promptPromises = Array.from(clients.entries()).map(
+          async ([name, client]) => {
+            try {
+              const result = await client.listPrompts();
+              return { name, prompts: result.prompts };
+            } catch (error) {
+              this.logger.error(
+                `Failed to list prompts from server '${name}':`,
+                error as Error,
+              );
+              return { name, prompts: [] };
+            }
+          },
+        );
+
+        const results = await Promise.all(promptPromises);
+
+        // Aggregate and namespace all prompts
+        const allPrompts: Prompt[] = [];
+        for (const { name, prompts } of results) {
+          for (const prompt of prompts) {
+            allPrompts.push(namespacePrompt(name, prompt));
+          }
+        }
+
+        // Cache the aggregated result
+        this.promptCache.set(session, {
+          prompts: allPrompts,
+          timestamp: Date.now(),
+        });
+
+        this.logger.info(
+          `Aggregated ${allPrompts.length} prompts from ${clients.size} servers for session '${session}'`,
+        );
+
+        return {
+          prompts: allPrompts,
+        };
+      },
+    );
+
+    // Handler for getting a specific prompt
+    this.server.server.setRequestHandler(
+      GetPromptRequestSchema,
+      async (
+        request: {
+          params: { name: string; arguments?: Record<string, string> };
+        },
+        { sessionId }: { sessionId?: string },
+      ): Promise<GetPromptResult> => {
+        const session = sessionId || "default";
+        const { name, arguments: promptArgs } = request.params;
+
+        // Parse the namespaced name
+        const parsed = parsePromptName(name);
+        if (!parsed) {
+          throw new Error(
+            `Invalid prompt name format: '${name}'. Expected format: {server-name}/{prompt-name}`,
+          );
+        }
+
+        const { serverName, originalName } = parsed;
+
+        // Get all clients for this session
+        const clients = this.clientPool.getClientsBySession(session);
+
+        // Find the client matching the server name
+        const client = clients.get(serverName);
+        if (!client) {
+          const availableServers = Array.from(clients.keys()).join(", ");
+          throw new Error(
+            `Server '${serverName}' not found in session '${session}'. Available servers: ${availableServers || "none"}`,
+          );
+        }
+
+        // Get the prompt from the client
+        try {
+          const result = await client.getPrompt({
+            name: originalName,
+            arguments: promptArgs,
+          });
+          this.logger.debug(
+            `Got prompt '${originalName}' from server '${serverName}'`,
+          );
+          return result;
+        } catch (error) {
+          this.logger.error(
+            `Failed to get prompt '${originalName}' from server '${serverName}':`,
+            error as Error,
+          );
+          throw error;
+        }
+      },
+    );
+
+    this.logger.info("MCP gateway prompt handlers registered");
   }
 
   private gatherServerInfo(

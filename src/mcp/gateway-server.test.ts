@@ -8,6 +8,7 @@ import type {
   CallToolResult,
   Resource,
   ReadResourceResult,
+  GetPromptResult,
 } from "@modelcontextprotocol/sdk/types.js";
 import type {
   ILogger,
@@ -33,6 +34,7 @@ const createMockClientManager = (
   getClient: vi.fn(),
   getClientsBySession: vi.fn(() => clients),
   setResourceListChangedHandler: vi.fn(),
+  setPromptListChangedHandler: vi.fn(),
   close: vi.fn(),
 });
 
@@ -132,6 +134,94 @@ async function createTestServerWithResources(
           mimeType: resource.mimeType,
         },
         async (uri) => handler(uri.toString()),
+      );
+    }
+  }
+
+  // Create linked transports
+  const [clientTransport, serverTransport] =
+    InMemoryTransport.createLinkedPair();
+
+  // Connect server
+  await server.connect(serverTransport);
+
+  // Create and connect client
+  const client = new Client(
+    {
+      name: "test-client",
+      version: "1.0.0",
+    },
+    {
+      capabilities: {},
+    },
+  );
+
+  await client.connect(clientTransport);
+
+  // Wrap in MCPClientSession
+  const mcpClientSession = new MCPClientSession(
+    client,
+    name,
+    undefined,
+    createMockLogger(),
+  );
+
+  return { server, client: mcpClientSession };
+}
+
+async function createTestServerWithPrompts(
+  name: string,
+  prompts: Array<{
+    name: string;
+    description?: string;
+    arguments?: Array<{
+      name: string;
+      description?: string;
+      required?: boolean;
+    }>;
+  }>,
+  getHandlers: Record<
+    string,
+    (args?: Record<string, string>) => Promise<GetPromptResult>
+  >,
+): Promise<{ server: McpServer; client: MCPClientSession }> {
+  const server = new McpServer(
+    {
+      name,
+      version: "1.0.0",
+    },
+    {
+      capabilities: {
+        prompts: {},
+      },
+    },
+  );
+
+  // Register prompts
+  for (const prompt of prompts) {
+    const handler = getHandlers[prompt.name];
+    if (handler) {
+      // Convert arguments array to Zod schema
+      const argsSchema: Record<string, z.ZodType> = {};
+      if (prompt.arguments) {
+        for (const arg of prompt.arguments) {
+          argsSchema[arg.name] = arg.required
+            ? z.string().describe(arg.description || "")
+            : z
+                .string()
+                .optional()
+                .describe(arg.description || "");
+        }
+      }
+
+      server.registerPrompt(
+        prompt.name,
+        {
+          description: prompt.description,
+          argsSchema:
+            Object.keys(argsSchema).length > 0 ? argsSchema : undefined,
+        },
+        async (args) => handler(args as Record<string, string> | undefined),
       );
     }
   }
@@ -1054,6 +1144,568 @@ describe("MCPGatewayServer - Resource Aggregation", () => {
       expect(content2 && "text" in content2 ? content2.text : undefined).toBe(
         "Docs v2 content",
       );
+    });
+  });
+
+  describe("Prompt Aggregation", () => {
+    let gatewayServer: MCPGatewayServer;
+    let luaRuntime: ILuaRuntime;
+    let logger: ILogger;
+    let gateway: McpServer;
+    let gatewayClient: Client;
+    const cleanupFns: Array<() => Promise<void>> = [];
+
+    beforeEach(async () => {
+      logger = createMockLogger();
+      luaRuntime = new WasmoonRuntime(logger);
+    });
+
+    afterEach(async () => {
+      // Clean up all servers and clients
+      for (const cleanup of cleanupFns) {
+        await cleanup();
+      }
+      cleanupFns.length = 0;
+      if (gatewayClient) {
+        await gatewayClient.close();
+      }
+      if (gateway) {
+        await gateway.close();
+      }
+    });
+
+    describe("listPrompts - aggregation from multiple servers", () => {
+      it("should aggregate prompts from multiple MCP servers", async () => {
+        // Create two test servers with different prompts
+        const { server: server1, client: client1 } =
+          await createTestServerWithPrompts(
+            "code-server",
+            [
+              {
+                name: "code-review",
+                description: "Review code for best practices",
+                arguments: [
+                  {
+                    name: "language",
+                    description: "Programming language",
+                    required: true,
+                  },
+                ],
+              },
+              {
+                name: "generate-tests",
+                description: "Generate unit tests",
+              },
+            ],
+            {
+              "code-review": async (args) => ({
+                messages: [
+                  {
+                    role: "user",
+                    content: {
+                      type: "text",
+                      text: `Review this ${args?.language || "code"}`,
+                    },
+                  },
+                ],
+              }),
+              "generate-tests": async () => ({
+                messages: [
+                  {
+                    role: "user",
+                    content: {
+                      type: "text",
+                      text: "Generate unit tests for this code",
+                    },
+                  },
+                ],
+              }),
+            },
+          );
+
+        const { server: server2, client: client2 } =
+          await createTestServerWithPrompts(
+            "docs-server",
+            [
+              {
+                name: "explain-concept",
+                description: "Explain a technical concept",
+                arguments: [
+                  {
+                    name: "concept",
+                    description: "The concept to explain",
+                    required: true,
+                  },
+                ],
+              },
+            ],
+            {
+              "explain-concept": async (args) => ({
+                messages: [
+                  {
+                    role: "user",
+                    content: {
+                      type: "text",
+                      text: `Explain ${args?.concept || "the concept"}`,
+                    },
+                  },
+                ],
+              }),
+            },
+          );
+
+        cleanupFns.push(
+          async () => {
+            await client1.close();
+            await server1.close();
+          },
+          async () => {
+            await client2.close();
+            await server2.close();
+          },
+        );
+
+        // Create gateway with both clients
+        const clients = new Map<string, MCPClientSession>([
+          ["code-server", client1],
+          ["docs-server", client2],
+        ]);
+
+        const clientManager = createMockClientManager(clients);
+        gatewayServer = new MCPGatewayServer(luaRuntime, clientManager, logger);
+        gateway = gatewayServer.getServer();
+
+        const [clientTransport, serverTransport] =
+          InMemoryTransport.createLinkedPair();
+        await gateway.connect(serverTransport);
+
+        gatewayClient = new Client(
+          { name: "test-gateway-client", version: "1.0.0" },
+          { capabilities: {} },
+        );
+        await gatewayClient.connect(clientTransport);
+
+        // List all prompts
+        const result = await gatewayClient.listPrompts();
+
+        // Should have 3 prompts total (2 from code-server, 1 from docs-server)
+        expect(result.prompts).toHaveLength(3);
+
+        // Check that names are properly namespaced
+        const promptNames = result.prompts.map((p) => p.name);
+        expect(promptNames).toContain("code-server/code-review");
+        expect(promptNames).toContain("code-server/generate-tests");
+        expect(promptNames).toContain("docs-server/explain-concept");
+
+        // Check that descriptions are preserved
+        const codeReview = result.prompts.find(
+          (p) => p.name === "code-server/code-review",
+        );
+        expect(codeReview?.description).toBe("Review code for best practices");
+
+        // Check that arguments are preserved
+        expect(codeReview?.arguments).toHaveLength(1);
+        expect(codeReview?.arguments?.[0]?.name).toBe("language");
+      });
+
+      it("should handle empty prompt lists", async () => {
+        const { server, client } = await createTestServerWithPrompts(
+          "empty-server",
+          [],
+          {},
+        );
+
+        cleanupFns.push(async () => {
+          await client.close();
+          await server.close();
+        });
+
+        const clients = new Map<string, MCPClientSession>([
+          ["empty-server", client],
+        ]);
+
+        const clientManager = createMockClientManager(clients);
+        gatewayServer = new MCPGatewayServer(luaRuntime, clientManager, logger);
+        gateway = gatewayServer.getServer();
+
+        const [clientTransport, serverTransport] =
+          InMemoryTransport.createLinkedPair();
+        await gateway.connect(serverTransport);
+
+        gatewayClient = new Client(
+          { name: "test-gateway-client", version: "1.0.0" },
+          { capabilities: {} },
+        );
+        await gatewayClient.connect(clientTransport);
+
+        const result = await gatewayClient.listPrompts();
+
+        expect(result.prompts).toHaveLength(0);
+      });
+
+      it("should handle prompts from servers with similar names", async () => {
+        const { server: server1, client: client1 } =
+          await createTestServerWithPrompts(
+            "docs",
+            [
+              {
+                name: "help",
+                description: "Docs help",
+              },
+            ],
+            {
+              help: async () => ({
+                messages: [
+                  {
+                    role: "user",
+                    content: {
+                      type: "text",
+                      text: "Docs help message",
+                    },
+                  },
+                ],
+              }),
+            },
+          );
+
+        const { server: server2, client: client2 } =
+          await createTestServerWithPrompts(
+            "docs-v2",
+            [
+              {
+                name: "help",
+                description: "Docs v2 help",
+              },
+            ],
+            {
+              help: async () => ({
+                messages: [
+                  {
+                    role: "user",
+                    content: {
+                      type: "text",
+                      text: "Docs v2 help message",
+                    },
+                  },
+                ],
+              }),
+            },
+          );
+
+        cleanupFns.push(
+          async () => {
+            await client1.close();
+            await server1.close();
+          },
+          async () => {
+            await client2.close();
+            await server2.close();
+          },
+        );
+
+        const clients = new Map<string, MCPClientSession>([
+          ["docs", client1],
+          ["docs-v2", client2],
+        ]);
+
+        const clientManager = createMockClientManager(clients);
+        gatewayServer = new MCPGatewayServer(luaRuntime, clientManager, logger);
+        gateway = gatewayServer.getServer();
+
+        const [clientTransport, serverTransport] =
+          InMemoryTransport.createLinkedPair();
+        await gateway.connect(serverTransport);
+
+        gatewayClient = new Client(
+          { name: "test-gateway-client", version: "1.0.0" },
+          { capabilities: {} },
+        );
+        await gatewayClient.connect(clientTransport);
+
+        // Both prompts should be listed with different namespaces
+        const result = await gatewayClient.listPrompts();
+
+        expect(result.prompts).toHaveLength(2);
+        const names = result.prompts.map((p) => p.name);
+        expect(names).toContain("docs/help");
+        expect(names).toContain("docs-v2/help");
+      });
+    });
+
+    describe("getPrompt - routing to correct server", () => {
+      it("should route getPrompt to the correct server by name", async () => {
+        const { server: server1, client: client1 } =
+          await createTestServerWithPrompts(
+            "code-server",
+            [
+              {
+                name: "review",
+                description: "Code review",
+              },
+            ],
+            {
+              review: async () => ({
+                messages: [
+                  {
+                    role: "user",
+                    content: {
+                      type: "text",
+                      text: "Review this code please",
+                    },
+                  },
+                ],
+                description: "Code review prompt",
+              }),
+            },
+          );
+
+        const { server: server2, client: client2 } =
+          await createTestServerWithPrompts(
+            "docs-server",
+            [
+              {
+                name: "explain",
+                description: "Explain concept",
+              },
+            ],
+            {
+              explain: async () => ({
+                messages: [
+                  {
+                    role: "user",
+                    content: {
+                      type: "text",
+                      text: "Explain this concept",
+                    },
+                  },
+                ],
+                description: "Explanation prompt",
+              }),
+            },
+          );
+
+        cleanupFns.push(
+          async () => {
+            await client1.close();
+            await server1.close();
+          },
+          async () => {
+            await client2.close();
+            await server2.close();
+          },
+        );
+
+        const clients = new Map<string, MCPClientSession>([
+          ["code-server", client1],
+          ["docs-server", client2],
+        ]);
+
+        const clientManager = createMockClientManager(clients);
+        gatewayServer = new MCPGatewayServer(luaRuntime, clientManager, logger);
+        gateway = gatewayServer.getServer();
+
+        const [clientTransport, serverTransport] =
+          InMemoryTransport.createLinkedPair();
+        await gateway.connect(serverTransport);
+
+        gatewayClient = new Client(
+          { name: "test-gateway-client", version: "1.0.0" },
+          { capabilities: {} },
+        );
+        await gatewayClient.connect(clientTransport);
+
+        // Get prompt from code-server
+        const result1 = await gatewayClient.getPrompt({
+          name: "code-server/review",
+        });
+
+        expect(result1.messages).toHaveLength(1);
+        const message1 = result1.messages[0];
+        expect(message1?.role).toBe("user");
+        expect(
+          message1?.content && "text" in message1.content
+            ? message1.content.text
+            : undefined,
+        ).toBe("Review this code please");
+        expect(result1.description).toBe("Code review prompt");
+
+        // Get prompt from docs-server
+        const result2 = await gatewayClient.getPrompt({
+          name: "docs-server/explain",
+        });
+
+        expect(result2.messages).toHaveLength(1);
+        const message2 = result2.messages[0];
+        expect(message2?.role).toBe("user");
+        expect(
+          message2?.content && "text" in message2.content
+            ? message2.content.text
+            : undefined,
+        ).toBe("Explain this concept");
+        expect(result2.description).toBe("Explanation prompt");
+      });
+
+      it("should pass arguments through to the underlying server", async () => {
+        const { server, client } = await createTestServerWithPrompts(
+          "code-server",
+          [
+            {
+              name: "review",
+              description: "Code review",
+              arguments: [
+                {
+                  name: "language",
+                  description: "Programming language",
+                  required: true,
+                },
+                { name: "style", description: "Code style", required: false },
+              ],
+            },
+          ],
+          {
+            review: async (args) => ({
+              messages: [
+                {
+                  role: "user",
+                  content: {
+                    type: "text",
+                    text: `Review this ${args?.language || "code"} with ${args?.style || "default"} style`,
+                  },
+                },
+              ],
+            }),
+          },
+        );
+
+        cleanupFns.push(async () => {
+          await client.close();
+          await server.close();
+        });
+
+        const clients = new Map<string, MCPClientSession>([
+          ["code-server", client],
+        ]);
+
+        const clientManager = createMockClientManager(clients);
+        gatewayServer = new MCPGatewayServer(luaRuntime, clientManager, logger);
+        gateway = gatewayServer.getServer();
+
+        const [clientTransport, serverTransport] =
+          InMemoryTransport.createLinkedPair();
+        await gateway.connect(serverTransport);
+
+        gatewayClient = new Client(
+          { name: "test-gateway-client", version: "1.0.0" },
+          { capabilities: {} },
+        );
+        await gatewayClient.connect(clientTransport);
+
+        // Get prompt with arguments
+        const result = await gatewayClient.getPrompt({
+          name: "code-server/review",
+          arguments: {
+            language: "TypeScript",
+            style: "functional",
+          },
+        });
+
+        expect(result.messages).toHaveLength(1);
+        const message = result.messages[0];
+        expect(
+          message?.content && "text" in message.content
+            ? message.content.text
+            : undefined,
+        ).toBe("Review this TypeScript with functional style");
+      });
+
+      it("should return error for invalid prompt name format", async () => {
+        const { server, client } = await createTestServerWithPrompts(
+          "test-server",
+          [],
+          {},
+        );
+
+        cleanupFns.push(async () => {
+          await client.close();
+          await server.close();
+        });
+
+        const clients = new Map<string, MCPClientSession>([
+          ["test-server", client],
+        ]);
+
+        const clientManager = createMockClientManager(clients);
+        gatewayServer = new MCPGatewayServer(luaRuntime, clientManager, logger);
+        gateway = gatewayServer.getServer();
+
+        const [clientTransport, serverTransport] =
+          InMemoryTransport.createLinkedPair();
+        await gateway.connect(serverTransport);
+
+        gatewayClient = new Client(
+          { name: "test-gateway-client", version: "1.0.0" },
+          { capabilities: {} },
+        );
+        await gatewayClient.connect(clientTransport);
+
+        // Try to get prompt with invalid name (no slash separator)
+        await expect(
+          gatewayClient.getPrompt({ name: "invalid-name-format" }),
+        ).rejects.toThrow();
+      });
+
+      it("should return error for non-existent server", async () => {
+        const { server, client } = await createTestServerWithPrompts(
+          "existing-server",
+          [
+            {
+              name: "prompt1",
+              description: "Test prompt",
+            },
+          ],
+          {
+            prompt1: async () => ({
+              messages: [
+                {
+                  role: "user",
+                  content: {
+                    type: "text",
+                    text: "Test",
+                  },
+                },
+              ],
+            }),
+          },
+        );
+
+        cleanupFns.push(async () => {
+          await client.close();
+          await server.close();
+        });
+
+        const clients = new Map<string, MCPClientSession>([
+          ["existing-server", client],
+        ]);
+
+        const clientManager = createMockClientManager(clients);
+        gatewayServer = new MCPGatewayServer(luaRuntime, clientManager, logger);
+        gateway = gatewayServer.getServer();
+
+        const [clientTransport, serverTransport] =
+          InMemoryTransport.createLinkedPair();
+        await gateway.connect(serverTransport);
+
+        gatewayClient = new Client(
+          { name: "test-gateway-client", version: "1.0.0" },
+          { capabilities: {} },
+        );
+        await gatewayClient.connect(clientTransport);
+
+        // Try to get prompt from non-existent server
+        await expect(
+          gatewayClient.getPrompt({ name: "non-existent-server/prompt1" }),
+        ).rejects.toThrow();
+      });
     });
   });
 });

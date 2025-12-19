@@ -29,6 +29,9 @@ export interface IMCPClientManager {
   setResourceListChangedHandler(
     handler: (serverName: string, sessionId: string) => void,
   ): void;
+  setPromptListChangedHandler(
+    handler: (serverName: string, sessionId: string) => void,
+  ): void;
   close(): Promise<void>;
 }
 
