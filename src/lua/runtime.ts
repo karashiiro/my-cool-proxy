@@ -39,6 +39,23 @@ export class WasmoonRuntime implements ILuaRuntime {
       return finalResult;
     } catch (error) {
       this.logger.error("Lua script execution failed", error as Error);
+
+      // Check for common result() shadowing error
+      if (
+        error instanceof Error &&
+        error.message.includes("self is not a function")
+      ) {
+        const hint = `
+💡 HINT: You may have shadowed the global 'result' function with a local variable.
+❌ Incorrect: local result = someFunction():await()
+✅ Correct: local res = someFunction():await(); result(res)
+
+The 'result' function is global - don't use 'local result = ...' as this overwrites it.
+        `.trim();
+        this.logger.error(hint);
+        throw new Error(`${error.message}\n${hint}`);
+      }
+
       throw error;
     } finally {
       engine.global.close();

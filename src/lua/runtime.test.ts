@@ -110,6 +110,41 @@ describe("WasmoonRuntime", () => {
       expect(result).toBe(42);
     });
 
+    it("should provide helpful error for shadowed result function", async () => {
+      const script = `
+        local result = github.search_issues({ query = "test" }):await()
+        result(result)  -- This tries to call the returned data as function
+      `;
+
+      // Create mock server and client manually
+      const { server, client } = await createTestServer("github", [
+        {
+          name: "search_issues",
+          description: "Search issues",
+          handler: async () => ({
+            content: [{ type: "text", text: "No results found" }],
+            isError: false,
+          }),
+        },
+      ]);
+      cleanupFns.push(async () => {
+        await client.close();
+        await server.close();
+      });
+
+      const error = await runtime
+        .executeScript(script, new Map([["github", client]]))
+        .catch((err) => err);
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain(
+        "TypeError: self is not a function",
+      );
+      expect((error as Error).message).toContain(
+        "💡 HINT: You may have shadowed the global 'result' function",
+      );
+    });
+
     it("should execute Lua math operations", async () => {
       const script = `
         result(10 + 5 * 2)
