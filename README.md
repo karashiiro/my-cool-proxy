@@ -117,7 +117,82 @@ local data = my_server.some_tool({ arg = "value" }):await()
 result({ processed = data.something })
 ```
 
-## Transport Types
+## MCP Client Transport Types
+
+## Running the Gateway
+
+The gateway supports two modes for how it exposes itself to MCP clients.
+
+### HTTP Mode (Default)
+
+Run the gateway as an HTTP server that clients connect to remotely:
+
+**Configure** - Set `transport: "http"` in config.json (or omit for default):
+
+```json
+{
+  "port": 3000,
+  "host": "localhost",
+  "transport": "http",
+  "mcpClients": { ... }
+}
+```
+
+**Run:**
+
+```bash
+pnpm dev
+# or for production:
+pnpm build && node dist/index.js
+```
+
+**Connect from MCP client:**
+
+```json
+{
+  "mcpServers": {
+    "my-cool-proxy": {
+      "url": "http://localhost:3000/mcp"
+    }
+  }
+}
+```
+
+### Stdio Mode
+
+Run the gateway as a stdio-based MCP server that clients launch directly:
+
+**Configure** - Set `transport: "stdio"` in config.json (port and host are optional):
+
+```json
+{
+  "transport": "stdio",
+  "mcpClients": { ... }
+}
+```
+
+**Build:**
+
+```bash
+pnpm build
+```
+
+**Connect from MCP client:**
+
+```json
+{
+  "mcpServers": {
+    "my-cool-proxy": {
+      "command": "node",
+      "args": ["path/to/my-cool-proxy/dist/index.js"]
+    }
+  }
+}
+```
+
+**Note:** Stdio mode requires building first - `pnpm dev` won't work properly with stdio since stdout is used for the MCP protocol.
+
+## MCP Client Transport Types
 
 **HTTP** - Connect to remote MCP servers:
 

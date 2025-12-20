@@ -79,8 +79,9 @@ export interface MCPClientConfigStdio {
 export type MCPClientConfig = MCPClientConfigHTTP | MCPClientConfigStdio;
 
 export interface ServerConfig {
-  port: number;
-  host: string;
+  port?: number;
+  host?: string;
+  transport?: "http" | "stdio";
   mcpClients: Record<string, MCPClientConfig>;
 }
 

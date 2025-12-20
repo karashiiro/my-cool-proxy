@@ -1,6 +1,7 @@
 {
   "port": 3000,
   "host": "localhost",
+  "transport": "http",
   "mcpClients": {
     "mcp-docs": {
       "type": "http",

@@ -35,6 +35,7 @@ CONFIG_PATH=/path/to/custom-config.json pnpm dev
 {
   "port": 3000,
   "host": "localhost",
+  "transport": "http",
   "mcpClients": {
     "mcp-docs": {
       "type": "http",
@@ -54,8 +55,11 @@ CONFIG_PATH=/path/to/custom-config.json pnpm dev
 
 #### Fields
 
-- **port** (number, required): Port number for the server to listen on
-- **host** (string, required): Hostname to bind to
+- **port** (number, required for HTTP mode): Port number for the server to listen on
+- **host** (string, required for HTTP mode): Hostname to bind to
+- **transport** (string, optional): Gateway transport mode - `"http"` or `"stdio"` (default: `"http"`)
+  - `"http"`: Run as HTTP server (requires port and host)
+  - `"stdio"`: Run as stdio-based MCP server (port and host are optional)
 - **mcpClients** (object, required): Map of MCP server configurations, keyed by server name
 
 #### MCP Client Configuration
@@ -169,8 +173,9 @@ This sanitized name is what you'll use in your Lua scripts to access the server.
 
 The config loader validates:
 
-- `port` must be a number
-- `host` must be a string
+- `transport` (if provided) must be "http" or "stdio"
+- `port` must be a number (required for HTTP mode)
+- `host` must be a string (required for HTTP mode)
 - `mcpClients` must be an object (not an array)
 - Each client must have a valid `type` ("http" or "stdio")
 - HTTP clients must have a `url` field
@@ -180,7 +185,82 @@ The config loader validates:
 
 If validation fails, the server will exit with a descriptive error message.
 
-## Transport Types
+## Gateway Transport Mode
+
+The `transport` field controls how the gateway **exposes itself** to MCP clients.
+
+### HTTP Mode (Default)
+
+Run the gateway as an HTTP server that clients connect to remotely.
+
+**Configuration:**
+
+```json
+{
+  "port": 3000,
+  "host": "localhost",
+  "transport": "http",
+  "mcpClients": { ... }
+}
+```
+
+**Usage:**
+
+```bash
+pnpm dev
+# or for production:
+pnpm build && node dist/index.js
+```
+
+**MCP Client Configuration:**
+
+```json
+{
+  "mcpServers": {
+    "my-cool-proxy": {
+      "url": "http://localhost:3000/mcp"
+    }
+  }
+}
+```
+
+### Stdio Mode
+
+Run the gateway as a stdio-based MCP server that clients launch directly via command-line.
+
+**Configuration:**
+
+```json
+{
+  "transport": "stdio",
+  "mcpClients": { ... }
+}
+```
+
+Note: `port` and `host` are optional in stdio mode since the gateway doesn't run an HTTP server.
+
+**Usage:**
+
+```bash
+pnpm build
+```
+
+**MCP Client Configuration:**
+
+```json
+{
+  "mcpServers": {
+    "my-cool-proxy": {
+      "command": "node",
+      "args": ["path/to/my-cool-proxy/dist/index.js"]
+    }
+  }
+}
+```
+
+**Important:** Stdio mode requires building first - `pnpm dev` won't work properly with stdio since stdout is used for the MCP protocol.
+
+## MCP Client Transport Types
 
 ### HTTP Transport
 

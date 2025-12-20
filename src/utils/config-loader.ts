@@ -18,19 +18,41 @@ export function loadConfig(): ServerConfig {
     const configContent = readFileSync(configPath, "utf-8");
     const config = JSON.parse(configContent) as ServerConfig;
 
-    // Validate required fields
-    if (typeof config.port !== "number") {
-      throw new Error("Config must specify 'port' as a number");
-    }
-    if (typeof config.host !== "string") {
-      throw new Error("Config must specify 'host' as a string");
-    }
+    // Validate mcpClients (always required)
     if (
       typeof config.mcpClients !== "object" ||
       config.mcpClients === null ||
       Array.isArray(config.mcpClients)
     ) {
       throw new Error("Config must specify 'mcpClients' as an object");
+    }
+
+    // Validate transport if provided
+    if (config.transport !== undefined) {
+      if (config.transport !== "http" && config.transport !== "stdio") {
+        throw new Error(
+          "Config 'transport' must be 'http' or 'stdio' if specified",
+        );
+      }
+    }
+
+    // Set default transport to http
+    if (!config.transport) {
+      config.transport = "http";
+    }
+
+    // Validate port and host only if using HTTP transport
+    if (config.transport === "http") {
+      if (typeof config.port !== "number") {
+        throw new Error(
+          "Config must specify 'port' as a number when using HTTP transport",
+        );
+      }
+      if (typeof config.host !== "string") {
+        throw new Error(
+          "Config must specify 'host' as a string when using HTTP transport",
+        );
+      }
     }
 
     // Validate each MCP client config

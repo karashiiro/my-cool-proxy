@@ -33,6 +33,7 @@ describe("loadConfig", () => {
       mcpClients: {
         test: { type: "http", url: "http://test.com" },
       },
+      transport: "http",
     };
 
     writeFileSync(testConfigPath, JSON.stringify(testConfig));

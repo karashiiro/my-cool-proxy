@@ -4,7 +4,7 @@ import type { ILogger } from "../types/interfaces.js";
 @injectable()
 export class ConsoleLogger implements ILogger {
   info(message: string, meta?: unknown): void {
-    console.log(`[INFO] ${message}`, meta || "");
+    console.error(`[INFO] ${message}`, meta || "");
   }
 
   error(message: string, error?: Error): void {
@@ -12,6 +12,6 @@ export class ConsoleLogger implements ILogger {
   }
 
   debug(message: string, meta?: unknown): void {
-    console.debug(`[DEBUG] ${message}`, meta || "");
+    console.error(`[DEBUG] ${message}`, meta || "");
   }
 }
