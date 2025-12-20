@@ -109,11 +109,12 @@ The proxy exposes these tools:
 Example Lua script:
 
 ```lua
--- Call a tool on your MCP server
-local result = my_server.some_tool({ arg = "value" }):await()
+-- Call a tool and return the result directly
+result(my_server.some_tool({ arg = "value" }):await())
 
--- Return data
-result({ data = result })
+-- Or store in a variable first if you need to process it
+local data = my_server.some_tool({ arg = "value" }):await()
+result({ processed = data.something })
 ```
 
 ## Transport Types
