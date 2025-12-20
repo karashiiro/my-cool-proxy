@@ -15,7 +15,10 @@ import { ToolDiscoveryService } from "../mcp/tool-discovery-service.js";
 export class ToolDetailsTool implements ITool {
   readonly name = "tool-details";
   readonly description =
-    "Get detailed information about a specific tool including full description and schemas";
+    "Get comprehensive information about a specific tool, including its full description, input schema " +
+    "with required/optional parameters, and expected output format. You MUST call this for each tool " +
+    "you plan to use - the brief descriptions from list-server-tools are insufficient for making actual " +
+    "tool calls. This ensures you understand the tool's capabilities and provide correct arguments.";
   readonly schema = {
     luaServerName: z.string().describe("The Lua identifier of the MCP server"),
     luaToolName: z.string().describe("The Lua identifier of the tool"),

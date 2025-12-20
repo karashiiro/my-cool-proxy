@@ -20,26 +20,28 @@ import type { ITool, ToolExecutionContext } from "./base-tool.js";
 @injectable()
 export class ExecuteLuaTool implements ITool {
   readonly name = "execute";
-  readonly description = `Execute a Lua script that can call tools on available MCP servers.
-MCP servers are available as globals with their Lua identifiers.
+  readonly description = `Execute a Lua script that orchestrates tool calls across MCP servers. This is the primary way to use specialized tools discovered through this gateway.
 
-Use list-servers to see available servers, list-server-tools to see the tools on a particular
-server, and tool-details to get full information for a single tool. You MUST use tool-details
-at least once for each tool you want to call to understand its inputs and outputs.
+WORKFLOW:
+1. Call list-servers to discover available MCP servers
+2. Call list-server-tools to see what each server provides
+3. Call tool-details for each tool you plan to use (REQUIRED - brief descriptions are insufficient)
+4. Call execute with a Lua script that uses those tools
 
-Wherever possible, combine multiple tool calls into a single script to avoid returning unnecessary data.
+SCRIPT SYNTAX:
+- MCP servers are available as global variables using their Lua identifiers
+- Tool calls return promises - use :await() to unwrap them
+- Call result() to return a value from your script
+- Example: result(server_name.tool_name({ arg = "value" }):await())
 
-To return a value, call the global result() function with the value as an argument.
-Tool calls return promises - use :await() to get the result.
-Example: result(server_name.tool_name({ arg = "value" }):await())`;
+OPTIMIZATION:
+Combine multiple tool calls into a single script when possible to avoid returning large intermediate results. For example, if you need to fetch data and then filter it, do both operations in one script rather than two separate calls.`;
 
   readonly schema = {
     script: z
       .string()
       .describe(
-        "Lua script to execute. Available servers are accessible as global variables. " +
-          "Tool calls return promises, so use :await() to unwrap them. " +
-          "Call the global result() function to return a value from the script.",
+        "Lua script to execute. See tool description for syntax and workflow.",
       ),
   };
 

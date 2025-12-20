@@ -14,7 +14,11 @@ import { ToolDiscoveryService } from "../mcp/tool-discovery-service.js";
 export class ListServersTool implements ITool {
   readonly name = "list-servers";
   readonly description =
-    "List all available MCP servers for this session, including their Lua identifiers and server information";
+    "Discover what specialized MCP servers are available through this gateway. MCP servers provide " +
+    "domain-specific tools that are often more powerful, accurate, and efficient than generic " +
+    "alternatives. Always call this tool FIRST when starting a new task to see what specialized " +
+    "capabilities you have access to. Returns server names with their Lua identifiers for use in " +
+    "subsequent discovery and execution.";
   readonly schema = {};
 
   constructor(

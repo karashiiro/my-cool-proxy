@@ -131,7 +131,7 @@ export class MCPFormatterService {
     }
 
     lines.push("Usage Example:");
-    lines.push(`  local result = ${luaServerName}.${luaToolName}({`);
+    lines.push(`  result(${luaServerName}.${luaToolName}({`);
 
     const exampleArgs = this.generateExampleArgs(tool.inputSchema);
     if (exampleArgs.length > 0) {
@@ -140,7 +140,7 @@ export class MCPFormatterService {
       lines.push("    -- No required parameters");
     }
 
-    lines.push("  }):await()");
+    lines.push("  }):await())");
     lines.push("");
 
     return lines.join("\n");

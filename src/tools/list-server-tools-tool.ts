@@ -15,7 +15,10 @@ import { ToolDiscoveryService } from "../mcp/tool-discovery-service.js";
 export class ListServerToolsTool implements ITool {
   readonly name = "list-server-tools";
   readonly description =
-    "List all available tools for a specific MCP server using its Lua identifier";
+    "List all tools provided by a specific MCP server. Use this after calling list-servers to explore " +
+    "what operations each server supports. Returns tool names with brief descriptions, allowing you to " +
+    "identify which tools might be relevant for your task. Once you've identified relevant tools, use " +
+    "tool-details to get complete information before calling them.";
   readonly schema = {
     luaServerName: z
       .string()
