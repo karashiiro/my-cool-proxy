@@ -18,7 +18,9 @@ export class ToolDetailsTool implements ITool {
     "Get comprehensive information about a specific tool, including its full description, input schema " +
     "with required/optional parameters, and expected output format. You MUST call this for each tool " +
     "you plan to use - the brief descriptions from list-server-tools are insufficient for making actual " +
-    "tool calls. This ensures you understand the tool's capabilities and provide correct arguments.";
+    "tool calls. This ensures you understand the tool's capabilities and provide correct arguments. " +
+    "If you need to understand the output structure for efficient data extraction, use inspect-tool-response " +
+    "after this (but only for safe/read-only tools).";
   readonly schema = {
     luaServerName: z.string().describe("The Lua identifier of the MCP server"),
     luaToolName: z.string().describe("The Lua identifier of the tool"),

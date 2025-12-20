@@ -26,7 +26,8 @@ WORKFLOW:
 1. Call list-servers to discover available MCP servers
 2. Call list-server-tools to see what each server provides
 3. Call tool-details for each tool you plan to use (REQUIRED - brief descriptions are insufficient)
-4. Call execute with a Lua script that uses those tools
+4. OPTIONAL: Call inspect-tool-response to see sample output structure for better data extraction
+5. Call execute with a Lua script that uses those tools
 
 SCRIPT SYNTAX:
 - MCP servers are available as global variables using their Lua identifiers
@@ -35,7 +36,12 @@ SCRIPT SYNTAX:
 - Example: result(server_name.tool_name({ arg = "value" }):await())
 
 OPTIMIZATION:
-Combine multiple tool calls into a single script when possible to avoid returning large intermediate results. For example, if you need to fetch data and then filter it, do both operations in one script rather than two separate calls.`;
+1. Combine multiple tool calls into a single script to avoid returning large intermediate results
+2. Check responses for pagination indicators (total_count, hasMore, nextCursor) and fetch all pages 
+   in one script if you need complete data
+3. Process responses in Lua to extract only needed fields before returning - Lua processing is cheap,
+   but returning large JSON objects wastes tokens
+4. Example: Instead of returning raw responses, extract specific fields into a summary table`;
 
   readonly schema = {
     script: z

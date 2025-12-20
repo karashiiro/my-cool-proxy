@@ -27,6 +27,7 @@ import { ExecuteLuaTool } from "../tools/execute-lua-tool.js";
 import { ListServersTool } from "../tools/list-servers-tool.js";
 import { ListServerToolsTool } from "../tools/list-server-tools-tool.js";
 import { ToolDetailsTool } from "../tools/tool-details-tool.js";
+import { InspectToolResponseTool } from "../tools/inspect-tool-response-tool.js";
 import { ToolRegistry } from "../tools/tool-registry.js";
 import type { IToolRegistry } from "../tools/tool-registry.js";
 
@@ -60,6 +61,7 @@ const createToolRegistry = (
     clientManager,
     logger,
     new MCPFormatterService(),
+    luaRuntime,
   );
 
   const registry = new ToolRegistry();
@@ -67,6 +69,7 @@ const createToolRegistry = (
   registry.register(new ListServersTool(toolDiscovery));
   registry.register(new ListServerToolsTool(toolDiscovery));
   registry.register(new ToolDetailsTool(toolDiscovery));
+  registry.register(new InspectToolResponseTool(toolDiscovery));
 
   return registry;
 };
@@ -2465,5 +2468,352 @@ describe("MCPGatewayServer - Resource Aggregation", () => {
         ).rejects.toThrow();
       });
     });
+  });
+});
+
+describe("MCPGatewayServer - Progressive Discovery with inspect-tool-response", () => {
+  let gatewayServer: MCPGatewayServer;
+  let luaRuntime: ILuaRuntime;
+  let clientManager: IMCPClientManager;
+  let logger: ILogger;
+  let gateway: McpServer;
+  let gatewayClient: Client;
+  const cleanupFns: Array<() => Promise<void>> = [];
+
+  beforeEach(() => {
+    logger = createMockLogger();
+    luaRuntime = new WasmoonRuntime(logger);
+  });
+
+  afterEach(async () => {
+    // Clean up all servers and clients
+    for (const cleanup of cleanupFns) {
+      await cleanup();
+    }
+    cleanupFns.length = 0;
+    if (gatewayClient) {
+      await gatewayClient.close();
+    }
+    if (gateway) {
+      await gateway.close();
+    }
+  });
+
+  it("should complete full discovery workflow: list-servers → list-server-tools → tool-details → inspect → execute", async () => {
+    // Create a test server with a tool that returns structured data
+    const { server, client } = await createTestServer("api-server", [
+      {
+        name: "get-users",
+        description: "Get user list",
+        handler: async (args: Record<string, unknown>) => ({
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                total_count: 100,
+                users: [
+                  { id: 1, name: "Alice", email: "alice@example.com" },
+                  { id: 2, name: "Bob", email: "bob@example.com" },
+                ],
+                page: args.page || 1,
+              }),
+            },
+          ],
+        }),
+      },
+    ]);
+
+    cleanupFns.push(async () => {
+      await client.close();
+      await server.close();
+    });
+
+    const servers = new Map([["api-server", client]]);
+    clientManager = createMockClientManager(servers);
+    gatewayServer = new MCPGatewayServer(
+      createToolRegistry(luaRuntime, clientManager, logger),
+      clientManager,
+      logger,
+      new ResourceAggregationService(clientManager, logger),
+      new PromptAggregationService(clientManager, logger),
+    );
+    gateway = gatewayServer.getServer();
+
+    // Connect to gateway
+    const [clientTransport, serverTransport] =
+      InMemoryTransport.createLinkedPair();
+    await gateway.connect(serverTransport);
+
+    gatewayClient = new Client(
+      { name: "test-gateway-client", version: "1.0.0" },
+      { capabilities: {} },
+    );
+    await gatewayClient.connect(clientTransport);
+
+    // Step 1: list-servers
+    const serversResult = (await gatewayClient.callTool({
+      name: "list-servers",
+      arguments: {},
+    })) as CallToolResult;
+    assertTextContentBlock(serversResult.content[0]);
+    const serversText = serversResult.content[0].text;
+    expect(serversText).toContain("api_server");
+
+    // Step 2: list-server-tools
+    const toolsResult = (await gatewayClient.callTool({
+      name: "list-server-tools",
+      arguments: { luaServerName: "api_server" },
+    })) as CallToolResult;
+    assertTextContentBlock(toolsResult.content[0]);
+    const toolsText = toolsResult.content[0].text;
+    expect(toolsText).toContain("get_users");
+
+    // Step 3: tool-details
+    const detailsResult = (await gatewayClient.callTool({
+      name: "tool-details",
+      arguments: {
+        luaServerName: "api_server",
+        luaToolName: "get_users",
+      },
+    })) as CallToolResult;
+    assertTextContentBlock(detailsResult.content[0]);
+    const detailsText = detailsResult.content[0].text;
+    expect(detailsText).toContain("get_users");
+    expect(detailsText).toContain("Usage Example");
+
+    // Step 4: inspect-tool-response (new!)
+    const inspectResult = (await gatewayClient.callTool({
+      name: "inspect-tool-response",
+      arguments: {
+        luaServerName: "api_server",
+        luaToolName: "get_users",
+        sampleArgs: { page: 1, limit: 2 },
+      },
+    })) as CallToolResult;
+    assertTextContentBlock(inspectResult.content[0]);
+    const inspectText = inspectResult.content[0].text;
+    expect(inspectText).toContain("⚠️ Tool executed");
+    expect(inspectText).toContain("Sample Response Structure");
+    expect(inspectText).toContain("total_count");
+    expect(inspectText).toContain("users");
+
+    // Step 5: execute - now with knowledge of structure, extract only what's needed
+    const executeScript = `
+      local response = api_server.get_users({ page = 1, limit = 10 }):await()
+      -- Extract only the fields we need based on inspection
+      local userSummary = {}
+      for i, user in ipairs(response.users) do
+        userSummary[i] = { id = user.id, name = user.name }
+      end
+      result({
+        user_count = response.total_count,
+        users = userSummary
+      })
+    `;
+
+    const executeResult = await gatewayClient.callTool({
+      name: "execute",
+      arguments: { script: executeScript },
+    });
+
+    // Should have extracted only relevant fields
+    expect(executeResult.structuredContent).toHaveProperty("user_count", 100);
+    expect(executeResult.structuredContent).toHaveProperty("users");
+    expect(
+      (executeResult.structuredContent as Record<string, unknown>).users,
+    ).toHaveLength(2);
+    // Email should NOT be included since we didn't extract it
+    const firstUser = (
+      (executeResult.structuredContent as Record<string, unknown>)
+        .users as Array<Record<string, unknown>>
+    )[0];
+    expect(firstUser).toHaveProperty("id");
+    expect(firstUser).toHaveProperty("name");
+    expect(firstUser).not.toHaveProperty("email");
+  });
+
+  it("should show inspect result matches execute result structure", async () => {
+    const { server, client } = await createTestServer("test-server", [
+      {
+        name: "get-data",
+        description: "Get data with pagination",
+        handler: async (args: Record<string, unknown>) => ({
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                items: [1, 2, 3],
+                hasMore: true,
+                page: args.page || 1,
+              }),
+            },
+          ],
+        }),
+      },
+    ]);
+
+    cleanupFns.push(async () => {
+      await client.close();
+      await server.close();
+    });
+
+    const servers = new Map([["test-server", client]]);
+    clientManager = createMockClientManager(servers);
+    gatewayServer = new MCPGatewayServer(
+      createToolRegistry(luaRuntime, clientManager, logger),
+      clientManager,
+      logger,
+      new ResourceAggregationService(clientManager, logger),
+      new PromptAggregationService(clientManager, logger),
+    );
+    gateway = gatewayServer.getServer();
+
+    const [clientTransport, serverTransport] =
+      InMemoryTransport.createLinkedPair();
+    await gateway.connect(serverTransport);
+
+    gatewayClient = new Client(
+      { name: "test-gateway-client", version: "1.0.0" },
+      { capabilities: {} },
+    );
+    await gatewayClient.connect(clientTransport);
+
+    // Inspect the tool
+    const inspectResult = (await gatewayClient.callTool({
+      name: "inspect-tool-response",
+      arguments: {
+        luaServerName: "test_server",
+        luaToolName: "get_data",
+        sampleArgs: { page: 1 },
+      },
+    })) as CallToolResult;
+
+    // Execute the same tool with same args
+    const executeResult = (await gatewayClient.callTool({
+      name: "execute",
+      arguments: {
+        script: "result(test_server.get_data({ page = 1 }):await())",
+      },
+    })) as CallToolResult;
+
+    // Both should have the same structure
+    // The inspect result shows the structure in text form
+    assertTextContentBlock(inspectResult.content[0]);
+    const inspectText = inspectResult.content[0].text;
+    expect(inspectText).toContain("items");
+    expect(inspectText).toContain("hasMore");
+    expect(inspectText).toContain("page");
+
+    // The execute result has the actual structured data
+    expect(executeResult.structuredContent).toHaveProperty("items");
+    expect(executeResult.structuredContent).toHaveProperty("hasMore");
+    expect(executeResult.structuredContent).toHaveProperty("page");
+  });
+
+  it("should handle inspect errors gracefully", async () => {
+    const { server, client } = await createTestServer("error-server", [
+      {
+        name: "failing-tool",
+        description: "A tool that fails",
+        handler: async () => {
+          throw new Error("Tool execution failed!");
+        },
+      },
+    ]);
+
+    cleanupFns.push(async () => {
+      await client.close();
+      await server.close();
+    });
+
+    const servers = new Map([["error-server", client]]);
+    clientManager = createMockClientManager(servers);
+    gatewayServer = new MCPGatewayServer(
+      createToolRegistry(luaRuntime, clientManager, logger),
+      clientManager,
+      logger,
+      new ResourceAggregationService(clientManager, logger),
+      new PromptAggregationService(clientManager, logger),
+    );
+    gateway = gatewayServer.getServer();
+
+    const [clientTransport, serverTransport] =
+      InMemoryTransport.createLinkedPair();
+    await gateway.connect(serverTransport);
+
+    gatewayClient = new Client(
+      { name: "test-gateway-client", version: "1.0.0" },
+      { capabilities: {} },
+    );
+    await gatewayClient.connect(clientTransport);
+
+    // Try to inspect a failing tool
+    const inspectResult = (await gatewayClient.callTool({
+      name: "inspect-tool-response",
+      arguments: {
+        luaServerName: "error_server",
+        luaToolName: "failing_tool",
+        sampleArgs: {},
+      },
+    })) as CallToolResult;
+
+    // Should return a response (may be error or may wrap the tool error in structured content)
+    // The important thing is it doesn't crash
+    expect(inspectResult.content).toBeDefined();
+    expect(inspectResult.content.length).toBeGreaterThan(0);
+  });
+
+  it("should warn when inspecting non-existent tool", async () => {
+    const { server, client } = await createTestServer("test-server", [
+      {
+        name: "real-tool",
+        description: "A real tool",
+        handler: async () => ({
+          content: [{ type: "text", text: "ok" }],
+        }),
+      },
+    ]);
+
+    cleanupFns.push(async () => {
+      await client.close();
+      await server.close();
+    });
+
+    const servers = new Map([["test-server", client]]);
+    clientManager = createMockClientManager(servers);
+    gatewayServer = new MCPGatewayServer(
+      createToolRegistry(luaRuntime, clientManager, logger),
+      clientManager,
+      logger,
+      new ResourceAggregationService(clientManager, logger),
+      new PromptAggregationService(clientManager, logger),
+    );
+    gateway = gatewayServer.getServer();
+
+    const [clientTransport, serverTransport] =
+      InMemoryTransport.createLinkedPair();
+    await gateway.connect(serverTransport);
+
+    gatewayClient = new Client(
+      { name: "test-gateway-client", version: "1.0.0" },
+      { capabilities: {} },
+    );
+    await gatewayClient.connect(clientTransport);
+
+    // Try to inspect non-existent tool
+    const inspectResult = (await gatewayClient.callTool({
+      name: "inspect-tool-response",
+      arguments: {
+        luaServerName: "test_server",
+        luaToolName: "nonexistent_tool",
+        sampleArgs: {},
+      },
+    })) as CallToolResult;
+
+    expect(inspectResult.isError).toBe(true);
+    assertTextContentBlock(inspectResult.content[0]);
+    const errorText = inspectResult.content[0].text;
+    expect(errorText).toContain("not found");
+    expect(errorText).toContain("Available tools");
   });
 });

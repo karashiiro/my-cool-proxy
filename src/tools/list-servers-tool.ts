@@ -18,7 +18,7 @@ export class ListServersTool implements ITool {
     "domain-specific tools that are often more powerful, accurate, and efficient than generic " +
     "alternatives. Always call this tool FIRST when starting a new task to see what specialized " +
     "capabilities you have access to. Returns server names with their Lua identifiers for use in " +
-    "subsequent discovery and execution.";
+    "subsequent discovery (list-server-tools → tool-details → optionally inspect-tool-response) and execution.";
   readonly schema = {};
 
   constructor(
