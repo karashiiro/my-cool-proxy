@@ -5,6 +5,7 @@ import pino from "pino";
 @injectable()
 export class ConsoleLogger implements ILogger {
   private logger = pino({
+    level: "debug",
     transport: {
       target: "pino-pretty",
     },

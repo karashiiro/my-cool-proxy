@@ -27,6 +27,8 @@ export class WasmoonRuntime implements ILuaRuntime {
     script: string,
     mcpServers: Map<string, MCPClientSession>,
   ): Promise<unknown> {
+    this.logger.debug(`Executing Lua script:\n${script}`);
+
     let finalResult: unknown;
     const engine = await this.createEngine((result: unknown) => {
       finalResult = result;
