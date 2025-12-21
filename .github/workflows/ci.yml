@@ -13,7 +13,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        node: [18.x, 20.x]
+        node: [20.x, 22.x, 24.x]
       fail-fast: false
     steps:
       - name: Checkout repository
