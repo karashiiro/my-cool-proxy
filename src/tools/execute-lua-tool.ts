@@ -37,8 +37,10 @@ SCRIPT SYNTAX:
 
 OPTIMIZATION:
 1. Combine multiple tool calls into a single script to avoid returning large intermediate results
-2. Check responses for pagination indicators (total_count, hasMore, nextCursor) and fetch all pages 
-   in one script if you need complete data
+2. ALWAYS paginate exhaustively when responses include pagination indicators (total_count, hasMore, nextCursor, page, etc.)
+   - Use a while loop to fetch ALL pages, not just the first page
+   - Only skip pagination if the user explicitly requests partial/sample results
+   - Process and aggregate data across all pages in Lua before returning
 3. Process responses in Lua to extract only needed fields before returning - Lua processing is cheap,
    but returning large JSON objects wastes tokens
 4. Example: Instead of returning raw responses, extract specific fields into a summary table`;
