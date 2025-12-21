@@ -22,6 +22,8 @@ export class ConsoleLogger implements ILogger {
       } else {
         this.logger.error(msgOrErr);
       }
+    } else {
+      this.logger.error(msgOrErr);
     }
   }
 
