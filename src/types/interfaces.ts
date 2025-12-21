@@ -86,9 +86,9 @@ export interface ServerConfig {
 }
 
 export interface ILogger {
-  info(message: string, meta?: unknown): void;
+  info(message: string): void;
   error(message: string, error?: Error): void;
-  debug(message: string, meta?: unknown): void;
+  debug(message: string): void;
 }
 
 export interface ServerInfo {

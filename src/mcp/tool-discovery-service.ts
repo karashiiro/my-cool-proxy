@@ -10,6 +10,7 @@ import { TYPES } from "../types/index.js";
 import { sanitizeLuaIdentifier } from "../utils/lua-identifier.js";
 import type { MCPClientSession } from "./client-session.js";
 import { MCPFormatterService } from "./mcp-formatter-service.js";
+import { inspect } from "node:util";
 
 @injectable()
 export class ToolDiscoveryService {
@@ -238,8 +239,7 @@ export class ToolDiscoveryService {
       // Actually execute the tool with sample args through the Lua runtime
       // This ensures the response structure matches what LLMs will see in execute scripts
       this.logger.info(
-        `Inspecting tool response: ${luaServerName}.${luaToolName} with args:`,
-        sampleArgs,
+        `Inspecting tool response: ${luaServerName}.${luaToolName} with args: ${inspect(sampleArgs)}`,
       );
 
       // Generate a Lua script that calls the tool and returns the result

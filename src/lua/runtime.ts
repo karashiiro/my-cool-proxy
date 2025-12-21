@@ -13,6 +13,7 @@ import {
   type CallToolResult,
 } from "@modelcontextprotocol/sdk/types.js";
 import { namespaceCallToolResultResources } from "../utils/resource-uri.js";
+import { inspect } from "node:util";
 
 @injectable()
 export class WasmoonRuntime implements ILuaRuntime {
@@ -116,8 +117,7 @@ The 'result' function is global - don't use 'local result = ...' as this overwri
             try {
               this.logger.debug(
                 `Calling ${originalServerName}.${originalToolName} ` +
-                  `(Lua: ${sanitizedServerName}.${sanitizedToolName}) with args:`,
-                args,
+                  `(Lua: ${sanitizedServerName}.${sanitizedToolName}) with args: ${inspect(args)}`,
               );
 
               const result = await takeResult<
