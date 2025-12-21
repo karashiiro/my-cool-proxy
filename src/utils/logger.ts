@@ -1,21 +1,14 @@
 import { injectable } from "inversify";
 import type { ILogger } from "../types/interfaces.js";
-import winston from "winston";
-
-const logFormat = winston.format.printf(function (info) {
-  return `[${info.level}] ${info.message}`;
-});
+import pino from "pino";
 
 @injectable()
 export class ConsoleLogger implements ILogger {
-  private logger = winston.createLogger({
-    defaultMeta: { service: "my-cool-proxy" },
-    transports: [
-      new winston.transports.Console({
-        level: "debug",
-        format: winston.format.combine(winston.format.colorize(), logFormat),
-      }),
-    ],
+  private logger = pino({
+    level: "debug",
+    transport: {
+      target: "pino-pretty",
+    },
   });
 
   info(message: string): void {
@@ -25,14 +18,10 @@ export class ConsoleLogger implements ILogger {
   error(msgOrErr: string | Error, error?: Error): void {
     if (typeof msgOrErr === "string") {
       if (error) {
-        this.logger.error(msgOrErr, { error });
+        this.logger.error(error, msgOrErr);
       } else {
         this.logger.error(msgOrErr);
       }
-    } else {
-      this.logger.error(msgOrErr.message, {
-        error: msgOrErr.stack || msgOrErr.message,
-      });
     }
   }
 
