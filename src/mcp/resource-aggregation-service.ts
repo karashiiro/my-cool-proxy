@@ -50,6 +50,14 @@ export class ResourceAggregationService {
           const result = await client.listResources();
           return { name, resources: result };
         } catch (error) {
+          if (
+            error instanceof Error &&
+            error.message.includes("Server does not support resources")
+          ) {
+            // Ignore noisy error - we already avoid sending the underlying request via enforceStrictCapabilities
+            return { name, resources: [] };
+          }
+
           this.logger.error(
             `Failed to list resources from server '${name}':`,
             error as Error,

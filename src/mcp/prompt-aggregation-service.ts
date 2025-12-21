@@ -51,6 +51,14 @@ export class PromptAggregationService {
           const result = await client.listPrompts();
           return { name, prompts: result };
         } catch (error) {
+          if (
+            error instanceof Error &&
+            error.message.includes("Server does not support prompts")
+          ) {
+            // Ignore noisy error - we already avoid sending the underlying request via enforceStrictCapabilities
+            return { name, prompts: [] };
+          }
+
           this.logger.error(
             `Failed to list prompts from server '${name}':`,
             error as Error,

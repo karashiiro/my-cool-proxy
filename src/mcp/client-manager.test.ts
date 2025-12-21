@@ -88,6 +88,7 @@ describe("MCPClientManager", () => {
         },
         {
           capabilities: {},
+          enforceStrictCapabilities: true,
         },
       );
 
@@ -255,6 +256,7 @@ describe("MCPClientManager", () => {
         },
         {
           capabilities: {},
+          enforceStrictCapabilities: true,
         },
       );
 

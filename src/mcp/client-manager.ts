@@ -52,6 +52,7 @@ export class MCPClientManager implements IMCPClientManager {
       },
       {
         capabilities: {},
+        enforceStrictCapabilities: true,
       },
     );
 
@@ -110,6 +111,7 @@ export class MCPClientManager implements IMCPClientManager {
       },
       {
         capabilities: {},
+        enforceStrictCapabilities: true,
       },
     );
 
