@@ -63,9 +63,9 @@ export class MCPGatewayServer {
       },
       {
         capabilities: {
-          tools: {
-            listChanged: true,
-          },
+          // We don't need listChanged here because our own exposed tools never change, even
+          // if those of the underlying servers do.
+          tools: {},
           resources: {
             listChanged: true,
           },
