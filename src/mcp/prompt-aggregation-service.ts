@@ -49,7 +49,7 @@ export class PromptAggregationService {
       async ([name, client]) => {
         try {
           const result = await client.listPrompts();
-          return { name, prompts: result.prompts };
+          return { name, prompts: result };
         } catch (error) {
           this.logger.error(
             `Failed to list prompts from server '${name}':`,

@@ -67,41 +67,12 @@ describe("MCPClientSession", () => {
       const result = await session.listTools();
 
       // Should return response unchanged
-      expect(result).toEqual(mockResponse);
-      expect(result.tools).toHaveLength(3);
+      expect(result).toEqual(mockResponse.tools);
+      expect(result).toHaveLength(3);
 
       // Should not log anything when no filter is applied
       expect(logger.info).not.toHaveBeenCalled();
       expect(logger.error).not.toHaveBeenCalled();
-    });
-
-    it("should preserve response metadata when no filter", async () => {
-      const mockResponse = {
-        tools: [
-          {
-            name: "tool1",
-            description: "Tool",
-            inputSchema: { type: "object" as const },
-          },
-        ],
-        nextCursor: "cursor123",
-        _meta: { version: "1.0" },
-      };
-
-      vi.mocked(mockClient.listTools).mockResolvedValue(mockResponse);
-
-      const session = new MCPClientSession(
-        mockClient,
-        serverName,
-        undefined,
-        logger,
-      );
-
-      const result = await session.listTools();
-
-      expect(result).toEqual(mockResponse);
-      expect(result.nextCursor).toBe("cursor123");
-      expect(result._meta).toEqual({ version: "1.0" });
     });
   });
 
@@ -129,35 +100,12 @@ describe("MCPClientSession", () => {
       const result = await session.listTools();
 
       // Should return empty tools array
-      expect(result.tools).toHaveLength(0);
-      expect(result.tools).toEqual([]);
+      expect(result).toEqual([]);
 
       // Should log that all tools are blocked
       expect(logger.info).toHaveBeenCalledWith(
         `Server '${serverName}': All tools blocked by empty allowedTools array`,
       );
-    });
-
-    it("should preserve other response properties with empty filter", async () => {
-      const mockResponse = {
-        tools: [
-          {
-            name: "tool1",
-            description: "Tool",
-            inputSchema: { type: "object" as const },
-          },
-        ],
-        nextCursor: "cursor456",
-      };
-
-      vi.mocked(mockClient.listTools).mockResolvedValue(mockResponse);
-
-      const session = new MCPClientSession(mockClient, serverName, [], logger);
-
-      const result = await session.listTools();
-
-      expect(result.tools).toEqual([]);
-      expect(result.nextCursor).toBe("cursor456");
     });
   });
 
@@ -201,11 +149,7 @@ describe("MCPClientSession", () => {
       const result = await session.listTools();
 
       // Should only include allowed tools
-      expect(result.tools).toHaveLength(2);
-      expect(result.tools.map((t) => t.name)).toEqual([
-        "read-file",
-        "list-files",
-      ]);
+      expect(result.map((t) => t.name)).toEqual(["read-file", "list-files"]);
 
       // Should log filtering info
       expect(logger.info).toHaveBeenCalledWith(
@@ -248,50 +192,12 @@ describe("MCPClientSession", () => {
 
       const result = await session.listTools();
 
-      expect(result.tools).toHaveLength(1);
-      expect(result.tools[0]?.name).toBe("tool2");
+      expect(result).toHaveLength(1);
+      expect(result[0]?.name).toBe("tool2");
 
       expect(logger.info).toHaveBeenCalledWith(
         `Server '${serverName}': Filtered to 1 of 3 tools: tool2`,
       );
-    });
-
-    it("should preserve tool properties when filtering", async () => {
-      const mockResponse = {
-        tools: [
-          {
-            name: "complex-tool",
-            description: "A complex tool",
-            inputSchema: {
-              type: "object" as const,
-              properties: { arg: { type: "string" } },
-            },
-          },
-          {
-            name: "other-tool",
-            description: "Other",
-            inputSchema: { type: "object" as const },
-          },
-        ],
-      };
-
-      vi.mocked(mockClient.listTools).mockResolvedValue(mockResponse);
-
-      const session = new MCPClientSession(
-        mockClient,
-        serverName,
-        ["complex-tool"],
-        logger,
-      );
-
-      const result = await session.listTools();
-
-      expect(result.tools[0]?.name).toBe("complex-tool");
-      expect(result.tools[0]?.description).toBe("A complex tool");
-      expect(result.tools[0]?.inputSchema).toEqual({
-        type: "object",
-        properties: { arg: { type: "string" } },
-      });
     });
 
     it("should filter all tools if none match allowedTools", async () => {
@@ -322,7 +228,7 @@ describe("MCPClientSession", () => {
       const result = await session.listTools();
 
       // Should return no tools
-      expect(result.tools).toHaveLength(0);
+      expect(result).toHaveLength(0);
 
       // Should log error for nonexistent tool
       expect(logger.error).toHaveBeenCalledWith(
@@ -420,8 +326,7 @@ describe("MCPClientSession", () => {
       const result = await session.listTools();
 
       // Should include only the existing allowed tools
-      expect(result.tools).toHaveLength(2);
-      expect(result.tools.map((t) => t.name)).toEqual(["tool-a", "tool-c"]);
+      expect(result.map((t) => t.name)).toEqual(["tool-a", "tool-c"]);
 
       // Should log error for missing tool
       expect(logger.error).toHaveBeenCalledWith(
@@ -451,7 +356,7 @@ describe("MCPClientSession", () => {
 
       const result = await session.listTools();
 
-      expect(result.tools).toEqual([]);
+      expect(result).toEqual([]);
 
       // Should log error since requested tool doesn't exist
       expect(logger.error).toHaveBeenCalledWith(
@@ -495,8 +400,7 @@ describe("MCPClientSession", () => {
       const result = await session.listTools();
 
       // Should only match exact case
-      expect(result.tools).toHaveLength(2);
-      expect(result.tools.map((t) => t.name)).toEqual(["ReadFile", "READFILE"]);
+      expect(result.map((t) => t.name)).toEqual(["ReadFile", "READFILE"]);
     });
   });
 
@@ -628,12 +532,12 @@ describe("MCPClientSession", () => {
 
       // First call should fetch from client
       const result1 = await session.listTools();
-      expect(result1).toEqual(mockResponse);
+      expect(result1).toEqual(mockResponse.tools);
       expect(mockClient.listTools).toHaveBeenCalledTimes(1);
 
       // Second call should return cached result
       const result2 = await session.listTools();
-      expect(result2).toEqual(mockResponse);
+      expect(result2).toEqual(mockResponse.tools);
       expect(mockClient.listTools).toHaveBeenCalledTimes(1); // Still only 1 call
 
       // Should log cache hit
@@ -669,14 +573,14 @@ describe("MCPClientSession", () => {
 
       // First call should fetch and filter
       const result1 = await session.listTools();
-      expect(result1.tools).toHaveLength(1);
-      expect(result1.tools[0]?.name).toBe("tool1");
+      expect(result1).toHaveLength(1);
+      expect(result1[0]?.name).toBe("tool1");
       expect(mockClient.listTools).toHaveBeenCalledTimes(1);
 
       // Second call should return cached filtered result
       const result2 = await session.listTools();
-      expect(result2.tools).toHaveLength(1);
-      expect(result2.tools[0]?.name).toBe("tool1");
+      expect(result2).toHaveLength(1);
+      expect(result2[0]?.name).toBe("tool1");
       expect(mockClient.listTools).toHaveBeenCalledTimes(1); // Still only 1 call
     });
   });
@@ -731,12 +635,12 @@ describe("MCPClientSession", () => {
 
       // First call should fetch
       const result1 = await session.listTools();
-      expect(result1.tools).toHaveLength(1);
+      expect(result1).toHaveLength(1);
       expect(mockClient.listTools).toHaveBeenCalledTimes(1);
 
       // Second call should use cache
       const result2 = await session.listTools();
-      expect(result2.tools).toHaveLength(1);
+      expect(result2).toHaveLength(1);
       expect(mockClient.listTools).toHaveBeenCalledTimes(1);
 
       // Trigger notification
@@ -750,7 +654,7 @@ describe("MCPClientSession", () => {
 
       // Next call should fetch fresh data
       const result3 = await session.listTools();
-      expect(result3.tools).toHaveLength(2);
+      expect(result3).toHaveLength(2);
       expect(mockClient.listTools).toHaveBeenCalledTimes(2);
     });
 
@@ -827,11 +731,11 @@ describe("MCPClientSession", () => {
       );
 
       const result1 = await session.listTools();
-      expect(result1.tools).toHaveLength(2);
+      expect(result1).toHaveLength(2);
 
       const result2 = await session.listTools();
-      expect(result2.tools).toHaveLength(2);
-      expect(result2.tools.map((t) => t.name)).toEqual(["tool1", "tool2"]);
+      expect(result2).toHaveLength(2);
+      expect(result2.map((t) => t.name)).toEqual(["tool1", "tool2"]);
 
       // Should only call once due to caching
       expect(mockClient.listTools).toHaveBeenCalledTimes(1);
@@ -911,43 +815,13 @@ describe("MCPClientSession", () => {
 
         const result = await session.listResources();
 
-        expect(result.resources).toHaveLength(2);
-        expect(result.resources[0]?.uri).toBe("file:///test1.txt");
-        expect(result.resources[1]?.uri).toBe("file:///test2.txt");
+        expect(result).toHaveLength(2);
+        expect(result[0]?.uri).toBe("file:///test1.txt");
+        expect(result[1]?.uri).toBe("file:///test2.txt");
         expect(mockClient.listResources).toHaveBeenCalledTimes(1);
         expect(mockClient.listResources).toHaveBeenCalledWith(undefined);
         expect(logger.info).not.toHaveBeenCalled();
         expect(logger.error).not.toHaveBeenCalled();
-      });
-
-      it("should preserve resource metadata", async () => {
-        const mockResponse = {
-          resources: [
-            {
-              uri: "file:///data.json",
-              name: "Data",
-              mimeType: "application/json",
-            },
-          ],
-          _meta: { version: "2.0", timestamp: "2024-01-01" },
-        };
-
-        vi.mocked(mockClient.listResources).mockResolvedValue(mockResponse);
-
-        const session = new MCPClientSession(
-          mockClient,
-          serverName,
-          undefined,
-          logger,
-        );
-
-        const result = await session.listResources();
-
-        expect(result._meta).toEqual({
-          version: "2.0",
-          timestamp: "2024-01-01",
-        });
-        expect(result.resources).toHaveLength(1);
       });
 
       it("should handle empty resource list", async () => {
@@ -966,7 +840,7 @@ describe("MCPClientSession", () => {
 
         const result = await session.listResources();
 
-        expect(result.resources).toEqual([]);
+        expect(result).toEqual([]);
         expect(mockClient.listResources).toHaveBeenCalledTimes(1);
         expect(logger.error).not.toHaveBeenCalled();
       });
@@ -997,8 +871,7 @@ describe("MCPClientSession", () => {
 
         expect(mockClient.listResources).toHaveBeenCalledTimes(1);
         expect(mockClient.listResources).toHaveBeenCalledWith(undefined);
-        expect(result.resources).toHaveLength(1);
-        expect(result.nextCursor).toBeUndefined();
+        expect(result).toHaveLength(1);
       });
 
       it("should fetch all pages when pagination present", async () => {
@@ -1075,16 +948,10 @@ describe("MCPClientSession", () => {
         });
 
         // Verify all resources are combined
-        expect(result.resources).toHaveLength(6);
-        expect(result.resources[0]?.uri).toBe("file:///page1-item1.txt");
-        expect(result.resources[2]?.uri).toBe("file:///page2-item1.txt");
-        expect(result.resources[5]?.uri).toBe("file:///page3-item1.txt");
-
-        // Verify no nextCursor in final result
-        expect(result.nextCursor).toBeUndefined();
-
-        // Verify metadata from last response is preserved
-        expect(result._meta).toEqual({ finalPage: true });
+        expect(result).toHaveLength(6);
+        expect(result[0]?.uri).toBe("file:///page1-item1.txt");
+        expect(result[2]?.uri).toBe("file:///page2-item1.txt");
+        expect(result[5]?.uri).toBe("file:///page3-item1.txt");
       });
 
       it("should handle many pages of resources", async () => {
@@ -1115,9 +982,9 @@ describe("MCPClientSession", () => {
         const result = await session.listResources();
 
         expect(mockClient.listResources).toHaveBeenCalledTimes(10);
-        expect(result.resources).toHaveLength(10);
-        expect(result.resources[0]?.uri).toBe("file:///page1.txt");
-        expect(result.resources[9]?.uri).toBe("file:///page10.txt");
+        expect(result).toHaveLength(10);
+        expect(result[0]?.uri).toBe("file:///page1.txt");
+        expect(result[9]?.uri).toBe("file:///page10.txt");
       });
     });
 
@@ -1144,12 +1011,12 @@ describe("MCPClientSession", () => {
 
         // First call should fetch from client
         const result1 = await session.listResources();
-        expect(result1.resources).toHaveLength(1);
+        expect(result1).toHaveLength(1);
         expect(mockClient.listResources).toHaveBeenCalledTimes(1);
 
         // Second call should return cached result
         const result2 = await session.listResources();
-        expect(result2.resources).toHaveLength(1);
+        expect(result2).toHaveLength(1);
         expect(mockClient.listResources).toHaveBeenCalledTimes(1); // Still only 1 call
 
         // Should log cache hit
@@ -1193,12 +1060,12 @@ describe("MCPClientSession", () => {
 
         // First call fetches both pages
         const result1 = await session.listResources();
-        expect(result1.resources).toHaveLength(2);
+        expect(result1).toHaveLength(2);
         expect(mockClient.listResources).toHaveBeenCalledTimes(2);
 
         // Second call returns cached result with both pages
         const result2 = await session.listResources();
-        expect(result2.resources).toHaveLength(2);
+        expect(result2).toHaveLength(2);
         expect(mockClient.listResources).toHaveBeenCalledTimes(2); // No additional calls
       });
 
@@ -1292,12 +1159,12 @@ describe("MCPClientSession", () => {
 
         // First call should fetch
         const result1 = await session.listResources();
-        expect(result1.resources).toHaveLength(1);
+        expect(result1).toHaveLength(1);
         expect(mockClient.listResources).toHaveBeenCalledTimes(1);
 
         // Second call should use cache
         const result2 = await session.listResources();
-        expect(result2.resources).toHaveLength(1);
+        expect(result2).toHaveLength(1);
         expect(mockClient.listResources).toHaveBeenCalledTimes(1);
 
         // Trigger notification
@@ -1311,7 +1178,7 @@ describe("MCPClientSession", () => {
 
         // Next call should fetch fresh data
         const result3 = await session.listResources();
-        expect(result3.resources).toHaveLength(3);
+        expect(result3).toHaveLength(3);
         expect(mockClient.listResources).toHaveBeenCalledTimes(2);
       });
 
@@ -1389,20 +1256,20 @@ describe("MCPClientSession", () => {
         );
 
         const result1 = await session.listResources();
-        expect(result1.resources).toHaveLength(2);
+        expect(result1).toHaveLength(2);
 
         const result2 = await session.listResources();
-        expect(result2.resources).toHaveLength(2);
+        expect(result2).toHaveLength(2);
 
         const result3 = await session.listResources();
-        expect(result3.resources).toHaveLength(2);
+        expect(result3).toHaveLength(2);
 
         // Should only call once due to caching
         expect(mockClient.listResources).toHaveBeenCalledTimes(1);
 
         // Results should be consistent
-        expect(result1.resources[0]?.uri).toBe(result2.resources[0]?.uri);
-        expect(result2.resources[0]?.uri).toBe(result3.resources[0]?.uri);
+        expect(result1[0]?.uri).toBe(result2[0]?.uri);
+        expect(result2[0]?.uri).toBe(result3[0]?.uri);
       });
 
       it("should work correctly with different server names", async () => {
@@ -1497,39 +1364,13 @@ describe("MCPClientSession", () => {
 
         const result = await session.listPrompts();
 
-        expect(result.prompts).toHaveLength(2);
-        expect(result.prompts[0]?.name).toBe("code-review");
-        expect(result.prompts[1]?.name).toBe("summarize");
+        expect(result).toHaveLength(2);
+        expect(result[0]?.name).toBe("code-review");
+        expect(result[1]?.name).toBe("summarize");
         expect(mockClient.listPrompts).toHaveBeenCalledTimes(1);
         expect(mockClient.listPrompts).toHaveBeenCalledWith(undefined);
         expect(logger.info).not.toHaveBeenCalled();
         expect(logger.error).not.toHaveBeenCalled();
-      });
-
-      it("should preserve prompt metadata", async () => {
-        const mockResponse = {
-          prompts: [
-            {
-              name: "test-prompt",
-              description: "Test prompt",
-            },
-          ],
-          _meta: { version: "3.0", generator: "test" },
-        };
-
-        vi.mocked(mockClient.listPrompts).mockResolvedValue(mockResponse);
-
-        const session = new MCPClientSession(
-          mockClient,
-          serverName,
-          undefined,
-          logger,
-        );
-
-        const result = await session.listPrompts();
-
-        expect(result._meta).toEqual({ version: "3.0", generator: "test" });
-        expect(result.prompts).toHaveLength(1);
       });
 
       it("should handle empty prompt list", async () => {
@@ -1548,7 +1389,7 @@ describe("MCPClientSession", () => {
 
         const result = await session.listPrompts();
 
-        expect(result.prompts).toEqual([]);
+        expect(result).toEqual([]);
         expect(mockClient.listPrompts).toHaveBeenCalledTimes(1);
         expect(logger.error).not.toHaveBeenCalled();
       });
@@ -1586,9 +1427,9 @@ describe("MCPClientSession", () => {
 
         const result = await session.listPrompts();
 
-        expect(result.prompts[0]?.arguments).toHaveLength(2);
-        expect(result.prompts[0]?.arguments?.[0]?.required).toBe(true);
-        expect(result.prompts[0]?.arguments?.[1]?.required).toBe(false);
+        expect(result[0]?.arguments).toHaveLength(2);
+        expect(result[0]?.arguments?.[0]?.required).toBe(true);
+        expect(result[0]?.arguments?.[1]?.required).toBe(false);
       });
     });
 
@@ -1616,8 +1457,7 @@ describe("MCPClientSession", () => {
 
         expect(mockClient.listPrompts).toHaveBeenCalledTimes(1);
         expect(mockClient.listPrompts).toHaveBeenCalledWith(undefined);
-        expect(result.prompts).toHaveLength(1);
-        expect(result.nextCursor).toBeUndefined();
+        expect(result).toHaveLength(1);
       });
 
       it("should fetch all pages when pagination present", async () => {
@@ -1688,16 +1528,10 @@ describe("MCPClientSession", () => {
         });
 
         // Verify all prompts are combined
-        expect(result.prompts).toHaveLength(6);
-        expect(result.prompts[0]?.name).toBe("prompt1");
-        expect(result.prompts[2]?.name).toBe("prompt3");
-        expect(result.prompts[5]?.name).toBe("prompt6");
-
-        // Verify no nextCursor in final result
-        expect(result.nextCursor).toBeUndefined();
-
-        // Verify metadata from last response is preserved
-        expect(result._meta).toEqual({ lastPage: true });
+        expect(result).toHaveLength(6);
+        expect(result[0]?.name).toBe("prompt1");
+        expect(result[2]?.name).toBe("prompt3");
+        expect(result[5]?.name).toBe("prompt6");
       });
 
       it("should handle many pages of prompts", async () => {
@@ -1727,9 +1561,9 @@ describe("MCPClientSession", () => {
         const result = await session.listPrompts();
 
         expect(mockClient.listPrompts).toHaveBeenCalledTimes(10);
-        expect(result.prompts).toHaveLength(10);
-        expect(result.prompts[0]?.name).toBe("prompt-1");
-        expect(result.prompts[9]?.name).toBe("prompt-10");
+        expect(result).toHaveLength(10);
+        expect(result[0]?.name).toBe("prompt-1");
+        expect(result[9]?.name).toBe("prompt-10");
       });
     });
 
@@ -1755,12 +1589,12 @@ describe("MCPClientSession", () => {
 
         // First call should fetch from client
         const result1 = await session.listPrompts();
-        expect(result1.prompts).toHaveLength(1);
+        expect(result1).toHaveLength(1);
         expect(mockClient.listPrompts).toHaveBeenCalledTimes(1);
 
         // Second call should return cached result
         const result2 = await session.listPrompts();
-        expect(result2.prompts).toHaveLength(1);
+        expect(result2).toHaveLength(1);
         expect(mockClient.listPrompts).toHaveBeenCalledTimes(1); // Still only 1 call
 
         // Should log cache hit
@@ -1802,12 +1636,12 @@ describe("MCPClientSession", () => {
 
         // First call fetches both pages
         const result1 = await session.listPrompts();
-        expect(result1.prompts).toHaveLength(2);
+        expect(result1).toHaveLength(2);
         expect(mockClient.listPrompts).toHaveBeenCalledTimes(2);
 
         // Second call returns cached result with both pages
         const result2 = await session.listPrompts();
-        expect(result2.prompts).toHaveLength(2);
+        expect(result2).toHaveLength(2);
         expect(mockClient.listPrompts).toHaveBeenCalledTimes(2); // No additional calls
       });
 
@@ -1896,12 +1730,12 @@ describe("MCPClientSession", () => {
 
         // First call should fetch
         const result1 = await session.listPrompts();
-        expect(result1.prompts).toHaveLength(1);
+        expect(result1).toHaveLength(1);
         expect(mockClient.listPrompts).toHaveBeenCalledTimes(1);
 
         // Second call should use cache
         const result2 = await session.listPrompts();
-        expect(result2.prompts).toHaveLength(1);
+        expect(result2).toHaveLength(1);
         expect(mockClient.listPrompts).toHaveBeenCalledTimes(1);
 
         // Trigger notification
@@ -1915,7 +1749,7 @@ describe("MCPClientSession", () => {
 
         // Next call should fetch fresh data
         const result3 = await session.listPrompts();
-        expect(result3.prompts).toHaveLength(3);
+        expect(result3).toHaveLength(3);
         expect(mockClient.listPrompts).toHaveBeenCalledTimes(2);
       });
 
@@ -1990,20 +1824,20 @@ describe("MCPClientSession", () => {
         );
 
         const result1 = await session.listPrompts();
-        expect(result1.prompts).toHaveLength(2);
+        expect(result1).toHaveLength(2);
 
         const result2 = await session.listPrompts();
-        expect(result2.prompts).toHaveLength(2);
+        expect(result2).toHaveLength(2);
 
         const result3 = await session.listPrompts();
-        expect(result3.prompts).toHaveLength(2);
+        expect(result3).toHaveLength(2);
 
         // Should only call once due to caching
         expect(mockClient.listPrompts).toHaveBeenCalledTimes(1);
 
         // Results should be consistent
-        expect(result1.prompts[0]?.name).toBe(result2.prompts[0]?.name);
-        expect(result2.prompts[0]?.name).toBe(result3.prompts[0]?.name);
+        expect(result1[0]?.name).toBe(result2[0]?.name);
+        expect(result2[0]?.name).toBe(result3[0]?.name);
       });
 
       it("should work correctly with different server names", async () => {

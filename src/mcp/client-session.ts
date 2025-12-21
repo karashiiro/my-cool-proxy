@@ -5,9 +5,11 @@ import {
   ResourceListChangedNotificationSchema,
   PromptListChangedNotificationSchema,
   type Implementation,
-  type ListToolsResult,
   type ListResourcesResult,
   type ListPromptsResult,
+  type Resource,
+  type Prompt,
+  type Tool,
 } from "@modelcontextprotocol/sdk/types.js";
 import { createCache } from "../services/cache-service.js";
 
@@ -16,9 +18,9 @@ export class MCPClientSession {
   private allowedTools: string[] | undefined;
   private logger: ILogger;
   private serverName: string;
-  private toolCache: ICacheService<ListToolsResult>;
-  private resourceCache: ICacheService<ListResourcesResult>;
-  private promptCache: ICacheService<ListPromptsResult>;
+  private toolCache: ICacheService<Tool[]>;
+  private resourceCache: ICacheService<Resource[]>;
+  private promptCache: ICacheService<Prompt[]>;
   private onResourceListChanged?: (serverName: string) => void;
   private onPromptListChanged?: (serverName: string) => void;
 
@@ -38,9 +40,9 @@ export class MCPClientSession {
     this.onPromptListChanged = onPromptListChanged;
 
     // Initialize cache instances
-    this.toolCache = createCache<ListToolsResult>(logger);
-    this.resourceCache = createCache<ListResourcesResult>(logger);
-    this.promptCache = createCache<ListPromptsResult>(logger);
+    this.toolCache = createCache<Tool[]>(logger);
+    this.resourceCache = createCache<Resource[]>(logger);
+    this.promptCache = createCache<Prompt[]>(logger);
 
     // Register notification handler for tool list changes
     this.setupNotificationHandlers();
@@ -125,28 +127,22 @@ export class MCPClientSession {
 
     // Fetch fresh tool list from server
     const response = await this.client.listTools();
-    const allTools = response.tools;
-
-    let filteredResponse;
+    let tools = response.tools;
 
     // If no filter, return all tools
-    if (this.allowedTools === undefined) {
-      filteredResponse = response;
-    } else if (this.allowedTools.length === 0) {
-      // If empty array, return no tools
+    // If empty array, return no tools
+    if (this.allowedTools && this.allowedTools.length === 0) {
       this.logger.info(
         `Server '${this.serverName}': All tools blocked by empty allowedTools array`,
       );
-      filteredResponse = { ...response, tools: [] };
-    } else {
+      tools = [];
+    } else if (this.allowedTools) {
       // Filter to only allowed tools
       const allowedSet = new Set(this.allowedTools);
-      const filteredTools = allTools.filter((tool) =>
-        allowedSet.has(tool.name),
-      );
+      const filteredTools = tools.filter((tool) => allowedSet.has(tool.name));
 
       // Log warnings for tools in allowedTools that don't exist
-      const actualToolNames = new Set(allTools.map((t) => t.name));
+      const actualToolNames = new Set(tools.map((t) => t.name));
       for (const allowedTool of this.allowedTools) {
         if (!actualToolNames.has(allowedTool)) {
           this.logger.error(
@@ -156,19 +152,19 @@ export class MCPClientSession {
       }
 
       this.logger.info(
-        `Server '${this.serverName}': Filtered to ${filteredTools.length} of ${allTools.length} tools: ${filteredTools.map((t) => t.name).join(", ")}`,
+        `Server '${this.serverName}': Filtered to ${filteredTools.length} of ${tools.length} tools: ${filteredTools.map((t) => t.name).join(", ")}`,
       );
 
-      filteredResponse = { ...response, tools: filteredTools };
+      tools = filteredTools;
     }
 
     // Cache the filtered response
-    this.toolCache.set("tools", filteredResponse);
+    this.toolCache.set("tools", tools);
 
-    return filteredResponse;
+    return tools;
   }
 
-  async listResources() {
+  async listResources(): Promise<Resource[]> {
     // Return cached response if available
     const cacheKey = "resources"; // Single entry cache
     const cached = this.resourceCache.get(cacheKey);
@@ -180,7 +176,7 @@ export class MCPClientSession {
     }
 
     // Fetch all pages of resources
-    const allResources: ListResourcesResult["resources"] = [];
+    const resources: Resource[] = [];
     let nextCursor: string | undefined = undefined;
     let response: ListResourcesResult;
 
@@ -191,23 +187,16 @@ export class MCPClientSession {
       );
 
       // Accumulate resources from this page
-      allResources.push(...response.resources);
+      resources.push(...response.resources);
 
       // Update cursor for next iteration
       nextCursor = response.nextCursor;
     } while (nextCursor !== undefined);
 
-    // Create final response with all accumulated resources
-    const finalResponse: ListResourcesResult = {
-      ...response, // Preserves _meta from last response
-      resources: allResources,
-      nextCursor: undefined, // No cursor since we fetched everything
-    };
-
     // Cache the complete response
-    this.resourceCache.set("resources", finalResponse);
+    this.resourceCache.set("resources", resources);
 
-    return finalResponse;
+    return resources;
   }
 
   async listPrompts() {
@@ -222,7 +211,7 @@ export class MCPClientSession {
     }
 
     // Fetch all pages of prompts
-    const allPrompts: ListPromptsResult["prompts"] = [];
+    const prompts: Prompt[] = [];
     let nextCursor: string | undefined = undefined;
     let response: ListPromptsResult;
 
@@ -233,23 +222,16 @@ export class MCPClientSession {
       );
 
       // Accumulate prompts from this page
-      allPrompts.push(...response.prompts);
+      prompts.push(...response.prompts);
 
       // Update cursor for next iteration
       nextCursor = response.nextCursor;
     } while (nextCursor !== undefined);
 
-    // Create final response with all accumulated prompts
-    const finalResponse: ListPromptsResult = {
-      ...response, // Preserves _meta from last response
-      prompts: allPrompts,
-      nextCursor: undefined, // No cursor since we fetched everything
-    };
-
     // Cache the complete response
-    this.promptCache.set("prompts", finalResponse);
+    this.promptCache.set("prompts", prompts);
 
-    return finalResponse;
+    return prompts;
   }
 
   async readResource(params: { uri: string }) {

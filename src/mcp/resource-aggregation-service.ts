@@ -48,7 +48,7 @@ export class ResourceAggregationService {
       async ([name, client]) => {
         try {
           const result = await client.listResources();
-          return { name, resources: result.resources };
+          return { name, resources: result };
         } catch (error) {
           this.logger.error(
             `Failed to list resources from server '${name}':`,

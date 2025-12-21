@@ -103,8 +103,7 @@ The 'result' function is global - don't use 'local result = ...' as this overwri
         const sanitizedServerName = sanitizeLuaIdentifier(originalServerName);
 
         // List available tools from the MCP server
-        const toolsResponse = await client.listTools();
-        const tools = toolsResponse.tools;
+        const tools = await client.listTools();
 
         // Create a Lua table for this server
         const serverTable: Record<string, unknown> = {};

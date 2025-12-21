@@ -147,15 +147,13 @@ export class ToolDiscoveryService {
         };
       }
 
-      const toolsResponse = await client.listTools();
-      const tool = toolsResponse.tools.find(
+      const tools = await client.listTools();
+      const tool = tools.find(
         (t) => sanitizeLuaIdentifier(t.name) === luaToolName,
       );
 
       if (!tool) {
-        const availableTools = toolsResponse.tools.map((t) =>
-          sanitizeLuaIdentifier(t.name),
-        );
+        const availableTools = tools.map((t) => sanitizeLuaIdentifier(t.name));
         const toolList =
           availableTools.length > 0 ? availableTools.join(", ") : "none";
         return {
@@ -214,15 +212,13 @@ export class ToolDiscoveryService {
         };
       }
 
-      const toolsResponse = await client.listTools();
-      const tool = toolsResponse.tools.find(
+      const tools = await client.listTools();
+      const tool = tools.find(
         (t) => sanitizeLuaIdentifier(t.name) === luaToolName,
       );
 
       if (!tool) {
-        const availableTools = toolsResponse.tools.map((t) =>
-          sanitizeLuaIdentifier(t.name),
-        );
+        const availableTools = tools.map((t) => sanitizeLuaIdentifier(t.name));
         const toolList =
           availableTools.length > 0 ? availableTools.join(", ") : "none";
         return {
@@ -328,9 +324,7 @@ export class ToolDiscoveryService {
   }
 
   private async gatherToolInfo(client: MCPClientSession) {
-    const toolsResponse = await client.listTools();
-    const tools = toolsResponse.tools || [];
-
+    const tools = await client.listTools();
     return tools.map((tool) => ({
       luaName: sanitizeLuaIdentifier(tool.name),
       description: tool.description || "",
