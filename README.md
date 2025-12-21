@@ -62,7 +62,7 @@ Copy the example config:
 cp config.example.json config.json
 ```
 
-Edit `config.json` to add your MCP servers:
+Edit `config.json` to add your MCP servers (see [CONFIG.md](./CONFIG.md) for all options):
 
 ```json
 {
