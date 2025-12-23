@@ -8,6 +8,9 @@ export class ConsoleLogger implements ILogger {
     level: "debug",
     transport: {
       target: "pino-pretty",
+      options: {
+        destination: 2, // Output to stderr (2) instead of stdout (1)
+      },
     },
   });
 
