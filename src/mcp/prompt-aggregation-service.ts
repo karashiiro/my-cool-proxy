@@ -1,4 +1,4 @@
-import { injectable, inject } from "inversify";
+import { injectable } from "inversify";
 import type {
   ListPromptsResult,
   GetPromptResult,
@@ -9,7 +9,7 @@ import type {
   ILogger,
   ICacheService,
 } from "../types/interfaces.js";
-import { TYPES } from "../types/index.js";
+import { $inject } from "../container/decorators.js";
 import { namespacePrompt, parsePromptName } from "../utils/prompt-name.js";
 import { namespaceGetPromptResultResources } from "../utils/resource-uri.js";
 import type { MCPClientSession } from "./client-session.js";
@@ -20,8 +20,8 @@ export class PromptAggregationService {
   private cache: ICacheService<Prompt[]>;
 
   constructor(
-    @inject(TYPES.MCPClientManager) private clientPool: IMCPClientManager,
-    @inject(TYPES.Logger) private logger: ILogger,
+    @$inject("MCPClientManager") private clientPool: IMCPClientManager,
+    @$inject("Logger") private logger: ILogger,
   ) {
     // Create a cache instance for this service
     this.cache = createCache<Prompt[]>(logger);

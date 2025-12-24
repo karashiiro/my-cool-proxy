@@ -1,5 +1,5 @@
-import { injectable, inject } from "inversify";
-import { TYPES } from "../types/index.js";
+import { injectable } from "inversify";
+import { $inject } from "../container/decorators.js";
 import type { ICacheService, ILogger } from "../types/interfaces.js";
 
 /**
@@ -26,7 +26,7 @@ export class MemoryCacheService<T> implements ICacheService<T> {
   private cache = new Map<string, { value: T; timestamp: number }>();
   private ttl?: number;
 
-  constructor(@inject(TYPES.Logger) private logger: ILogger) {
+  constructor(@$inject("Logger") private logger: ILogger) {
     // TTL can be configured per-instance if needed
     // For now, no TTL by default (cache never expires)
     this.ttl = undefined;

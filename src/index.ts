@@ -1,6 +1,7 @@
 import "reflect-metadata";
-import type { Container } from "inversify";
+import type { TypedContainer } from "@inversifyjs/strongly-typed";
 import { createContainer } from "./container/inversify.config.js";
+import type { ContainerBindingMap } from "./container/binding-map.js";
 import { TYPES } from "./types/index.js";
 import type {
   ILogger,
@@ -17,7 +18,10 @@ import type { MCPGatewayServer } from "./mcp/gateway-server.js";
 // Load configuration from file and merge with environment variables
 const config = mergeEnvConfig(loadConfig());
 
-async function startHttpMode(container: Container, config: ServerConfig) {
+async function startHttpMode(
+  container: TypedContainer<ContainerBindingMap>,
+  config: ServerConfig,
+) {
   const logger = container.get<ILogger>(TYPES.Logger);
 
   // Ensure port and host are defined (validation should guarantee this)
@@ -55,7 +59,10 @@ async function startHttpMode(container: Container, config: ServerConfig) {
   });
 }
 
-async function startStdioMode(container: Container, config: ServerConfig) {
+async function startStdioMode(
+  container: TypedContainer<ContainerBindingMap>,
+  config: ServerConfig,
+) {
   const logger = container.get<ILogger>(TYPES.Logger);
   const gatewayServer = container.get<MCPGatewayServer>(TYPES.MCPGatewayServer);
   const clientManager = container.get<IMCPClientManager>(

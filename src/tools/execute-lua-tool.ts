@@ -1,4 +1,4 @@
-import { injectable, inject } from "inversify";
+import { injectable } from "inversify";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { CallToolResultSchema } from "@modelcontextprotocol/sdk/types.js";
 import * as z from "zod";
@@ -7,7 +7,7 @@ import type {
   IMCPClientManager,
   ILogger,
 } from "../types/interfaces.js";
-import { TYPES } from "../types/index.js";
+import { $inject } from "../container/decorators.js";
 import type { ITool, ToolExecutionContext } from "./base-tool.js";
 
 /**
@@ -54,9 +54,9 @@ OPTIMIZATION:
   };
 
   constructor(
-    @inject(TYPES.LuaRuntime) private luaRuntime: ILuaRuntime,
-    @inject(TYPES.MCPClientManager) private clientPool: IMCPClientManager,
-    @inject(TYPES.Logger) private logger: ILogger,
+    @$inject("LuaRuntime") private luaRuntime: ILuaRuntime,
+    @$inject("MCPClientManager") private clientPool: IMCPClientManager,
+    @$inject("Logger") private logger: ILogger,
   ) {}
 
   async execute(

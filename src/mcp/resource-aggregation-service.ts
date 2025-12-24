@@ -1,4 +1,4 @@
-import { injectable, inject } from "inversify";
+import { injectable } from "inversify";
 import type {
   ListResourcesResult,
   ReadResourceResult,
@@ -9,7 +9,7 @@ import type {
   ILogger,
   ICacheService,
 } from "../types/interfaces.js";
-import { TYPES } from "../types/index.js";
+import { $inject } from "../container/decorators.js";
 import { namespaceResource, parseResourceUri } from "../utils/resource-uri.js";
 import type { MCPClientSession } from "./client-session.js";
 import { createCache } from "../services/cache-service.js";
@@ -19,8 +19,8 @@ export class ResourceAggregationService {
   private cache: ICacheService<Resource[]>;
 
   constructor(
-    @inject(TYPES.MCPClientManager) private clientPool: IMCPClientManager,
-    @inject(TYPES.Logger) private logger: ILogger,
+    @$inject("MCPClientManager") private clientPool: IMCPClientManager,
+    @$inject("Logger") private logger: ILogger,
   ) {
     // Create a cache instance for this service
     this.cache = createCache<Resource[]>(logger);

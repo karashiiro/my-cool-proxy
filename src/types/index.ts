@@ -1,19 +1,23 @@
+/**
+ * Dependency injection identifiers for the container.
+ * Using string literals instead of symbols for better compatibility with strongly-typed containers.
+ */
 export const TYPES = {
-  LuaRuntime: Symbol.for("LuaRuntime"),
-  MCPClientManager: Symbol.for("MCPClientManager"),
-  TransportManager: Symbol.for("TransportManager"),
-  SessionStore: Symbol.for("SessionStore"),
-  AuthStrategy: Symbol.for("AuthStrategy"),
-  ServerConfig: Symbol.for("ServerConfig"),
-  Logger: Symbol.for("Logger"),
-  ToolDiscoveryService: Symbol.for("ToolDiscoveryService"),
-  ResourceAggregationService: Symbol.for("ResourceAggregationService"),
-  PromptAggregationService: Symbol.for("PromptAggregationService"),
-  MCPFormatterService: Symbol.for("MCPFormatterService"),
-  MCPGatewayServer: Symbol.for("MCPGatewayServer"),
-  MCPSessionController: Symbol.for("MCPSessionController"),
-  ShutdownHandler: Symbol.for("ShutdownHandler"),
-  CacheService: Symbol.for("CacheService"),
-  Tool: Symbol.for("Tool"),
-  ToolRegistry: Symbol.for("ToolRegistry"),
-};
+  LuaRuntime: "LuaRuntime",
+  MCPClientManager: "MCPClientManager",
+  TransportManager: "TransportManager",
+  SessionStore: "SessionStore",
+  AuthStrategy: "AuthStrategy",
+  ServerConfig: "ServerConfig",
+  Logger: "Logger",
+  ToolDiscoveryService: "ToolDiscoveryService",
+  ResourceAggregationService: "ResourceAggregationService",
+  PromptAggregationService: "PromptAggregationService",
+  MCPFormatterService: "MCPFormatterService",
+  MCPGatewayServer: "MCPGatewayServer",
+  MCPSessionController: "MCPSessionController",
+  ShutdownHandler: "ShutdownHandler",
+  CacheService: "CacheService",
+  Tool: "Tool",
+  ToolRegistry: "ToolRegistry",
+} as const;

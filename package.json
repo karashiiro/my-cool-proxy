@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "format": "prettier --write .",
-    "lint": "eslint . --ext .ts,.js",
+    "lint": "eslint . --ext .ts,.js && prettier --check .",
     "typecheck": "tsgo --noEmit",
     "build": "tsgo -p tsconfig.build.json",
     "dev": "tsx src/index.ts",
@@ -35,6 +35,7 @@
     "vitest": "^4.0.16"
   },
   "dependencies": {
+    "@inversifyjs/strongly-typed": "^2.2.0",
     "@modelcontextprotocol/sdk": "^1.25.1",
     "express": "^5.2.1",
     "inversify": "^7.10.7",

@@ -1,6 +1,8 @@
 import "reflect-metadata";
 import { Container } from "inversify";
+import type { TypedContainer } from "@inversifyjs/strongly-typed";
 import { TYPES } from "../types/index.js";
+import type { ContainerBindingMap } from "./binding-map.js";
 import type {
   ILuaRuntime,
   IMCPClientManager,
@@ -30,8 +32,10 @@ import { InspectToolResponseTool } from "../tools/inspect-tool-response-tool.js"
 import type { IToolRegistry } from "../tools/tool-registry.js";
 import { ToolRegistry } from "../tools/tool-registry.js";
 
-export function createContainer(config: ServerConfig): Container {
-  const container = new Container();
+export function createContainer(
+  config: ServerConfig,
+): TypedContainer<ContainerBindingMap> {
+  const container = new Container() as TypedContainer<ContainerBindingMap>;
 
   // Bind configuration
   container.bind<ServerConfig>(TYPES.ServerConfig).toConstantValue(config);

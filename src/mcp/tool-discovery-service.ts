@@ -1,4 +1,4 @@
-import { injectable, inject } from "inversify";
+import { injectable } from "inversify";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type {
   IMCPClientManager,
@@ -6,7 +6,7 @@ import type {
   ServerListItem,
   ILuaRuntime,
 } from "../types/interfaces.js";
-import { TYPES } from "../types/index.js";
+import { $inject } from "../container/decorators.js";
 import { sanitizeLuaIdentifier } from "../utils/lua-identifier.js";
 import type { MCPClientSession } from "./client-session.js";
 import { MCPFormatterService } from "./mcp-formatter-service.js";
@@ -15,10 +15,10 @@ import { inspect } from "node:util";
 @injectable()
 export class ToolDiscoveryService {
   constructor(
-    @inject(TYPES.MCPClientManager) private clientPool: IMCPClientManager,
-    @inject(TYPES.Logger) private logger: ILogger,
-    @inject(TYPES.MCPFormatterService) private formatter: MCPFormatterService,
-    @inject(TYPES.LuaRuntime) private luaRuntime: ILuaRuntime,
+    @$inject("MCPClientManager") private clientPool: IMCPClientManager,
+    @$inject("Logger") private logger: ILogger,
+    @$inject("MCPFormatterService") private formatter: MCPFormatterService,
+    @$inject("LuaRuntime") private luaRuntime: ILuaRuntime,
   ) {}
 
   /**

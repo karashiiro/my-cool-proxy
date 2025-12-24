@@ -1,7 +1,7 @@
-import { injectable, inject } from "inversify";
+import { injectable } from "inversify";
 import type { Request, Response } from "express";
 import type { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { TYPES } from "../types/index.js";
+import { $inject } from "../container/decorators.js";
 import type {
   IMCPClientManager,
   ITransportManager,
@@ -29,11 +29,11 @@ import type { MCPGatewayServer } from "../mcp/gateway-server.js";
 @injectable()
 export class MCPSessionController implements IMCPSessionController {
   constructor(
-    @inject(TYPES.MCPClientManager) private clientPool: IMCPClientManager,
-    @inject(TYPES.TransportManager) private transportManager: ITransportManager,
-    @inject(TYPES.MCPGatewayServer) private gatewayServer: MCPGatewayServer,
-    @inject(TYPES.ServerConfig) private config: ServerConfig,
-    @inject(TYPES.Logger) private logger: ILogger,
+    @$inject("MCPClientManager") private clientPool: IMCPClientManager,
+    @$inject("TransportManager") private transportManager: ITransportManager,
+    @$inject("MCPGatewayServer") private gatewayServer: MCPGatewayServer,
+    @$inject("ServerConfig") private config: ServerConfig,
+    @$inject("Logger") private logger: ILogger,
   ) {}
 
   /**

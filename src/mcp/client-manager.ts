@@ -1,9 +1,9 @@
-import { injectable, inject } from "inversify";
+import { injectable } from "inversify";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import type { ILogger, IMCPClientManager } from "../types/interfaces.js";
-import { TYPES } from "../types/index.js";
+import { $inject } from "../container/decorators.js";
 import { MCPClientSession } from "./client-session.js";
 
 @injectable()
@@ -15,7 +15,7 @@ export class MCPClientManager implements IMCPClientManager {
   ) => void;
   private onPromptListChanged?: (serverName: string, sessionId: string) => void;
 
-  constructor(@inject(TYPES.Logger) private logger: ILogger) {}
+  constructor(@$inject("Logger") private logger: ILogger) {}
 
   setResourceListChangedHandler(
     handler: (serverName: string, sessionId: string) => void,

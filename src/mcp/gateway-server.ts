@@ -1,4 +1,4 @@
-import { injectable, inject } from "inversify";
+import { injectable } from "inversify";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import {
   ListResourcesRequestSchema,
@@ -7,7 +7,7 @@ import {
   GetPromptRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import type { IMCPClientManager, ILogger } from "../types/interfaces.js";
-import { TYPES } from "../types/index.js";
+import { $inject } from "../container/decorators.js";
 import { ResourceAggregationService } from "./resource-aggregation-service.js";
 import { PromptAggregationService } from "./prompt-aggregation-service.js";
 import type { IToolRegistry } from "../tools/tool-registry.js";
@@ -48,12 +48,12 @@ export class MCPGatewayServer {
   private serverId = "my-cool-proxy";
 
   constructor(
-    @inject(TYPES.ToolRegistry) private toolRegistry: IToolRegistry,
-    @inject(TYPES.MCPClientManager) private clientPool: IMCPClientManager,
-    @inject(TYPES.Logger) private logger: ILogger,
-    @inject(TYPES.ResourceAggregationService)
+    @$inject("ToolRegistry") private toolRegistry: IToolRegistry,
+    @$inject("MCPClientManager") private clientPool: IMCPClientManager,
+    @$inject("Logger") private logger: ILogger,
+    @$inject("ResourceAggregationService")
     private resourceAggregation: ResourceAggregationService,
-    @inject(TYPES.PromptAggregationService)
+    @$inject("PromptAggregationService")
     private promptAggregation: PromptAggregationService,
   ) {
     this.server = new McpServer(

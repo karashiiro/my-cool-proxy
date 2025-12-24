@@ -1,7 +1,7 @@
-import { injectable, inject } from "inversify";
+import { injectable } from "inversify";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import * as z from "zod";
-import { TYPES } from "../types/index.js";
+import { $inject } from "../container/decorators.js";
 import type { ITool, ToolExecutionContext } from "./base-tool.js";
 import { ToolDiscoveryService } from "../mcp/tool-discovery-service.js";
 
@@ -26,7 +26,7 @@ export class ListServerToolsTool implements ITool {
   };
 
   constructor(
-    @inject(TYPES.ToolDiscoveryService)
+    @$inject("ToolDiscoveryService")
     private toolDiscovery: ToolDiscoveryService,
   ) {}
 

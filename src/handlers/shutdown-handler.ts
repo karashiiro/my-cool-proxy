@@ -1,5 +1,5 @@
-import { injectable, inject } from "inversify";
-import { TYPES } from "../types/index.js";
+import { injectable } from "inversify";
+import { $inject } from "../container/decorators.js";
 import type {
   ITransportManager,
   IMCPClientManager,
@@ -28,9 +28,9 @@ import type {
 @injectable()
 export class ShutdownHandler implements IShutdownHandler {
   constructor(
-    @inject(TYPES.TransportManager) private transportManager: ITransportManager,
-    @inject(TYPES.MCPClientManager) private clientPool: IMCPClientManager,
-    @inject(TYPES.Logger) private logger: ILogger,
+    @$inject("TransportManager") private transportManager: ITransportManager,
+    @$inject("MCPClientManager") private clientPool: IMCPClientManager,
+    @$inject("Logger") private logger: ILogger,
   ) {}
 
   /**
