@@ -11,10 +11,12 @@ import type { ContainerBindingMap } from "./binding-map.js";
  *
  * @example
  * ```typescript
+ * import { TYPES } from "../types/index.js";
+ *
  * @injectable()
  * class MyService {
  *   constructor(
- *     @$inject('Logger') private logger: ILogger
+ *     @$inject(TYPES.Logger) private logger: ILogger
  *   ) {}
  * }
  * ```
@@ -27,10 +29,12 @@ export const $inject = inject as TypedInject<ContainerBindingMap>;
  *
  * @example
  * ```typescript
+ * import { TYPES } from "../types/index.js";
+ *
  * @injectable()
  * class MyService {
  *   constructor(
- *     @$multiInject('Tool') private tools: ITool[]
+ *     @$multiInject(TYPES.Tool) private tools: ITool[]
  *   ) {}
  * }
  * ```

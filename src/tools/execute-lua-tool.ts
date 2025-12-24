@@ -8,6 +8,7 @@ import type {
   ILogger,
 } from "../types/interfaces.js";
 import { $inject } from "../container/decorators.js";
+import { TYPES } from "../types/index.js";
 import type { ITool, ToolExecutionContext } from "./base-tool.js";
 
 /**
@@ -54,9 +55,9 @@ OPTIMIZATION:
   };
 
   constructor(
-    @$inject("LuaRuntime") private luaRuntime: ILuaRuntime,
-    @$inject("MCPClientManager") private clientPool: IMCPClientManager,
-    @$inject("Logger") private logger: ILogger,
+    @$inject(TYPES.LuaRuntime) private luaRuntime: ILuaRuntime,
+    @$inject(TYPES.MCPClientManager) private clientPool: IMCPClientManager,
+    @$inject(TYPES.Logger) private logger: ILogger,
   ) {}
 
   async execute(

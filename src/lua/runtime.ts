@@ -2,6 +2,7 @@ import { injectable } from "inversify";
 import { LuaFactory, LuaEngine } from "wasmoon";
 import type { ILuaRuntime, ILogger } from "../types/interfaces.js";
 import { $inject } from "../container/decorators.js";
+import { TYPES } from "../types/index.js";
 import { sanitizeLuaIdentifier } from "../utils/lua-identifier.js";
 import {
   takeResult,
@@ -19,7 +20,7 @@ import { inspect } from "node:util";
 export class WasmoonRuntime implements ILuaRuntime {
   private factory: LuaFactory;
 
-  constructor(@$inject("Logger") private logger: ILogger) {
+  constructor(@$inject(TYPES.Logger) private logger: ILogger) {
     this.factory = new LuaFactory();
   }
 

@@ -3,6 +3,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { randomUUID } from "crypto";
 import type { ILogger, ITransportManager } from "../types/interfaces.js";
 import { $inject } from "../container/decorators.js";
+import { TYPES } from "../types/index.js";
 
 @injectable()
 export class TransportManager implements ITransportManager {
@@ -13,7 +14,7 @@ export class TransportManager implements ITransportManager {
     string
   >();
 
-  constructor(@$inject("Logger") private logger: ILogger) {}
+  constructor(@$inject(TYPES.Logger) private logger: ILogger) {}
 
   getOrCreate(sessionId: string): StreamableHTTPServerTransport {
     if (this.transports.has(sessionId)) {
