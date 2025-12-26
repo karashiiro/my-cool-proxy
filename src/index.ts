@@ -10,7 +10,9 @@ import type {
   IShutdownHandler,
   ServerConfig,
 } from "./types/interfaces.js";
-import { createMcpExpressApp } from "@modelcontextprotocol/sdk/server/express.js";
+import { serve } from "@hono/node-server";
+import { Hono } from "hono";
+import { cors } from "hono/cors";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { loadConfig, mergeEnvConfig } from "./utils/config-loader.js";
 import type { MCPGatewayServer } from "./mcp/gateway-server.js";
@@ -39,18 +41,38 @@ async function startHttpMode(
     TYPES.ShutdownHandler,
   );
 
-  // Setup Express app
-  const app = createMcpExpressApp();
+  // Setup Hono app
+  const app = new Hono();
+
+  // Enable CORS for all origins (matching MCP SDK example)
+  app.use(
+    "*",
+    cors({
+      origin: "*",
+      allowMethods: ["GET", "POST", "DELETE", "OPTIONS"],
+      allowHeaders: [
+        "Content-Type",
+        "mcp-session-id",
+        "Last-Event-ID",
+        "mcp-protocol-version",
+      ],
+      exposeHeaders: ["mcp-session-id", "mcp-protocol-version"],
+    }),
+  );
 
   // Handle all HTTP methods (POST for messages, GET for SSE, DELETE for cleanup)
-  app.all("/mcp", async (req, res) => {
-    await sessionController.handleRequest(req, res);
+  app.all("/mcp", async (c) => {
+    return await sessionController.handleRequest(c.req.raw);
   });
 
-  app.listen(config.port, () => {
-    logger.info(
-      `MCP Lua Gateway listening on http://${config.host}:${config.port}`,
-    );
+  // Start the server
+  logger.info(
+    `MCP Lua Gateway listening on http://${config.host}:${config.port}`,
+  );
+
+  serve({
+    fetch: app.fetch,
+    port: config.port,
   });
 
   // Graceful shutdown

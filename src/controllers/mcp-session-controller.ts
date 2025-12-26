@@ -1,6 +1,5 @@
 import { injectable } from "inversify";
-import type { Request, Response } from "express";
-import type { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import type { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { $inject } from "../container/decorators.js";
 import { TYPES } from "../types/index.js";
 import type {
@@ -47,9 +46,10 @@ export class MCPSessionController implements IMCPSessionController {
    * 3. Initializes MCP clients for the session
    * 4. Connects gateway server if this is a new transport
    * 5. Delegates request handling to the transport
+   * 6. Returns the Web Standard Response from the transport
    */
-  async handleRequest(req: Request, res: Response): Promise<void> {
-    const sessionId = req.headers["mcp-session-id"] as string | undefined;
+  async handleRequest(req: Request): Promise<Response> {
+    const sessionId = req.headers.get("mcp-session-id") ?? undefined;
 
     // Get or create transport for this request
     const transport = this.transportManager.getOrCreateForRequest(sessionId);
@@ -66,8 +66,8 @@ export class MCPSessionController implements IMCPSessionController {
       await this.connectGatewayServer(transport, clientSession);
     }
 
-    // Handle the request through the transport
-    await transport.handleRequest(req, res, req.body);
+    // Handle the request through the transport and return the response
+    return await transport.handleRequest(req);
   }
 
   /**
@@ -113,7 +113,7 @@ export class MCPSessionController implements IMCPSessionController {
    * enabling the transport to handle incoming requests through the gateway.
    */
   private async connectGatewayServer(
-    transport: StreamableHTTPServerTransport,
+    transport: WebStandardStreamableHTTPServerTransport,
     sessionId: string,
   ): Promise<void> {
     this.logger.info(

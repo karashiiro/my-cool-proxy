@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { TransportManager } from "./transport-manager.js";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import type { ILogger } from "../types/interfaces.js";
 
 // Mock the SDK module
-vi.mock("@modelcontextprotocol/sdk/server/streamableHttp.js");
+vi.mock("@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js");
 
 // Mock logger factory
 const createMockLogger = (): ILogger => ({
@@ -43,14 +43,16 @@ describe("TransportManager", () => {
       onclose: undefined,
     };
 
-    // Mock StreamableHTTPServerTransport constructor
-    vi.mocked(StreamableHTTPServerTransport).mockImplementation(function (
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      opts?: any,
-    ) {
-      capturedOptions = opts as TransportOptions;
-      return mockTransport as unknown as StreamableHTTPServerTransport;
-    });
+    // Mock WebStandardStreamableHTTPServerTransport constructor
+    vi.mocked(WebStandardStreamableHTTPServerTransport).mockImplementation(
+      function (
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        opts?: any,
+      ) {
+        capturedOptions = opts as TransportOptions;
+        return mockTransport as unknown as WebStandardStreamableHTTPServerTransport;
+      },
+    );
   });
 
   afterEach(() => {
@@ -71,7 +73,7 @@ describe("TransportManager", () => {
 
       const transport = transportManager.getOrCreate(sessionId);
 
-      expect(StreamableHTTPServerTransport).toHaveBeenCalled();
+      expect(WebStandardStreamableHTTPServerTransport).toHaveBeenCalled();
       expect(transport).toBe(mockTransport);
       expect(logger.info).toHaveBeenCalledWith(
         `Creating new transport for session ${sessionId}`,
@@ -85,7 +87,7 @@ describe("TransportManager", () => {
       const transport2 = transportManager.getOrCreate(sessionId);
 
       expect(transport1).toBe(transport2);
-      expect(StreamableHTTPServerTransport).toHaveBeenCalledTimes(1);
+      expect(WebStandardStreamableHTTPServerTransport).toHaveBeenCalledTimes(1);
       expect(logger.debug).toHaveBeenCalledWith(
         `Reusing existing transport for session ${sessionId}`,
       );
@@ -309,7 +311,7 @@ describe("TransportManager", () => {
       const transport2 = transportManager.getOrCreateForRequest(sessionId);
 
       expect(transport1).toBe(transport2);
-      expect(StreamableHTTPServerTransport).not.toHaveBeenCalled();
+      expect(WebStandardStreamableHTTPServerTransport).not.toHaveBeenCalled();
       expect(logger.debug).toHaveBeenCalledWith(
         `Reusing transport for session ${sessionId}`,
       );
@@ -321,7 +323,7 @@ describe("TransportManager", () => {
       const transport = transportManager.getOrCreateForRequest(sessionId);
 
       expect(transport).toBeDefined();
-      expect(StreamableHTTPServerTransport).toHaveBeenCalled();
+      expect(WebStandardStreamableHTTPServerTransport).toHaveBeenCalled();
       expect(logger.info).toHaveBeenCalledWith(
         `Creating new transport for new connection`,
       );
@@ -331,7 +333,7 @@ describe("TransportManager", () => {
       const transport = transportManager.getOrCreateForRequest();
 
       expect(transport).toBeDefined();
-      expect(StreamableHTTPServerTransport).toHaveBeenCalled();
+      expect(WebStandardStreamableHTTPServerTransport).toHaveBeenCalled();
       expect(logger.info).toHaveBeenCalledWith(
         `Creating new transport for new connection`,
       );
@@ -342,7 +344,7 @@ describe("TransportManager", () => {
       const transport2 = transportManager.getOrCreateForRequest();
 
       // Both should be created (different transports)
-      expect(StreamableHTTPServerTransport).toHaveBeenCalledTimes(2);
+      expect(WebStandardStreamableHTTPServerTransport).toHaveBeenCalledTimes(2);
       expect(transport1).toBe(mockTransport); // Both will be the same mock, but created separately
       expect(transport2).toBe(mockTransport);
     });
@@ -362,17 +364,18 @@ describe("TransportManager", () => {
       const transport1 = transportManager.getOrCreate(sessionId);
 
       // Count how many times constructor was called
-      const initialCallCount = vi.mocked(StreamableHTTPServerTransport).mock
-        .calls.length;
+      const initialCallCount = vi.mocked(
+        WebStandardStreamableHTTPServerTransport,
+      ).mock.calls.length;
 
       // Call getOrCreateForRequest with the same sessionId
       const transport2 = transportManager.getOrCreateForRequest(sessionId);
 
       // Should reuse the same transport, not create a new one
       expect(transport1).toBe(transport2);
-      expect(vi.mocked(StreamableHTTPServerTransport).mock.calls.length).toBe(
-        initialCallCount,
-      );
+      expect(
+        vi.mocked(WebStandardStreamableHTTPServerTransport).mock.calls.length,
+      ).toBe(initialCallCount);
       expect(logger.debug).toHaveBeenCalledWith(
         `Reusing transport for session ${sessionId}`,
       );
@@ -536,7 +539,7 @@ describe("TransportManager", () => {
 
       expect(transport1).toBe(transport2);
       expect(transport2).toBe(transport3);
-      expect(StreamableHTTPServerTransport).toHaveBeenCalledTimes(1);
+      expect(WebStandardStreamableHTTPServerTransport).toHaveBeenCalledTimes(1);
     });
 
     it("should handle multiple transports with different sessionIds", () => {
@@ -548,7 +551,7 @@ describe("TransportManager", () => {
         expect(transportManager.has(s)).toBe(true);
       });
 
-      expect(StreamableHTTPServerTransport).toHaveBeenCalledTimes(
+      expect(WebStandardStreamableHTTPServerTransport).toHaveBeenCalledTimes(
         sessions.length,
       );
     });
@@ -614,7 +617,7 @@ describe("TransportManager", () => {
       transportManager.getOrCreateForRequest();
 
       expect(transport1).toBe(transport2);
-      expect(StreamableHTTPServerTransport).toHaveBeenCalledTimes(2);
+      expect(WebStandardStreamableHTTPServerTransport).toHaveBeenCalledTimes(2);
     });
   });
 });

@@ -1,5 +1,5 @@
 import { injectable } from "inversify";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { randomUUID } from "crypto";
 import type { ILogger, ITransportManager } from "../types/interfaces.js";
 import { $inject } from "../container/decorators.js";
@@ -7,16 +7,19 @@ import { TYPES } from "../types/index.js";
 
 @injectable()
 export class TransportManager implements ITransportManager {
-  private transports = new Map<string, StreamableHTTPServerTransport>();
+  private transports = new Map<
+    string,
+    WebStandardStreamableHTTPServerTransport
+  >();
   // Track the original sessionId for each transport to clean up both entries
   private transportToSessionId = new WeakMap<
-    StreamableHTTPServerTransport,
+    WebStandardStreamableHTTPServerTransport,
     string
   >();
 
   constructor(@$inject(TYPES.Logger) private logger: ILogger) {}
 
-  getOrCreate(sessionId: string): StreamableHTTPServerTransport {
+  getOrCreate(sessionId: string): WebStandardStreamableHTTPServerTransport {
     if (this.transports.has(sessionId)) {
       this.logger.debug(`Reusing existing transport for session ${sessionId}`);
       return this.transports.get(sessionId)!;
@@ -24,7 +27,7 @@ export class TransportManager implements ITransportManager {
 
     this.logger.info(`Creating new transport for session ${sessionId}`);
 
-    const transport = new StreamableHTTPServerTransport({
+    const transport = new WebStandardStreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
       onsessioninitialized: (sid) => {
         this.logger.info(`Transport session initialized: ${sid}`);
@@ -61,7 +64,9 @@ export class TransportManager implements ITransportManager {
     return this.transports.has(sessionId);
   }
 
-  getOrCreateForRequest(sessionId?: string): StreamableHTTPServerTransport {
+  getOrCreateForRequest(
+    sessionId?: string,
+  ): WebStandardStreamableHTTPServerTransport {
     // If session ID is provided and we have an existing transport for it, reuse it
     if (sessionId && this.has(sessionId)) {
       this.logger.debug(`Reusing transport for session ${sessionId}`);

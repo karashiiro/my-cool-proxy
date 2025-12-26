@@ -1,6 +1,5 @@
-import type { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import type { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import type { MCPClientSession } from "../mcp/client-session.js";
-import type { Request, Response } from "express";
 
 export interface ILuaRuntime {
   executeScript(
@@ -37,8 +36,10 @@ export interface IMCPClientManager {
 }
 
 export interface ITransportManager {
-  getOrCreate(sessionId: string): StreamableHTTPServerTransport;
-  getOrCreateForRequest(sessionId?: string): StreamableHTTPServerTransport;
+  getOrCreate(sessionId: string): WebStandardStreamableHTTPServerTransport;
+  getOrCreateForRequest(
+    sessionId?: string,
+  ): WebStandardStreamableHTTPServerTransport;
   has(sessionId: string): boolean;
   remove(sessionId: string): void;
   closeAll(): Promise<void>;
@@ -114,7 +115,7 @@ export interface ToolInfo {
 }
 
 export interface IMCPSessionController {
-  handleRequest(req: Request, res: Response): Promise<void>;
+  handleRequest(req: Request): Promise<Response>;
 }
 
 export interface IShutdownHandler {
