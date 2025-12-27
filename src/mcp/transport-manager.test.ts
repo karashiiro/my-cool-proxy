@@ -1,17 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { TestBed } from "@suites/unit";
 import { TransportManager } from "./transport-manager.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
-import type { ILogger } from "../types/interfaces.js";
+import { TYPES } from "../types/index.js";
 
 // Mock the SDK module
 vi.mock("@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js");
-
-// Mock logger factory
-const createMockLogger = (): ILogger => ({
-  info: vi.fn(),
-  error: vi.fn(),
-  debug: vi.fn(),
-});
 
 // Type for mock transport with mutable properties
 type MockTransport = {
@@ -28,13 +22,18 @@ type TransportOptions = {
 
 describe("TransportManager", () => {
   let transportManager: TransportManager;
-  let logger: ILogger;
+  let logger: ReturnType<typeof unitRef.get>;
   let mockTransport: MockTransport;
   let capturedOptions: TransportOptions;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let unitRef: any;
 
-  beforeEach(() => {
-    logger = createMockLogger();
-    transportManager = new TransportManager(logger);
+  beforeEach(async () => {
+    const { unit, unitRef: ref } =
+      await TestBed.solitary(TransportManager).compile();
+    transportManager = unit;
+    unitRef = ref;
+    logger = unitRef.get(TYPES.Logger);
 
     // Reset mock transport
     mockTransport = {
@@ -61,9 +60,7 @@ describe("TransportManager", () => {
 
   describe("constructor", () => {
     it("should create instance with logger", () => {
-      const testLogger = createMockLogger();
-      const manager = new TransportManager(testLogger);
-      expect(manager).toBeInstanceOf(TransportManager);
+      expect(transportManager).toBeInstanceOf(TransportManager);
     });
   });
 

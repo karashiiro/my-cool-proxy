@@ -1,15 +1,16 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { TestBed } from "@suites/unit";
 import { WasmoonRuntime } from "./runtime.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import type { ILogger } from "../types/interfaces.js";
+import { TYPES } from "../types/index.js";
 import * as z from "zod";
 import { MCPClientSession } from "../mcp/client-session.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 
-// Mock logger
-const createMockLogger = (): ILogger => ({
+// Mock logger - used for test servers
+const createMockLogger = () => ({
   info: vi.fn(),
   error: vi.fn(),
   debug: vi.fn(),
@@ -84,12 +85,17 @@ async function createTestServer(
 
 describe("WasmoonRuntime", () => {
   let runtime: WasmoonRuntime;
-  let logger: ILogger;
+  let logger: ReturnType<typeof unitRef.get>;
   const cleanupFns: Array<() => Promise<void>> = [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let unitRef: any;
 
-  beforeEach(() => {
-    logger = createMockLogger();
-    runtime = new WasmoonRuntime(logger);
+  beforeEach(async () => {
+    const { unit, unitRef: ref } =
+      await TestBed.solitary(WasmoonRuntime).compile();
+    runtime = unit;
+    unitRef = ref;
+    logger = unitRef.get(TYPES.Logger);
   });
 
   afterEach(async () => {

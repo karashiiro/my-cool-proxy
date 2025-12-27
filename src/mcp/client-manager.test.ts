@@ -1,10 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { TestBed } from "@suites/unit";
 import { MCPClientManager } from "./client-manager.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { MCPClientSession } from "./client-session.js";
-import type { ILogger } from "../types/interfaces.js";
+import { TYPES } from "../types/index.js";
 
 // Mock the SDK modules
 vi.mock("@modelcontextprotocol/sdk/client/index.js");
@@ -12,23 +13,21 @@ vi.mock("@modelcontextprotocol/sdk/client/streamableHttp.js");
 vi.mock("@modelcontextprotocol/sdk/client/stdio.js");
 vi.mock("./client-session.js");
 
-// Mock logger
-const createMockLogger = (): ILogger => ({
-  info: vi.fn(),
-  error: vi.fn(),
-  debug: vi.fn(),
-});
-
 describe("MCPClientManager", () => {
   let clientManager: MCPClientManager;
-  let logger: ILogger;
+  let logger: ReturnType<typeof unitRef.get>;
   let mockSdkClient: Client;
   let mockTransport: StreamableHTTPClientTransport | StdioClientTransport;
   let mockClientSession: MCPClientSession;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let unitRef: any;
 
-  beforeEach(() => {
-    logger = createMockLogger();
-    clientManager = new MCPClientManager(logger);
+  beforeEach(async () => {
+    const { unit, unitRef: ref } =
+      await TestBed.solitary(MCPClientManager).compile();
+    clientManager = unit;
+    unitRef = ref;
+    logger = unitRef.get(TYPES.Logger);
 
     // Create mock SDK client
     mockSdkClient = {

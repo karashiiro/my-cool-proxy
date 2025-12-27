@@ -1,21 +1,21 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { TestBed } from "@suites/unit";
 import { MemoryCacheService, createCache } from "./cache-service.js";
-import type { ILogger } from "../types/interfaces.js";
-
-// Mock logger
-const createMockLogger = (): ILogger => ({
-  info: vi.fn(),
-  error: vi.fn(),
-  debug: vi.fn(),
-});
+import { TYPES } from "../types/index.js";
 
 describe("MemoryCacheService", () => {
   let cache: MemoryCacheService<string>;
-  let logger: ILogger;
+  let logger: ReturnType<typeof unitRef.get>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let unitRef: any;
 
-  beforeEach(() => {
-    logger = createMockLogger();
-    cache = new MemoryCacheService<string>(logger);
+  beforeEach(async () => {
+    const { unit, unitRef: ref } = await TestBed.solitary(
+      MemoryCacheService<string>,
+    ).compile();
+    cache = unit;
+    unitRef = ref;
+    logger = unitRef.get(TYPES.Logger);
   });
 
   describe("basic operations", () => {
