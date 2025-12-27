@@ -1,57 +1,21 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
+import { TestBed } from "@suites/unit";
 import { InspectToolResponseTool } from "./inspect-tool-response-tool.js";
-import { ToolDiscoveryService } from "../mcp/tool-discovery-service.js";
-import type {
-  ILogger,
-  IMCPClientManager,
-  ILuaRuntime,
-} from "../types/interfaces.js";
-import { MCPFormatterService } from "../mcp/mcp-formatter-service.js";
-
-// Mock logger
-const createMockLogger = (): ILogger => ({
-  info: vi.fn(),
-  error: vi.fn(),
-  debug: vi.fn(),
-});
-
-// Mock client manager
-const createMockClientManager = (): IMCPClientManager => ({
-  addHttpClient: vi.fn(),
-  addStdioClient: vi.fn(),
-  getClient: vi.fn(),
-  getClientsBySession: vi.fn(() => new Map()),
-  setResourceListChangedHandler: vi.fn(),
-  setPromptListChangedHandler: vi.fn(),
-  close: vi.fn(),
-});
-
-// Mock Lua runtime
-const createMockLuaRuntime = (): ILuaRuntime => ({
-  executeScript: vi.fn(async () => ({
-    items: [{ id: 1, name: "test" }],
-    total: 1,
-  })),
-});
+import { TYPES } from "../types/index.js";
 
 describe("InspectToolResponseTool", () => {
   let tool: InspectToolResponseTool;
-  let toolDiscovery: ToolDiscoveryService;
-  let clientManager: IMCPClientManager;
-  let logger: ILogger;
-  let luaRuntime: ILuaRuntime;
+  let toolDiscovery: ReturnType<typeof unitRef.get>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let unitRef: any;
 
-  beforeEach(() => {
-    logger = createMockLogger();
-    clientManager = createMockClientManager();
-    luaRuntime = createMockLuaRuntime();
-    toolDiscovery = new ToolDiscoveryService(
-      clientManager,
-      logger,
-      new MCPFormatterService(),
-      luaRuntime,
-    );
-    tool = new InspectToolResponseTool(toolDiscovery);
+  beforeEach(async () => {
+    const { unit, unitRef: ref } = await TestBed.solitary(
+      InspectToolResponseTool,
+    ).compile();
+    tool = unit;
+    unitRef = ref;
+    toolDiscovery = unitRef.get(TYPES.ToolDiscoveryService);
   });
 
   describe("tool metadata", () => {
@@ -76,7 +40,7 @@ describe("InspectToolResponseTool", () => {
 
   describe("execute", () => {
     it("should call toolDiscovery.inspectToolResponse with correct arguments", async () => {
-      const inspectSpy = vi.spyOn(toolDiscovery, "inspectToolResponse");
+      const inspectSpy = toolDiscovery.inspectToolResponse;
       inspectSpy.mockResolvedValue({
         content: [{ type: "text", text: "Sample response" }],
       });
@@ -98,7 +62,7 @@ describe("InspectToolResponseTool", () => {
     });
 
     it("should use 'default' session when sessionId not provided", async () => {
-      const inspectSpy = vi.spyOn(toolDiscovery, "inspectToolResponse");
+      const inspectSpy = toolDiscovery.inspectToolResponse;
       inspectSpy.mockResolvedValue({
         content: [{ type: "text", text: "Sample response" }],
       });
@@ -119,7 +83,7 @@ describe("InspectToolResponseTool", () => {
     });
 
     it("should handle undefined sampleArgs", async () => {
-      const inspectSpy = vi.spyOn(toolDiscovery, "inspectToolResponse");
+      const inspectSpy = toolDiscovery.inspectToolResponse;
       inspectSpy.mockResolvedValue({
         content: [{ type: "text", text: "Sample response" }],
       });
@@ -150,9 +114,7 @@ describe("InspectToolResponseTool", () => {
         ],
       };
 
-      vi.spyOn(toolDiscovery, "inspectToolResponse").mockResolvedValue(
-        mockResponse,
-      );
+      toolDiscovery.inspectToolResponse.mockResolvedValue(mockResponse);
 
       const args = {
         luaServerName: "github",
@@ -166,7 +128,7 @@ describe("InspectToolResponseTool", () => {
     });
 
     it("should propagate errors from toolDiscovery", async () => {
-      vi.spyOn(toolDiscovery, "inspectToolResponse").mockResolvedValue({
+      toolDiscovery.inspectToolResponse.mockResolvedValue({
         content: [{ type: "text", text: "Failed to inspect" }],
         isError: true,
       });

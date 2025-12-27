@@ -1,57 +1,20 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
+import { TestBed } from "@suites/unit";
 import { ListServersTool } from "./list-servers-tool.js";
-import { ToolDiscoveryService } from "../mcp/tool-discovery-service.js";
-import type {
-  ILogger,
-  IMCPClientManager,
-  ILuaRuntime,
-} from "../types/interfaces.js";
-import { MCPFormatterService } from "../mcp/mcp-formatter-service.js";
-
-// Mock logger
-const createMockLogger = (): ILogger => ({
-  info: vi.fn(),
-  error: vi.fn(),
-  debug: vi.fn(),
-});
-
-// Mock client manager
-const createMockClientManager = (): IMCPClientManager => ({
-  addHttpClient: vi.fn(),
-  addStdioClient: vi.fn(),
-  getClient: vi.fn(),
-  getClientsBySession: vi.fn(() => new Map()),
-  setResourceListChangedHandler: vi.fn(),
-  setPromptListChangedHandler: vi.fn(),
-  close: vi.fn(),
-});
-
-// Mock Lua runtime
-const createMockLuaRuntime = (): ILuaRuntime => ({
-  executeScript: vi.fn(async () => ({
-    items: [{ id: 1, name: "test" }],
-    total: 1,
-  })),
-});
+import { TYPES } from "../types/index.js";
 
 describe("ListServersTool", () => {
   let tool: ListServersTool;
-  let toolDiscovery: ToolDiscoveryService;
-  let clientManager: IMCPClientManager;
-  let logger: ILogger;
-  let luaRuntime: ILuaRuntime;
+  let toolDiscovery: ReturnType<typeof unitRef.get>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let unitRef: any;
 
-  beforeEach(() => {
-    logger = createMockLogger();
-    clientManager = createMockClientManager();
-    luaRuntime = createMockLuaRuntime();
-    toolDiscovery = new ToolDiscoveryService(
-      clientManager,
-      logger,
-      new MCPFormatterService(),
-      luaRuntime,
-    );
-    tool = new ListServersTool(toolDiscovery);
+  beforeEach(async () => {
+    const { unit, unitRef: ref } =
+      await TestBed.solitary(ListServersTool).compile();
+    tool = unit;
+    unitRef = ref;
+    toolDiscovery = unitRef.get(TYPES.ToolDiscoveryService);
   });
 
   describe("tool metadata", () => {
@@ -77,8 +40,7 @@ describe("ListServersTool", () => {
 
   describe("execute", () => {
     it("should call toolDiscovery.listServers with correct sessionId", async () => {
-      const listSpy = vi.spyOn(toolDiscovery, "listServers");
-      listSpy.mockResolvedValue({
+      toolDiscovery.listServers.mockResolvedValue({
         content: [
           {
             type: "text" as const,
@@ -89,29 +51,27 @@ describe("ListServersTool", () => {
 
       await tool.execute({}, { sessionId: "test-session" });
 
-      expect(listSpy).toHaveBeenCalledWith("test-session");
+      expect(toolDiscovery.listServers).toHaveBeenCalledWith("test-session");
     });
 
     it("should use 'default' session when sessionId not provided", async () => {
-      const listSpy = vi.spyOn(toolDiscovery, "listServers");
-      listSpy.mockResolvedValue({
+      toolDiscovery.listServers.mockResolvedValue({
         content: [{ type: "text" as const, text: "Servers listed" }],
       });
 
       await tool.execute({}, {});
 
-      expect(listSpy).toHaveBeenCalledWith("default");
+      expect(toolDiscovery.listServers).toHaveBeenCalledWith("default");
     });
 
     it("should use 'default' session when sessionId is undefined", async () => {
-      const listSpy = vi.spyOn(toolDiscovery, "listServers");
-      listSpy.mockResolvedValue({
+      toolDiscovery.listServers.mockResolvedValue({
         content: [{ type: "text" as const, text: "Servers listed" }],
       });
 
       await tool.execute({}, { sessionId: undefined });
 
-      expect(listSpy).toHaveBeenCalledWith("default");
+      expect(toolDiscovery.listServers).toHaveBeenCalledWith("default");
     });
 
     it("should return formatted list of servers", async () => {
@@ -124,7 +84,7 @@ describe("ListServersTool", () => {
         ],
       };
 
-      vi.spyOn(toolDiscovery, "listServers").mockResolvedValue(mockResponse);
+      toolDiscovery.listServers.mockResolvedValue(mockResponse);
 
       const result = await tool.execute({}, { sessionId: "test" });
 
@@ -132,8 +92,7 @@ describe("ListServersTool", () => {
     });
 
     it("should ignore any args passed (tool takes no parameters)", async () => {
-      const listSpy = vi.spyOn(toolDiscovery, "listServers");
-      listSpy.mockResolvedValue({
+      toolDiscovery.listServers.mockResolvedValue({
         content: [{ type: "text" as const, text: "Servers listed" }],
       });
 
@@ -144,7 +103,7 @@ describe("ListServersTool", () => {
 
       await tool.execute(args, { sessionId: "test" });
 
-      expect(listSpy).toHaveBeenCalledWith("test");
+      expect(toolDiscovery.listServers).toHaveBeenCalledWith("test");
     });
 
     it("should propagate errors from toolDiscovery", async () => {
@@ -158,7 +117,7 @@ describe("ListServersTool", () => {
         isError: true,
       };
 
-      vi.spyOn(toolDiscovery, "listServers").mockResolvedValue(errorResponse);
+      toolDiscovery.listServers.mockResolvedValue(errorResponse);
 
       const result = await tool.execute({}, { sessionId: "test" });
 
@@ -176,7 +135,7 @@ describe("ListServersTool", () => {
         ],
       };
 
-      vi.spyOn(toolDiscovery, "listServers").mockResolvedValue(emptyResponse);
+      toolDiscovery.listServers.mockResolvedValue(emptyResponse);
 
       const result = await tool.execute({}, { sessionId: "test" });
 
@@ -202,9 +161,7 @@ describe("ListServersTool", () => {
         ],
       };
 
-      vi.spyOn(toolDiscovery, "listServers").mockResolvedValue(
-        detailedResponse,
-      );
+      toolDiscovery.listServers.mockResolvedValue(detailedResponse);
 
       const result = await tool.execute({}, { sessionId: "test" });
 

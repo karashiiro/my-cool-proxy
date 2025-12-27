@@ -1,57 +1,20 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
+import { TestBed } from "@suites/unit";
 import { ToolDetailsTool } from "./tool-details-tool.js";
-import { ToolDiscoveryService } from "../mcp/tool-discovery-service.js";
-import type {
-  ILogger,
-  IMCPClientManager,
-  ILuaRuntime,
-} from "../types/interfaces.js";
-import { MCPFormatterService } from "../mcp/mcp-formatter-service.js";
-
-// Mock logger
-const createMockLogger = (): ILogger => ({
-  info: vi.fn(),
-  error: vi.fn(),
-  debug: vi.fn(),
-});
-
-// Mock client manager
-const createMockClientManager = (): IMCPClientManager => ({
-  addHttpClient: vi.fn(),
-  addStdioClient: vi.fn(),
-  getClient: vi.fn(),
-  getClientsBySession: vi.fn(() => new Map()),
-  setResourceListChangedHandler: vi.fn(),
-  setPromptListChangedHandler: vi.fn(),
-  close: vi.fn(),
-});
-
-// Mock Lua runtime
-const createMockLuaRuntime = (): ILuaRuntime => ({
-  executeScript: vi.fn(async () => ({
-    items: [{ id: 1, name: "test" }],
-    total: 1,
-  })),
-});
+import { TYPES } from "../types/index.js";
 
 describe("ToolDetailsTool", () => {
   let tool: ToolDetailsTool;
-  let toolDiscovery: ToolDiscoveryService;
-  let clientManager: IMCPClientManager;
-  let logger: ILogger;
-  let luaRuntime: ILuaRuntime;
+  let toolDiscovery: ReturnType<typeof unitRef.get>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let unitRef: any;
 
-  beforeEach(() => {
-    logger = createMockLogger();
-    clientManager = createMockClientManager();
-    luaRuntime = createMockLuaRuntime();
-    toolDiscovery = new ToolDiscoveryService(
-      clientManager,
-      logger,
-      new MCPFormatterService(),
-      luaRuntime,
-    );
-    tool = new ToolDetailsTool(toolDiscovery);
+  beforeEach(async () => {
+    const { unit, unitRef: ref } =
+      await TestBed.solitary(ToolDetailsTool).compile();
+    tool = unit;
+    unitRef = ref;
+    toolDiscovery = unitRef.get(TYPES.ToolDiscoveryService);
   });
 
   describe("tool metadata", () => {
@@ -78,7 +41,7 @@ describe("ToolDetailsTool", () => {
 
   describe("execute", () => {
     it("should call toolDiscovery.getToolDetails with correct arguments", async () => {
-      const detailsSpy = vi.spyOn(toolDiscovery, "getToolDetails");
+      const detailsSpy = toolDiscovery.getToolDetails;
       detailsSpy.mockResolvedValue({
         content: [
           {
@@ -103,7 +66,7 @@ describe("ToolDetailsTool", () => {
     });
 
     it("should use 'default' session when sessionId not provided", async () => {
-      const detailsSpy = vi.spyOn(toolDiscovery, "getToolDetails");
+      const detailsSpy = toolDiscovery.getToolDetails;
       detailsSpy.mockResolvedValue({
         content: [{ type: "text" as const, text: "Tool details" }],
       });
@@ -123,7 +86,7 @@ describe("ToolDetailsTool", () => {
     });
 
     it("should use 'default' session when sessionId is undefined", async () => {
-      const detailsSpy = vi.spyOn(toolDiscovery, "getToolDetails");
+      const detailsSpy = toolDiscovery.getToolDetails;
       detailsSpy.mockResolvedValue({
         content: [{ type: "text" as const, text: "Tool details" }],
       });
@@ -159,7 +122,7 @@ describe("ToolDetailsTool", () => {
         ],
       };
 
-      vi.spyOn(toolDiscovery, "getToolDetails").mockResolvedValue(mockResponse);
+      toolDiscovery.getToolDetails.mockResolvedValue(mockResponse);
 
       const args = {
         luaServerName: "github",
@@ -182,9 +145,7 @@ describe("ToolDetailsTool", () => {
         isError: true,
       };
 
-      vi.spyOn(toolDiscovery, "getToolDetails").mockResolvedValue(
-        errorResponse,
-      );
+      toolDiscovery.getToolDetails.mockResolvedValue(errorResponse);
 
       const args = {
         luaServerName: "invalid_server",
@@ -211,9 +172,7 @@ describe("ToolDetailsTool", () => {
         isError: true,
       };
 
-      vi.spyOn(toolDiscovery, "getToolDetails").mockResolvedValue(
-        errorResponse,
-      );
+      toolDiscovery.getToolDetails.mockResolvedValue(errorResponse);
 
       const args = {
         luaServerName: "github",
@@ -241,9 +200,7 @@ describe("ToolDetailsTool", () => {
         isError: true,
       };
 
-      vi.spyOn(toolDiscovery, "getToolDetails").mockResolvedValue(
-        errorResponse,
-      );
+      toolDiscovery.getToolDetails.mockResolvedValue(errorResponse);
 
       const args = {
         luaServerName: "github",
@@ -275,9 +232,7 @@ describe("ToolDetailsTool", () => {
         ],
       };
 
-      vi.spyOn(toolDiscovery, "getToolDetails").mockResolvedValue(
-        complexSchemaResponse,
-      );
+      toolDiscovery.getToolDetails.mockResolvedValue(complexSchemaResponse);
 
       const args = {
         luaServerName: "api",
@@ -290,7 +245,7 @@ describe("ToolDetailsTool", () => {
     });
 
     it("should type-cast both parameters as strings", async () => {
-      const detailsSpy = vi.spyOn(toolDiscovery, "getToolDetails");
+      const detailsSpy = toolDiscovery.getToolDetails;
       detailsSpy.mockResolvedValue({
         content: [{ type: "text" as const, text: "Tool details" }],
       });
