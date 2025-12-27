@@ -1,2 +1,3 @@
 onlyBuiltDependencies:
+  - "@suites/doubles.vitest"
   - esbuild

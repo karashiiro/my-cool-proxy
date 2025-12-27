@@ -41,6 +41,15 @@ importers:
       "@eslint/js":
         specifier: ^9.39.2
         version: 9.39.2
+      "@suites/di.inversify":
+        specifier: 4.0.0-alpha.0
+        version: 4.0.0-alpha.0(inversify@7.10.7(reflect-metadata@0.2.2))(reflect-metadata@0.2.2)
+      "@suites/doubles.vitest":
+        specifier: ^3.0.1
+        version: 3.0.1(@vitest/spy@4.0.16)(vitest@4.0.16(@types/node@25.0.3)(jiti@2.6.1)(tsx@4.21.0))
+      "@suites/unit":
+        specifier: ^3.0.1
+        version: 3.0.1
       "@types/node":
         specifier: ^25.0.3
         version: 25.0.3
@@ -715,6 +724,74 @@ packages:
       {
         integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==,
       }
+
+  "@suites/core.unit@3.0.1":
+    resolution:
+      {
+        integrity: sha512-X5xNg5EK1zAKXo4WS1fyBcViyvWvUWCEaA1fv/3ow5mD9AkKnIQajqm9pLAkUl/BM73baLQv9biLnmEHje1ghA==,
+      }
+    engines: { node: ^16.10.0 || ^18.12.0 || >=20.0.0 }
+
+  "@suites/di.inversify@4.0.0-alpha.0":
+    resolution:
+      {
+        integrity: sha512-kbruSpwdeg+e4VG4HExR4wKCcqhN4TfLgEN5oxKbt8nhzey/w88EfPodjFKK3qe5VkdKJ7JrSmUtNZCz3+FldQ==,
+      }
+    engines: { node: ">= 20" }
+    peerDependencies:
+      inversify: ">= 7.0"
+      reflect-metadata: ~0.2.2
+
+  "@suites/doubles.vitest@3.0.1":
+    resolution:
+      {
+        integrity: sha512-CldGybIRIUNR88CXWb9ofCAoIg7RnBQ3uItpe7b0YGFhSl5fFwuzQuqBjUVkof0Fe9PyloCZ0U1lAzcxwgfwww==,
+      }
+    engines: { node: ^18.12.0 || >=20.0.0 }
+    peerDependencies:
+      "@vitest/spy": ">= 1.0"
+      vitest: ">= 1.0"
+
+  "@suites/types.common@3.0.0":
+    resolution:
+      {
+        integrity: sha512-+kCWmVAyEI01P4d/t3LbrOCq1xXQlh3SsPstn1uBuC/MDMW/pENHkU5xVC9G8VOW/pkXh53KXwbHIxpJImp4Zw==,
+      }
+    engines: { node: ^16.10.0 || ^18.12.0 || >=20.0.0 }
+
+  "@suites/types.common@4.0.0-alpha.0":
+    resolution:
+      {
+        integrity: sha512-nqGbLZmWVC8GWt1Zt2USd9HYC6T4AsLe6y+ZHBTkdRyQ+jVeowUEiiAI7kGM/u+LfKxKaEXhoWzKep7piZjo1g==,
+      }
+    engines: { node: ">= 20" }
+
+  "@suites/types.di@3.0.0":
+    resolution:
+      {
+        integrity: sha512-RzvgfTsjg3KrJ3SRbo9J84g5mRfkMZMzinLTjAQO+yCBBz+YMhbwaUXDBX70RcFGiAHjTNPg0jWjis3FHPH8Dg==,
+      }
+    engines: { node: ^16.10.0 || ^18.12.0 || >=20.0.0 }
+
+  "@suites/types.di@4.0.0-alpha.0":
+    resolution:
+      {
+        integrity: sha512-pfAxt3sPQOrtS7/2HCibtgSJsZV/mOPcaF3bxUcYZPcY5EiLRUh5ZpML7poAYrAcYmaFKRiJvxRdwWf5/BqG5g==,
+      }
+    engines: { node: ">= 20" }
+
+  "@suites/types.doubles@3.0.0":
+    resolution:
+      {
+        integrity: sha512-B5sHH98qU7Fq+ozA42J3LLv846xRJn2ndx1xfLr0oaKxEG6Xud/vmdJpH65F/2P7DNMJkxWo/VDIqXrN4UDcvg==,
+      }
+
+  "@suites/unit@3.0.1":
+    resolution:
+      {
+        integrity: sha512-28RLtgxG8NH6zcBvfiMGqbToWNTs2WnTPa9GWQ2k1laXueGILDTTRjQrsApIAlbtRF5lGuGPynRFEMBAL+90Mw==,
+      }
+    engines: { node: ^16.10.0 || ^18.12.0 || >=20.0.0 }
 
   "@types/chai@5.2.3":
     resolution:
@@ -1808,6 +1885,13 @@ packages:
       }
     engines: { node: ">=10" }
 
+  lodash.isequal@4.5.0:
+    resolution:
+      {
+        integrity: sha512-pDo3lu8Jhfjqls6GkMgpahsF9kCyayhgykjyLMNFTKWrpVdAQtYyB4muAMWozBB4ig/dtWAmsMxLEI8wuz+DYQ==,
+      }
+    deprecated: This package is deprecated. Use require('node:util').isDeepStrictEqual instead.
+
   lodash.merge@4.6.2:
     resolution:
       {
@@ -2885,6 +2969,48 @@ snapshots:
 
   "@standard-schema/spec@1.1.0": {}
 
+  "@suites/core.unit@3.0.1":
+    dependencies:
+      "@suites/types.common": 3.0.0
+      "@suites/types.di": 3.0.0
+      lodash.isequal: 4.5.0
+
+  "@suites/di.inversify@4.0.0-alpha.0(inversify@7.10.7(reflect-metadata@0.2.2))(reflect-metadata@0.2.2)":
+    dependencies:
+      "@suites/types.common": 4.0.0-alpha.0
+      "@suites/types.di": 4.0.0-alpha.0
+      inversify: 7.10.7(reflect-metadata@0.2.2)
+      reflect-metadata: 0.2.2
+
+  "@suites/doubles.vitest@3.0.1(@vitest/spy@4.0.16)(vitest@4.0.16(@types/node@25.0.3)(jiti@2.6.1)(tsx@4.21.0))":
+    dependencies:
+      "@suites/core.unit": 3.0.1
+      "@suites/types.common": 3.0.0
+      "@suites/types.doubles": 3.0.0
+      "@vitest/spy": 4.0.16
+      vitest: 4.0.16(@types/node@25.0.3)(jiti@2.6.1)(tsx@4.21.0)
+
+  "@suites/types.common@3.0.0": {}
+
+  "@suites/types.common@4.0.0-alpha.0": {}
+
+  "@suites/types.di@3.0.0":
+    dependencies:
+      "@suites/types.common": 3.0.0
+
+  "@suites/types.di@4.0.0-alpha.0":
+    dependencies:
+      "@suites/types.common": 4.0.0-alpha.0
+
+  "@suites/types.doubles@3.0.0": {}
+
+  "@suites/unit@3.0.1":
+    dependencies:
+      "@suites/core.unit": 3.0.1
+      "@suites/types.common": 3.0.0
+      "@suites/types.di": 3.0.0
+      "@suites/types.doubles": 3.0.0
+
   "@types/chai@5.2.3":
     dependencies:
       "@types/deep-eql": 4.0.2
@@ -3588,6 +3714,8 @@ snapshots:
   locate-path@6.0.0:
     dependencies:
       p-locate: 5.0.0
+
+  lodash.isequal@4.5.0: {}
 
   lodash.merge@4.6.2: {}
 

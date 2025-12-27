@@ -1,49 +1,25 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
+import { TestBed } from "@suites/unit";
 import { ExecuteLuaTool } from "./execute-lua-tool.js";
-import type {
-  ILogger,
-  IMCPClientManager,
-  ILuaRuntime,
-} from "../types/interfaces.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-
-// Mock logger
-const createMockLogger = (): ILogger => ({
-  info: vi.fn(),
-  error: vi.fn(),
-  debug: vi.fn(),
-});
-
-// Mock client manager
-const createMockClientManager = (): IMCPClientManager => ({
-  addHttpClient: vi.fn(),
-  addStdioClient: vi.fn(),
-  getClient: vi.fn(),
-  getClientsBySession: vi.fn(() => new Map()),
-  setResourceListChangedHandler: vi.fn(),
-  setPromptListChangedHandler: vi.fn(),
-  close: vi.fn(),
-});
-
-// Mock Lua runtime
-const createMockLuaRuntime = (): ILuaRuntime => ({
-  executeScript: vi.fn(async () => ({
-    items: [{ id: 1, name: "test" }],
-    total: 1,
-  })),
-});
+import { TYPES } from "../types/index.js";
 
 describe("ExecuteLuaTool", () => {
   let tool: ExecuteLuaTool;
-  let luaRuntime: ILuaRuntime;
-  let clientManager: IMCPClientManager;
-  let logger: ILogger;
+  let luaRuntime: ReturnType<typeof unitRef.get>;
+  let clientManager: ReturnType<typeof unitRef.get>;
+  let logger: ReturnType<typeof unitRef.get>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let unitRef: any;
 
-  beforeEach(() => {
-    logger = createMockLogger();
-    clientManager = createMockClientManager();
-    luaRuntime = createMockLuaRuntime();
-    tool = new ExecuteLuaTool(luaRuntime, clientManager, logger);
+  beforeEach(async () => {
+    const { unit, unitRef: ref } =
+      await TestBed.solitary(ExecuteLuaTool).compile();
+    tool = unit;
+    unitRef = ref;
+    luaRuntime = unitRef.get(TYPES.LuaRuntime);
+    clientManager = unitRef.get(TYPES.MCPClientManager);
+    logger = unitRef.get(TYPES.Logger);
   });
 
   describe("tool metadata", () => {
@@ -71,10 +47,8 @@ describe("ExecuteLuaTool", () => {
   describe("execute", () => {
     it("should call luaRuntime.executeScript with script and mcpServers", async () => {
       const mockServers = new Map();
-      vi.spyOn(clientManager, "getClientsBySession").mockReturnValue(
-        mockServers,
-      );
-      vi.spyOn(luaRuntime, "executeScript").mockResolvedValue({
+      clientManager.getClientsBySession.mockReturnValue(mockServers);
+      luaRuntime.executeScript.mockResolvedValue({
         result: "success",
       });
 
@@ -92,10 +66,8 @@ describe("ExecuteLuaTool", () => {
 
     it("should use 'default' session when sessionId not provided", async () => {
       const mockServers = new Map();
-      vi.spyOn(clientManager, "getClientsBySession").mockReturnValue(
-        mockServers,
-      );
-      vi.spyOn(luaRuntime, "executeScript").mockResolvedValue({});
+      clientManager.getClientsBySession.mockReturnValue(mockServers);
+      luaRuntime.executeScript.mockResolvedValue({});
 
       await tool.execute({ script: "result({})" }, {});
 
@@ -104,10 +76,8 @@ describe("ExecuteLuaTool", () => {
 
     it("should use 'default' session when sessionId is undefined", async () => {
       const mockServers = new Map();
-      vi.spyOn(clientManager, "getClientsBySession").mockReturnValue(
-        mockServers,
-      );
-      vi.spyOn(luaRuntime, "executeScript").mockResolvedValue({});
+      clientManager.getClientsBySession.mockReturnValue(mockServers);
+      luaRuntime.executeScript.mockResolvedValue({});
 
       await tool.execute({ script: "result({})" }, { sessionId: undefined });
 
@@ -125,7 +95,7 @@ describe("ExecuteLuaTool", () => {
         isError: false,
       };
 
-      vi.spyOn(luaRuntime, "executeScript").mockResolvedValue(callToolResult);
+      luaRuntime.executeScript.mockResolvedValue(callToolResult);
 
       const result = await tool.execute(
         { script: "result({content = ...})" },
@@ -144,7 +114,7 @@ describe("ExecuteLuaTool", () => {
         total: 2,
       };
 
-      vi.spyOn(luaRuntime, "executeScript").mockResolvedValue(objectResult);
+      luaRuntime.executeScript.mockResolvedValue(objectResult);
 
       const result = await tool.execute(
         { script: "result({items = ..., total = 2})" },
@@ -162,9 +132,7 @@ describe("ExecuteLuaTool", () => {
     });
 
     it("should return text result for string values", async () => {
-      vi.spyOn(luaRuntime, "executeScript").mockResolvedValue(
-        "Simple string result",
-      );
+      luaRuntime.executeScript.mockResolvedValue("Simple string result");
 
       const result = await tool.execute(
         { script: 'result("Simple string result")' },
@@ -179,7 +147,7 @@ describe("ExecuteLuaTool", () => {
     });
 
     it("should return text result for number values", async () => {
-      vi.spyOn(luaRuntime, "executeScript").mockResolvedValue(42);
+      luaRuntime.executeScript.mockResolvedValue(42);
 
       const result = await tool.execute(
         { script: "result(42)" },
@@ -194,7 +162,7 @@ describe("ExecuteLuaTool", () => {
     });
 
     it("should handle undefined result", async () => {
-      vi.spyOn(luaRuntime, "executeScript").mockResolvedValue(undefined);
+      luaRuntime.executeScript.mockResolvedValue(undefined);
 
       const result = await tool.execute(
         { script: "-- no result call" },
@@ -209,7 +177,7 @@ describe("ExecuteLuaTool", () => {
     });
 
     it("should handle null result as object", async () => {
-      vi.spyOn(luaRuntime, "executeScript").mockResolvedValue(null);
+      luaRuntime.executeScript.mockResolvedValue(null);
 
       const result = await tool.execute(
         { script: "result(null)" },
@@ -223,7 +191,7 @@ describe("ExecuteLuaTool", () => {
 
     it("should handle script execution errors", async () => {
       const error = new Error("Lua syntax error on line 3");
-      vi.spyOn(luaRuntime, "executeScript").mockRejectedValue(error);
+      luaRuntime.executeScript.mockRejectedValue(error);
 
       const result = await tool.execute(
         { script: "invalid lua code {{" },
@@ -242,7 +210,7 @@ describe("ExecuteLuaTool", () => {
 
     it("should handle runtime errors during tool calls", async () => {
       const error = new Error("Tool 'nonexistent' not found");
-      vi.spyOn(luaRuntime, "executeScript").mockRejectedValue(error);
+      luaRuntime.executeScript.mockRejectedValue(error);
 
       const result = await tool.execute(
         { script: "result(server.nonexistent():await())" },
@@ -256,8 +224,9 @@ describe("ExecuteLuaTool", () => {
     });
 
     it("should type-cast script parameter as string", async () => {
-      const executeSpy = vi.spyOn(luaRuntime, "executeScript");
-      executeSpy.mockResolvedValue({});
+      const mockServers = new Map();
+      clientManager.getClientsBySession.mockReturnValue(mockServers);
+      luaRuntime.executeScript.mockResolvedValue({});
 
       const args = {
         script: "result({})",
@@ -266,12 +235,15 @@ describe("ExecuteLuaTool", () => {
 
       await tool.execute(args, { sessionId: "test" });
 
-      expect(executeSpy).toHaveBeenCalledWith("result({})", expect.any(Map));
+      expect(luaRuntime.executeScript).toHaveBeenCalledWith(
+        "result({})",
+        expect.any(Map),
+      );
     });
 
     it("should handle array results as objects", async () => {
       const arrayResult = [1, 2, 3, 4, 5];
-      vi.spyOn(luaRuntime, "executeScript").mockResolvedValue(arrayResult);
+      luaRuntime.executeScript.mockResolvedValue(arrayResult);
 
       const result = await tool.execute(
         { script: "result({1, 2, 3, 4, 5})" },
@@ -295,7 +267,7 @@ describe("ExecuteLuaTool", () => {
         success: true,
       };
 
-      vi.spyOn(luaRuntime, "executeScript").mockResolvedValue(complexResult);
+      luaRuntime.executeScript.mockResolvedValue(complexResult);
 
       const result = await tool.execute(
         { script: "result(complex_object)" },
@@ -310,7 +282,7 @@ describe("ExecuteLuaTool", () => {
     });
 
     it("should handle boolean results", async () => {
-      vi.spyOn(luaRuntime, "executeScript").mockResolvedValue(true);
+      luaRuntime.executeScript.mockResolvedValue(true);
 
       const result = await tool.execute(
         { script: "result(true)" },
@@ -329,7 +301,7 @@ describe("ExecuteLuaTool", () => {
         content: "not an array", // Should be array but isn't
       };
 
-      vi.spyOn(luaRuntime, "executeScript").mockResolvedValue(invalidResult);
+      luaRuntime.executeScript.mockResolvedValue(invalidResult);
 
       const result = await tool.execute(
         { script: "result({content = ...})" },
