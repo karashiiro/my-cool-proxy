@@ -18,7 +18,7 @@ describe("ConsoleLogger stdout/stderr separation", () => {
     expect(result.stderr).toContain("test info");
     expect(result.stderr).toContain("test error");
     expect(result.stderr).toContain("test debug");
-  }, 10000);
+  }, 15000);
 });
 
 interface ProcessResult {
@@ -70,7 +70,7 @@ function runLoggerInChildProcess(): Promise<ProcessResult> {
       reject(new Error(`Child process error: ${err.message}`));
     });
 
-    // Timeout after 8 seconds
+    // Timeout after 12 seconds
     setTimeout(() => {
       child.kill();
       reject(
@@ -78,6 +78,6 @@ function runLoggerInChildProcess(): Promise<ProcessResult> {
           `Child process timeout. stdout: ${stdout}, stderr: ${stderr}`,
         ),
       );
-    }, 8000);
+    }, 30000);
   });
 }

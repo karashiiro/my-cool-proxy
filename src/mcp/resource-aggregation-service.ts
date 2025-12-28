@@ -11,7 +11,11 @@ import type {
 } from "../types/interfaces.js";
 import { $inject } from "../container/decorators.js";
 import { TYPES } from "../types/index.js";
-import { namespaceResource, parseResourceUri } from "../utils/resource-uri.js";
+import {
+  namespaceResource,
+  namespaceResourceUri,
+  parseResourceUri,
+} from "../utils/resource-uri.js";
 import type { MCPClientSession } from "./client-session.js";
 import { createCache } from "../services/cache-service.js";
 
@@ -116,7 +120,17 @@ export class ResourceAggregationService {
       this.logger.debug(
         `Read resource '${originalUri}' from server '${serverName}'`,
       );
-      return result;
+
+      // Namespace the URIs in the response contents
+      const namespacedContents = result.contents.map((content) => ({
+        ...content,
+        uri: namespaceResourceUri(serverName, content.uri),
+      }));
+
+      return {
+        ...result,
+        contents: namespacedContents,
+      };
     } catch (error) {
       this.logger.error(
         `Failed to read resource '${originalUri}' from server '${serverName}':`,

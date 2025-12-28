@@ -1,6 +1,5 @@
 import { injectable } from "inversify";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
-import { randomUUID } from "crypto";
 import type { ILogger, ITransportManager } from "../types/interfaces.js";
 import { $inject } from "../container/decorators.js";
 import { TYPES } from "../types/index.js";
@@ -8,6 +7,11 @@ import { TYPES } from "../types/index.js";
 @injectable()
 export class TransportManager implements ITransportManager {
   private transports = new Map<
+    string,
+    WebStandardStreamableHTTPServerTransport
+  >();
+  // Track pending transport creations to prevent race conditions
+  private pendingCreations = new Map<
     string,
     WebStandardStreamableHTTPServerTransport
   >();
@@ -20,20 +24,37 @@ export class TransportManager implements ITransportManager {
   constructor(@$inject(TYPES.Logger) private logger: ILogger) {}
 
   getOrCreate(sessionId: string): WebStandardStreamableHTTPServerTransport {
-    if (this.transports.has(sessionId)) {
+    // Check if transport already exists
+    const existingTransport = this.transports.get(sessionId);
+    if (existingTransport) {
       this.logger.debug(`Reusing existing transport for session ${sessionId}`);
-      return this.transports.get(sessionId)!;
+      return existingTransport;
     }
 
-    this.logger.info(`Creating new transport for session ${sessionId}`);
+    // Check if transport is currently being created
+    const pendingTransport = this.pendingCreations.get(sessionId);
+    if (pendingTransport) {
+      this.logger.debug(
+        `Reusing pending transport creation for session ${sessionId}`,
+      );
+      return pendingTransport;
+    }
 
+    // Create transport object and add to pending IMMEDIATELY to prevent race
+    // IMPORTANT: We provide a sessionIdGenerator that returns the client-provided sessionId
+    // This ensures the transport uses the same session ID as the client sent in headers
     const transport = new WebStandardStreamableHTTPServerTransport({
-      sessionIdGenerator: () => randomUUID(),
+      sessionIdGenerator: () => sessionId,
       onsessioninitialized: (sid) => {
         this.logger.info(`Transport session initialized: ${sid}`);
         this.transports.set(sid, transport);
       },
     });
+
+    // Add to pendingCreations RIGHT AFTER creation, before ANY other operations
+    this.pendingCreations.set(sessionId, transport);
+
+    this.logger.info(`Creating new transport for session ${sessionId}`);
 
     // Track the original sessionId for cleanup
     this.transportToSessionId.set(transport, sessionId);
@@ -56,7 +77,12 @@ export class TransportManager implements ITransportManager {
       }
     };
 
+    // Store in transports map
     this.transports.set(sessionId, transport);
+
+    // Remove from pending now that it's in the main map
+    this.pendingCreations.delete(sessionId);
+
     return transport;
   }
 
@@ -73,11 +99,17 @@ export class TransportManager implements ITransportManager {
       return this.getOrCreate(sessionId);
     }
 
-    // Otherwise, create a new transport with a unique key
-    // Each new client gets its own transport, even if they don't provide a session ID
-    const newSessionKey = `pending-${Date.now()}-${Math.random()}`;
-    this.logger.info(`Creating new transport for new connection`);
-    return this.getOrCreate(newSessionKey);
+    // Create a new transport
+    // Use the client-provided sessionId if available, otherwise generate a pending key
+    const transportKey = sessionId || `pending-${Date.now()}-${Math.random()}`;
+
+    if (sessionId) {
+      this.logger.info(`Creating new transport for session ${sessionId}`);
+    } else {
+      this.logger.info(`Creating new transport for new connection`);
+    }
+
+    return this.getOrCreate(transportKey);
   }
 
   remove(sessionId: string): void {

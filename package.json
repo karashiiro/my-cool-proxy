@@ -11,6 +11,10 @@
     "build": "tsgo -p tsconfig.build.json",
     "dev": "tsx src/index.ts",
     "test": "vitest run",
+    "test:unit": "vitest run --exclude 'src/e2e/**'",
+    "test:e2e": "vitest run src/e2e",
+    "test:e2e:http": "vitest run src/e2e/http",
+    "test:e2e:stdio": "vitest run src/e2e/stdio",
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
     "check": "pnpm run lint && pnpm run typecheck && pnpm run test"

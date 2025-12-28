@@ -322,7 +322,7 @@ describe("TransportManager", () => {
       expect(transport).toBeDefined();
       expect(WebStandardStreamableHTTPServerTransport).toHaveBeenCalled();
       expect(logger.info).toHaveBeenCalledWith(
-        `Creating new transport for new connection`,
+        `Creating new transport for session ${sessionId}`,
       );
     });
 

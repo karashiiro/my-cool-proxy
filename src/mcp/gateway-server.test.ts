@@ -1504,7 +1504,7 @@ describe("MCPGatewayServer - Resource Aggregation", () => {
 
       expect(result.contents).toHaveLength(1);
       expect(result.contents[0]).toMatchObject({
-        uri: "file:///docs/README.md",
+        uri: "mcp://docs-server/file:///docs/README.md",
         mimeType: "text/markdown",
         text: "# Project Documentation\n\nWelcome!",
       });
@@ -1692,7 +1692,7 @@ describe("MCPGatewayServer - Resource Aggregation", () => {
 
       expect(readResult.contents).toHaveLength(1);
       expect(readResult.contents[0]).toMatchObject({
-        uri: "file:///data/report.json",
+        uri: "mcp://data-server/file:///data/report.json",
         mimeType: "application/json",
         text: '{"sales": 1000, "users": 50}',
       });
