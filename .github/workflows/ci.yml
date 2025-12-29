@@ -44,3 +44,8 @@ jobs:
         run: pnpm test:coverage
         env:
           CI: true
+
+      - name: Run E2E tests
+        run: pnpm test:e2e
+        env:
+          CI: true
