@@ -117,21 +117,38 @@ describe("HTTP Multi-Session E2E", () => {
       expect(result1.content).toHaveLength(1);
       expect(result2.content).toHaveLength(1);
 
-      // Both should see the same servers
+      // Both should see the same servers (but with different session IDs)
       const content1 = (
         result1.content as Array<TextContent | ImageContent | EmbeddedResource>
       )[0]!;
       const content2 = (
         result2.content as Array<TextContent | ImageContent | EmbeddedResource>
       )[0]!;
-      expect(content1).toEqual(content2);
+
+      // Verify both have text content
+      expect(content1.type).toBe("text");
+      expect(content2.type).toBe("text");
+
+      if (content1.type === "text" && content2.type === "text") {
+        // Both should list the same number of servers
+        expect(content1.text).toContain("Available MCP Servers: 1");
+        expect(content2.text).toContain("Available MCP Servers: 1");
+
+        // Both should see the calculator server
+        expect(content1.text).toContain("📦 calculator");
+        expect(content2.text).toContain("📦 calculator");
+
+        // But they should show different session IDs
+        expect(content1.text).toContain("Session: session-1");
+        expect(content2.text).toContain("Session: session-2");
+      }
     });
 
     it("should execute Lua scripts independently in each session", async () => {
       // Client 1 executes a calculation
       const script1 = `
-        local result = calculator.add({ a = 100, b = 200 }):await()
-        result({ session = "1", calculation = result })
+        local res = calculator.add({ a = 100, b = 200 }):await()
+        result(res)
       `;
 
       const executeResult1 = await client1.callTool({
@@ -141,8 +158,8 @@ describe("HTTP Multi-Session E2E", () => {
 
       // Client 2 executes a different calculation
       const script2 = `
-        local result = calculator.multiply({ a = 5, b = 10 }):await()
-        result({ session = "2", calculation = result })
+        local res = calculator.multiply({ a = 5, b = 10 }):await()
+        result(res)
       `;
 
       const executeResult2 = await client2.callTool({

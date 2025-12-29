@@ -57,8 +57,15 @@ export class MCPClientManager implements IMCPClientManager {
       },
     );
 
+    // Merge session ID header with any user-provided headers
+    // This ensures downstream servers can isolate sessions properly
+    const allHeaders = {
+      ...headers,
+      "mcp-session-id": sessionId,
+    };
+
     const transport = new StreamableHTTPClientTransport(new URL(endpoint), {
-      requestInit: headers ? { headers } : undefined,
+      requestInit: { headers: allHeaders },
     });
     await sdkClient.connect(transport);
 

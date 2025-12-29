@@ -47,7 +47,8 @@ export class TransportManager implements ITransportManager {
       sessionIdGenerator: () => sessionId,
       onsessioninitialized: (sid) => {
         this.logger.info(`Transport session initialized: ${sid}`);
-        this.transports.set(sid, transport);
+        // NOTE: We don't add to map here because we already added it below with sessionId
+        // This avoids duplicate map entries if the SDK changes sid
       },
     });
 

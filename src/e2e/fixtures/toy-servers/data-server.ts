@@ -163,16 +163,37 @@ function createDataServer(): McpServer {
 export async function startHttpDataServer(port: number): Promise<{
   close: () => Promise<void>;
 }> {
-  const server = createDataServer();
-  const transport = new WebStandardStreamableHTTPServerTransport({
-    sessionIdGenerator: () => crypto.randomUUID(),
-  });
-
-  await server.connect(transport);
+  // Track transports and servers per session
+  const transports = new Map<
+    string,
+    WebStandardStreamableHTTPServerTransport
+  >();
+  const servers = new Map<string, McpServer>();
 
   // Create HTTP server with Hono
   const app = new Hono();
-  app.all("/mcp", async (c) => transport.handleRequest(c.req.raw));
+  app.all("/mcp", async (c) => {
+    // Get session ID from header (or use a default)
+    const sessionId = c.req.header("mcp-session-id") || "default";
+
+    // Get or create transport for this session
+    let transport = transports.get(sessionId);
+    let server = servers.get(sessionId);
+
+    if (!transport || !server) {
+      // Create new transport and server for this session
+      transport = new WebStandardStreamableHTTPServerTransport({
+        sessionIdGenerator: () => sessionId,
+      });
+      server = createDataServer();
+      await server.connect(transport);
+
+      transports.set(sessionId, transport);
+      servers.set(sessionId, server);
+    }
+
+    return transport.handleRequest(c.req.raw);
+  });
 
   const httpServer = serve({
     fetch: app.fetch,
@@ -182,7 +203,13 @@ export async function startHttpDataServer(port: number): Promise<{
 
   return {
     close: async () => {
-      await server.close();
+      // Close all servers and transports
+      for (const server of servers.values()) {
+        await server.close();
+      }
+      transports.clear();
+      servers.clear();
+
       await new Promise<void>((resolve, reject) => {
         httpServer.close((err) => (err ? reject(err) : resolve()));
       });

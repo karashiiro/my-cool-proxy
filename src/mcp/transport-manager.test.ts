@@ -133,66 +133,48 @@ describe("TransportManager", () => {
     });
 
     describe("onsessioninitialized callback", () => {
-      it("should store transport under generated sessionId", () => {
-        const originalSessionId = "original-session";
-        const generatedSessionId = "generated-uuid-123";
+      it("should log session initialization", () => {
+        const sessionId = "test-session";
 
-        transportManager.getOrCreate(originalSessionId);
+        transportManager.getOrCreate(sessionId);
 
-        // Simulate session initialization
-        mockTransport.sessionId = generatedSessionId;
-        capturedOptions.onsessioninitialized(generatedSessionId);
+        // Simulate session initialization - with our sessionIdGenerator, this will be the same ID
+        mockTransport.sessionId = sessionId;
+        capturedOptions.onsessioninitialized(sessionId);
 
-        // Transport should be accessible via generated ID
-        expect(transportManager.has(generatedSessionId)).toBe(true);
+        // Transport should still be accessible via original ID
+        expect(transportManager.has(sessionId)).toBe(true);
       });
 
-      it("should log session initialization", () => {
-        const generatedSessionId = "generated-uuid-456";
+      it("should log the session ID from callback", () => {
+        const sessionId = "session-456";
 
-        transportManager.getOrCreate("session-1");
+        transportManager.getOrCreate(sessionId);
 
-        mockTransport.sessionId = generatedSessionId;
-        capturedOptions.onsessioninitialized(generatedSessionId);
+        mockTransport.sessionId = sessionId;
+        capturedOptions.onsessioninitialized(sessionId);
 
         expect(logger.info).toHaveBeenCalledWith(
-          `Transport session initialized: ${generatedSessionId}`,
+          `Transport session initialized: ${sessionId}`,
         );
-      });
-
-      it("should allow lookup by both original and generated session IDs", () => {
-        const originalSessionId = "original-123";
-        const generatedSessionId = "generated-456";
-
-        transportManager.getOrCreate(originalSessionId);
-
-        mockTransport.sessionId = generatedSessionId;
-        capturedOptions.onsessioninitialized(generatedSessionId);
-
-        expect(transportManager.has(originalSessionId)).toBe(true);
-        expect(transportManager.has(generatedSessionId)).toBe(true);
       });
     });
 
     describe("onclose callback", () => {
-      it("should remove both original and generated session IDs", () => {
-        const originalSessionId = "original-123";
-        const generatedSessionId = "generated-456";
+      it("should remove session ID on close", () => {
+        const sessionId = "test-session";
 
-        const transport = transportManager.getOrCreate(originalSessionId);
+        transportManager.getOrCreate(sessionId);
 
-        // Initialize session
-        mockTransport.sessionId = generatedSessionId;
-        capturedOptions.onsessioninitialized(generatedSessionId);
+        mockTransport.sessionId = sessionId;
+        capturedOptions.onsessioninitialized(sessionId);
 
-        expect(transportManager.has(originalSessionId)).toBe(true);
-        expect(transportManager.has(generatedSessionId)).toBe(true);
+        expect(transportManager.has(sessionId)).toBe(true);
 
-        // Trigger close
-        transport.onclose!();
+        // Trigger close (onclose is set on the transport, not in options)
+        mockTransport.onclose!();
 
-        expect(transportManager.has(originalSessionId)).toBe(false);
-        expect(transportManager.has(generatedSessionId)).toBe(false);
+        expect(transportManager.has(sessionId)).toBe(false);
       });
 
       it("should handle missing originalSessionId gracefully", () => {
@@ -281,16 +263,16 @@ describe("TransportManager", () => {
       expect(transportManager.has(sessionId)).toBe(true);
     });
 
-    it("should return true for transport-generated session ID", () => {
-      const originalSessionId = "original";
-      const generatedSessionId = "generated";
+    it("should return true for session ID after initialization", () => {
+      const sessionId = "test-session";
 
-      transportManager.getOrCreate(originalSessionId);
+      transportManager.getOrCreate(sessionId);
 
-      mockTransport.sessionId = generatedSessionId;
-      capturedOptions.onsessioninitialized(generatedSessionId);
+      // With our sessionIdGenerator, the initialized ID is the same as original
+      mockTransport.sessionId = sessionId;
+      capturedOptions.onsessioninitialized(sessionId);
 
-      expect(transportManager.has(generatedSessionId)).toBe(true);
+      expect(transportManager.has(sessionId)).toBe(true);
     });
   });
 
@@ -556,22 +538,20 @@ describe("TransportManager", () => {
 
   describe("integration tests", () => {
     it("should handle complete lifecycle: create → initialize → close", () => {
-      const originalSessionId = "lifecycle-original";
-      const generatedSessionId = "lifecycle-generated";
+      const sessionId = "lifecycle-test";
 
       // Create
-      const transport = transportManager.getOrCreate(originalSessionId);
-      expect(transportManager.has(originalSessionId)).toBe(true);
+      const transport = transportManager.getOrCreate(sessionId);
+      expect(transportManager.has(sessionId)).toBe(true);
 
-      // Initialize
-      mockTransport.sessionId = generatedSessionId;
-      capturedOptions.onsessioninitialized(generatedSessionId);
-      expect(transportManager.has(generatedSessionId)).toBe(true);
+      // Initialize (with our sessionIdGenerator, ID stays the same)
+      mockTransport.sessionId = sessionId;
+      capturedOptions.onsessioninitialized(sessionId);
+      expect(transportManager.has(sessionId)).toBe(true);
 
       // Close
       transport.onclose!();
-      expect(transportManager.has(originalSessionId)).toBe(false);
-      expect(transportManager.has(generatedSessionId)).toBe(false);
+      expect(transportManager.has(sessionId)).toBe(false);
     });
 
     it("should handle multi-session scenario with closeAll", async () => {
@@ -580,15 +560,14 @@ describe("TransportManager", () => {
       // Create all sessions
       sessions.forEach((s) => transportManager.getOrCreate(s));
 
-      // Initialize some with generated IDs
-      mockTransport.sessionId = "generated-0";
-      capturedOptions.onsessioninitialized("generated-0");
+      // Initialize one session (ID stays the same with our generator)
+      mockTransport.sessionId = sessions[0]!;
+      capturedOptions.onsessioninitialized(sessions[0]!);
 
       // Verify all accessible
       sessions.forEach((s) => {
         expect(transportManager.has(s)).toBe(true);
       });
-      expect(transportManager.has("generated-0")).toBe(true);
 
       // Close all
       await transportManager.closeAll();

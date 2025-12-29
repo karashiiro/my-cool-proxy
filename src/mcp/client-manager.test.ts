@@ -91,11 +91,15 @@ describe("MCPClientManager", () => {
         },
       );
 
-      // Should create transport with correct endpoint
+      // Should create transport with correct endpoint and session ID header
       expect(StreamableHTTPClientTransport).toHaveBeenCalledWith(
         new URL(endpoint),
         {
-          requestInit: undefined,
+          requestInit: {
+            headers: {
+              "mcp-session-id": sessionId,
+            },
+          },
         },
       );
 
@@ -129,11 +133,16 @@ describe("MCPClientManager", () => {
 
       await clientManager.addHttpClient(name, endpoint, sessionId, headers);
 
-      // Should create transport with headers
+      // Should create transport with custom headers merged with session ID
       expect(StreamableHTTPClientTransport).toHaveBeenCalledWith(
         new URL(endpoint),
         {
-          requestInit: { headers },
+          requestInit: {
+            headers: {
+              ...headers,
+              "mcp-session-id": sessionId,
+            },
+          },
         },
       );
 
