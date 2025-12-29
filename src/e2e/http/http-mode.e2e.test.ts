@@ -1,15 +1,17 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import type {
-  TextContent,
-  ImageContent,
-  EmbeddedResource,
-} from "@modelcontextprotocol/sdk/types.js";
+import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { allocatePort } from "../helpers/port-manager.js";
 import { generateHttpTestConfig } from "../helpers/test-config-generator.js";
 import { HttpServerManager } from "../helpers/http-server-manager.js";
 import { ToyServerManager } from "../helpers/toy-server-manager.js";
+import { createGatewayClient } from "../helpers/client-helpers.js";
+import {
+  getTextContent,
+  getTextString,
+  assertTextContains,
+  assertTextContainsAll,
+  assertIsError,
+} from "../helpers/test-assertions.js";
 
 describe("HTTP Mode E2E", () => {
   let gatewayPort: number;
@@ -70,21 +72,11 @@ describe("HTTP Mode E2E", () => {
     });
 
     // Create client with explicit session ID
-    gatewayClient = new Client(
-      { name: "e2e-test-client", version: "1.0.0" },
-      { capabilities: {} },
-    );
-    const transport = new StreamableHTTPClientTransport(
-      new URL(`http://localhost:${gatewayPort}/mcp`),
-      {
-        requestInit: {
-          headers: {
-            "mcp-session-id": "e2e-test-session",
-          },
-        },
-      },
-    );
-    await gatewayClient.connect(transport);
+    gatewayClient = await createGatewayClient({
+      gatewayPort,
+      sessionId: "e2e-test-session",
+      clientName: "e2e-test-client",
+    });
   }, 30000);
 
   afterAll(async () => {
@@ -101,17 +93,7 @@ describe("HTTP Mode E2E", () => {
         arguments: {},
       });
 
-      expect(result.content).toHaveLength(1);
-      const content = (
-        result.content as Array<TextContent | ImageContent | EmbeddedResource>
-      )[0]!;
-      expect(content.type).toBe("text");
-
-      if (content.type === "text") {
-        // The tool returns formatted text, not JSON
-        expect(content.text).toContain("calculator");
-        expect(content.text).toContain("data-server");
-      }
+      assertTextContainsAll(result, ["calculator", "data-server"]);
     });
 
     it("should list tools from calculator server", async () => {
@@ -120,19 +102,7 @@ describe("HTTP Mode E2E", () => {
         arguments: { luaServerName: "calculator" },
       });
 
-      expect(result.content).toHaveLength(1);
-      const content = (
-        result.content as Array<TextContent | ImageContent | EmbeddedResource>
-      )[0]!;
-      expect(content.type).toBe("text");
-
-      if (content.type === "text") {
-        // The tool returns formatted text, not JSON
-        expect(content.text).toContain("add");
-        expect(content.text).toContain("multiply");
-        expect(content.text).toContain("subtract");
-        expect(content.text).toContain("divide");
-      }
+      assertTextContainsAll(result, ["add", "multiply", "subtract", "divide"]);
     });
 
     it("should get tool details for add tool", async () => {
@@ -144,16 +114,7 @@ describe("HTTP Mode E2E", () => {
         },
       });
 
-      expect(result.content).toHaveLength(1);
-      const content = (
-        result.content as Array<TextContent | ImageContent | EmbeddedResource>
-      )[0]!;
-      expect(content.type).toBe("text");
-
-      if (content.type === "text") {
-        expect(content.text).toContain("Add two numbers");
-        expect(content.text).toContain("Input Schema:");
-      }
+      assertTextContainsAll(result, ["Add two numbers", "Input Schema:"]);
     });
 
     it("should inspect tool response with sample args", async () => {
@@ -166,15 +127,7 @@ describe("HTTP Mode E2E", () => {
         },
       });
 
-      expect(result.content).toHaveLength(1);
-      const content = (
-        result.content as Array<TextContent | ImageContent | EmbeddedResource>
-      )[0]!;
-      expect(content.type).toBe("text");
-
-      if (content.type === "text") {
-        expect(content.text).toContain("2 + 3 = 5");
-      }
+      assertTextContains(result, "2 + 3 = 5");
     });
 
     it("should execute Lua script calling calculator tools", async () => {
@@ -183,22 +136,12 @@ describe("HTTP Mode E2E", () => {
         result(res)
       `;
 
-      const executeResult = await gatewayClient.callTool({
+      const result = await gatewayClient.callTool({
         name: "execute",
         arguments: { script },
       });
 
-      expect(executeResult.content).toHaveLength(1);
-      const content = (
-        executeResult.content as Array<
-          TextContent | ImageContent | EmbeddedResource
-        >
-      )[0]!;
-      expect(content.type).toBe("text");
-
-      if (content.type === "text") {
-        expect(content.text).toContain("10 + 20 = 30");
-      }
+      assertTextContains(result, "10 + 20 = 30");
     });
   });
 
@@ -216,19 +159,12 @@ describe("HTTP Mode E2E", () => {
         })
       `;
 
-      const executeResult = await gatewayClient.callTool({
+      const result = await gatewayClient.callTool({
         name: "execute",
         arguments: { script },
       });
 
-      expect(executeResult.content).toHaveLength(1);
-      const content = (
-        executeResult.content as Array<
-          TextContent | ImageContent | EmbeddedResource
-        >
-      )[0]!;
-
-      // The result might be text or structured content
+      const content = getTextContent(result);
       expect(content.type).toMatch(/text|resource/);
     });
 
@@ -243,19 +179,13 @@ describe("HTTP Mode E2E", () => {
         })
       `;
 
-      const executeResult = await gatewayClient.callTool({
+      const result = await gatewayClient.callTool({
         name: "execute",
         arguments: { script },
       });
 
-      expect(executeResult.content).toHaveLength(1);
-      expect(
-        (
-          executeResult.content as Array<
-            TextContent | ImageContent | EmbeddedResource
-          >
-        )[0]!.type,
-      ).toMatch(/text|resource/);
+      const content = getTextContent(result);
+      expect(content.type).toMatch(/text|resource/);
     });
   });
 
@@ -308,14 +238,7 @@ describe("HTTP Mode E2E", () => {
         arguments: { script },
       });
 
-      expect(result.isError).toBe(true);
-      expect(result.content).toHaveLength(1);
-      const content = (
-        result.content as Array<TextContent | ImageContent | EmbeddedResource>
-      )[0]!;
-      if (content.type === "text") {
-        expect(content.text).toContain("Cannot divide by zero");
-      }
+      assertIsError(result, "Cannot divide by zero");
     });
 
     it("should handle invalid server names", async () => {
@@ -324,14 +247,7 @@ describe("HTTP Mode E2E", () => {
         arguments: { luaServerName: "nonexistent" },
       });
 
-      expect(result.isError).toBe(true);
-      expect(result.content).toHaveLength(1);
-      const content = (
-        result.content as Array<TextContent | ImageContent | EmbeddedResource>
-      )[0]!;
-      if (content.type === "text") {
-        expect(content.text).toContain("Server 'nonexistent' not found");
-      }
+      assertIsError(result, "Server 'nonexistent' not found");
     });
 
     it("should handle Lua script errors", async () => {
@@ -345,14 +261,7 @@ describe("HTTP Mode E2E", () => {
         arguments: { script },
       });
 
-      expect(result.isError).toBe(true);
-      expect(result.content).toHaveLength(1);
-      const content = (
-        result.content as Array<TextContent | ImageContent | EmbeddedResource>
-      )[0]!;
-      if (content.type === "text") {
-        expect(content.text).toContain("error");
-      }
+      assertIsError(result, "error");
     });
   });
 });

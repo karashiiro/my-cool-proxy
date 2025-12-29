@@ -1,15 +1,15 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import type {
-  TextContent,
-  ImageContent,
-  EmbeddedResource,
-} from "@modelcontextprotocol/sdk/types.js";
+import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { allocatePort } from "../helpers/port-manager.js";
 import { generateHttpTestConfig } from "../helpers/test-config-generator.js";
 import { HttpServerManager } from "../helpers/http-server-manager.js";
 import { ToyServerManager } from "../helpers/toy-server-manager.js";
+import { createGatewayClient } from "../helpers/client-helpers.js";
+import {
+  getTextContent,
+  assertTextContains,
+  assertAllSucceeded,
+} from "../helpers/test-assertions.js";
 
 describe("HTTP Multi-Session E2E", () => {
   let gatewayPort: number;
@@ -59,39 +59,18 @@ describe("HTTP Multi-Session E2E", () => {
       },
     });
 
-    // Create client 1 with session ID "session-1"
-    client1 = new Client(
-      { name: "e2e-client-1", version: "1.0.0" },
-      { capabilities: {} },
-    );
-    const transport1 = new StreamableHTTPClientTransport(
-      new URL(`http://localhost:${gatewayPort}/mcp`),
-      {
-        requestInit: {
-          headers: {
-            "mcp-session-id": "session-1",
-          },
-        },
-      },
-    );
-    await client1.connect(transport1);
+    // Create clients with different session IDs
+    client1 = await createGatewayClient({
+      gatewayPort,
+      sessionId: "session-1",
+      clientName: "e2e-client-1",
+    });
 
-    // Create client 2 with session ID "session-2"
-    client2 = new Client(
-      { name: "e2e-client-2", version: "1.0.0" },
-      { capabilities: {} },
-    );
-    const transport2 = new StreamableHTTPClientTransport(
-      new URL(`http://localhost:${gatewayPort}/mcp`),
-      {
-        requestInit: {
-          headers: {
-            "mcp-session-id": "session-2",
-          },
-        },
-      },
-    );
-    await client2.connect(transport2);
+    client2 = await createGatewayClient({
+      gatewayPort,
+      sessionId: "session-2",
+      clientName: "e2e-client-2",
+    });
   }, 30000);
 
   afterAll(async () => {
@@ -114,34 +93,18 @@ describe("HTTP Multi-Session E2E", () => {
         arguments: {},
       });
 
-      expect(result1.content).toHaveLength(1);
-      expect(result2.content).toHaveLength(1);
+      const text1 = getTextContent(result1).text;
+      const text2 = getTextContent(result2).text;
 
-      // Both should see the same servers (but with different session IDs)
-      const content1 = (
-        result1.content as Array<TextContent | ImageContent | EmbeddedResource>
-      )[0]!;
-      const content2 = (
-        result2.content as Array<TextContent | ImageContent | EmbeddedResource>
-      )[0]!;
+      // Both should list the same servers
+      expect(text1).toContain("Available MCP Servers: 1");
+      expect(text2).toContain("Available MCP Servers: 1");
+      expect(text1).toContain("📦 calculator");
+      expect(text2).toContain("📦 calculator");
 
-      // Verify both have text content
-      expect(content1.type).toBe("text");
-      expect(content2.type).toBe("text");
-
-      if (content1.type === "text" && content2.type === "text") {
-        // Both should list the same number of servers
-        expect(content1.text).toContain("Available MCP Servers: 1");
-        expect(content2.text).toContain("Available MCP Servers: 1");
-
-        // Both should see the calculator server
-        expect(content1.text).toContain("📦 calculator");
-        expect(content2.text).toContain("📦 calculator");
-
-        // But they should show different session IDs
-        expect(content1.text).toContain("Session: session-1");
-        expect(content2.text).toContain("Session: session-2");
-      }
+      // But they should show different session IDs
+      expect(text1).toContain("Session: session-1");
+      expect(text2).toContain("Session: session-2");
     });
 
     it("should execute Lua scripts independently in each session", async () => {
@@ -151,7 +114,7 @@ describe("HTTP Multi-Session E2E", () => {
         result(res)
       `;
 
-      const executeResult1 = await client1.callTool({
+      const result1 = await client1.callTool({
         name: "execute",
         arguments: { script: script1 },
       });
@@ -162,33 +125,14 @@ describe("HTTP Multi-Session E2E", () => {
         result(res)
       `;
 
-      const executeResult2 = await client2.callTool({
+      const result2 = await client2.callTool({
         name: "execute",
         arguments: { script: script2 },
       });
 
-      // Verify that both executions succeeded and returned different results
-      expect(executeResult1.content).toHaveLength(1);
-      expect(executeResult2.content).toHaveLength(1);
-
-      const content1 = (
-        executeResult1.content as Array<
-          TextContent | ImageContent | EmbeddedResource
-        >
-      )[0]!;
-      const content2 = (
-        executeResult2.content as Array<
-          TextContent | ImageContent | EmbeddedResource
-        >
-      )[0]!;
-
-      if (content1.type === "text") {
-        expect(content1.text).toContain("100 + 200 = 300");
-      }
-
-      if (content2.type === "text") {
-        expect(content2.text).toContain("5 * 10 = 50");
-      }
+      // Verify that both executions succeeded with different results
+      assertTextContains(result1, "100 + 200 = 300");
+      assertTextContains(result2, "5 * 10 = 50");
     });
 
     it("should maintain separate client pools per session", async () => {
@@ -206,22 +150,9 @@ describe("HTTP Multi-Session E2E", () => {
         client2.callTool({ name: "execute", arguments: { script } }),
       ]);
 
-      // Both should succeed
-      expect(result1.content).toHaveLength(1);
-      expect(result2.content).toHaveLength(1);
-
-      // Both should have the same result (1 + 1 = 2)
-      const content1 = (
-        result1.content as Array<TextContent | ImageContent | EmbeddedResource>
-      )[0]!;
-      const content2 = (
-        result2.content as Array<TextContent | ImageContent | EmbeddedResource>
-      )[0]!;
-
-      if (content1.type === "text" && content2.type === "text") {
-        expect(content1.text).toContain("1 + 1 = 2");
-        expect(content2.text).toContain("1 + 1 = 2");
-      }
+      // Both should succeed with the same calculation result
+      assertTextContains(result1, "1 + 1 = 2");
+      assertTextContains(result2, "1 + 1 = 2");
     });
   });
 
@@ -257,9 +188,7 @@ describe("HTTP Multi-Session E2E", () => {
       const results = await Promise.all(promises);
 
       expect(results).toHaveLength(6);
-      results.forEach((result) => {
-        expect(result.content).toHaveLength(1);
-      });
+      assertAllSucceeded(results);
     });
   });
 });
