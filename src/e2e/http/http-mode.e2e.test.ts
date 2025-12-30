@@ -7,7 +7,6 @@ import { ToyServerManager } from "../helpers/toy-server-manager.js";
 import { createGatewayClient } from "../helpers/client-helpers.js";
 import {
   getTextContent,
-  getTextString,
   assertTextContains,
   assertTextContainsAll,
   assertIsError,

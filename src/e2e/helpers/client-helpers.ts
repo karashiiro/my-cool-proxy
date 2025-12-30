@@ -68,7 +68,7 @@ export async function closeClients(
     clients.filter(Boolean).map(async (client) => {
       try {
         await client!.close();
-      } catch (error) {
+      } catch {
         // Ignore cleanup errors
       }
     }),
