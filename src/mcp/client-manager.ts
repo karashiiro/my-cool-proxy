@@ -57,15 +57,22 @@ export class MCPClientManager implements IMCPClientManager {
       },
     );
 
-    // Merge session ID header with any user-provided headers
-    // This ensures downstream servers can isolate sessions properly
+    // Only propagate real session IDs (not temporary/generated ones)
+    // This allows test servers to isolate sessions while avoiding issues with production servers
+    // Skip: "pending-..." (generated for new connections) and "default" (fallback when no session ID)
+    const shouldPropagateSessionId =
+      sessionId && !sessionId.startsWith("pending-") && sessionId !== "default";
+
     const allHeaders = {
       ...headers,
-      "mcp-session-id": sessionId,
+      ...(shouldPropagateSessionId ? { "mcp-session-id": sessionId } : {}),
     };
 
     const transport = new StreamableHTTPClientTransport(new URL(endpoint), {
-      requestInit: { headers: allHeaders },
+      requestInit:
+        Object.keys(allHeaders).length > 0
+          ? { headers: allHeaders }
+          : undefined,
     });
     await sdkClient.connect(transport);
 
