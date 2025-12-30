@@ -1,3 +1,4 @@
 onlyBuiltDependencies:
+  - "@suites/di.inversify"
   - "@suites/doubles.vitest"
   - esbuild
