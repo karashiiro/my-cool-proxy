@@ -1,0 +1,20 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Coverage
+coverage/
+
+# Logs
+*.log
+
+# Local configuration
+.claude/
+config*.json
+!config.example.json
+
+# Lock files
+pnpm-lock.yaml
+package-lock.json

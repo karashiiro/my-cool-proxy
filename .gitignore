@@ -141,3 +141,6 @@ vite.config.ts.timestamp-*
 # Application config
 config*.json
 !config.example.json
+
+# Claude Code local settings
+.claude/
