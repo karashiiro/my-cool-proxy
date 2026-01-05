@@ -86,10 +86,20 @@ OPTIMIZATION:
         if (parseResult.success) return parseResult.data;
       }
 
-      // Return structured result if it's an object
+      // Return structured result if it's an object (but not an array)
       if (result !== null && typeof result === "object") {
+        const textContent = {
+          type: "text" as const,
+          text: JSON.stringify(result, null, 2),
+        };
+
+        // structuredContent must be a Record, not an array
+        if (Array.isArray(result)) {
+          return { content: [textContent] };
+        }
+
         return {
-          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+          content: [textContent],
           structuredContent: result as Record<string, unknown>,
         };
       }

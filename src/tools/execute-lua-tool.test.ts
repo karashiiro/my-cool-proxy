@@ -241,7 +241,7 @@ describe("ExecuteLuaTool", () => {
       );
     });
 
-    it("should handle array results as objects", async () => {
+    it("should handle array results without structuredContent", async () => {
       const arrayResult = [1, 2, 3, 4, 5];
       luaRuntime.executeScript.mockResolvedValue(arrayResult);
 
@@ -251,7 +251,28 @@ describe("ExecuteLuaTool", () => {
       );
 
       expect(result.content).toHaveLength(1);
-      expect(result.structuredContent).toEqual(arrayResult);
+      expect(result.content[0]).toEqual({
+        type: "text",
+        text: JSON.stringify(arrayResult, null, 2),
+      });
+      // Arrays should NOT be in structuredContent (MCP schema violation)
+      expect(result.structuredContent).toBeUndefined();
+    });
+
+    it("should handle array of objects without structuredContent", async () => {
+      const arrayResult = [{ id: 1 }, { id: 2 }];
+      luaRuntime.executeScript.mockResolvedValue(arrayResult);
+
+      const result = await tool.execute(
+        { script: "result({{id = 1}, {id = 2}})" },
+        { sessionId: "test" },
+      );
+
+      expect(result.content[0]).toEqual({
+        type: "text",
+        text: JSON.stringify(arrayResult, null, 2),
+      });
+      expect(result.structuredContent).toBeUndefined();
     });
 
     it("should handle complex nested object results", async () => {
