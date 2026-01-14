@@ -70,10 +70,9 @@ describe("HTTP Mode E2E", () => {
       },
     });
 
-    // Create client with explicit session ID
+    // Create client - session is managed automatically by the server
     gatewayClient = await createGatewayClient({
       gatewayPort,
-      sessionId: "e2e-test-session",
       clientName: "e2e-test-client",
     });
   }, 30000);

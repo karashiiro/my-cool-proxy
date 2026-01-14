@@ -59,16 +59,14 @@ describe("HTTP Multi-Session E2E", () => {
       },
     });
 
-    // Create clients with different session IDs
+    // Create clients - each will get a unique server-generated session ID
     client1 = await createGatewayClient({
       gatewayPort,
-      sessionId: "session-1",
       clientName: "e2e-client-1",
     });
 
     client2 = await createGatewayClient({
       gatewayPort,
-      sessionId: "session-2",
       clientName: "e2e-client-2",
     });
   }, 30000);
@@ -102,9 +100,16 @@ describe("HTTP Multi-Session E2E", () => {
       expect(text1).toContain("📦 calculator");
       expect(text2).toContain("📦 calculator");
 
-      // But they should show different session IDs
-      expect(text1).toContain("Session: session-1");
-      expect(text2).toContain("Session: session-2");
+      // Both should have a session ID (server-generated UUIDs)
+      expect(text1).toMatch(/Session: [\w-]+/);
+      expect(text2).toMatch(/Session: [\w-]+/);
+
+      // Extract session IDs and verify they're different
+      const session1Match = text1.match(/Session: ([\w-]+)/);
+      const session2Match = text2.match(/Session: ([\w-]+)/);
+      expect(session1Match).not.toBeNull();
+      expect(session2Match).not.toBeNull();
+      expect(session1Match![1]).not.toBe(session2Match![1]);
     });
 
     it("should execute Lua scripts independently in each session", async () => {

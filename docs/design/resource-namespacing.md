@@ -86,6 +86,7 @@ flowchart TB
 ```
 
 The runtime namespaces because:
+
 - It knows which server the tool belongs to
 - Scripts can call tools from multiple servers
 - Results must be namespaced per-call
@@ -102,11 +103,11 @@ scheme  server     original
 
 ### Examples
 
-| Original | Server | Namespaced |
-|----------|--------|------------|
-| `file:///data.json` | calculator | `mcp://calculator/file:///data.json` |
-| `https://api.example.com/doc` | my-api | `mcp://my-api/https://api.example.com/doc` |
-| `custom://resource/1` | data-server | `mcp://data-server/custom://resource/1` |
+| Original                      | Server      | Namespaced                                 |
+| ----------------------------- | ----------- | ------------------------------------------ |
+| `file:///data.json`           | calculator  | `mcp://calculator/file:///data.json`       |
+| `https://api.example.com/doc` | my-api      | `mcp://my-api/https://api.example.com/doc` |
+| `custom://resource/1`         | data-server | `mcp://data-server/custom://resource/1`    |
 
 ## Resource Aggregation Service
 
@@ -155,6 +156,7 @@ sequenceDiagram
 ### Caching
 
 Resources are cached per session:
+
 - First `listResources()` call fetches from all servers
 - Subsequent calls return cached data
 - Cache invalidated on `resources/list_changed` notification
@@ -173,6 +175,7 @@ Example: calculator/help
 ### Listing Prompts
 
 Similar flow to resources:
+
 1. Fetch from all servers
 2. Prefix each prompt name with server name
 3. Return aggregated list
@@ -202,15 +205,17 @@ Prompts can contain embedded resources or resource links. These are also namespa
 
 ```json
 {
-  "messages": [{
-    "role": "user",
-    "content": {
-      "type": "resource",
-      "resource": {
-        "uri": "mcp://calculator/file:///template.txt"
+  "messages": [
+    {
+      "role": "user",
+      "content": {
+        "type": "resource",
+        "resource": {
+          "uri": "mcp://calculator/file:///template.txt"
+        }
       }
     }
-  }]
+  ]
 }
 ```
 
@@ -220,30 +225,36 @@ When tools return resources, the Lua runtime namespaces them:
 
 ### Content Types Namespaced
 
-| Content Type | Field Namespaced |
-|--------------|------------------|
-| `resource` | `resource.uri` |
-| `resource_link` | `uri` |
+| Content Type    | Field Namespaced |
+| --------------- | ---------------- |
+| `resource`      | `resource.uri`   |
+| `resource_link` | `uri`            |
 
 ### Example
 
 Tool returns:
+
 ```json
 {
-  "content": [{
-    "type": "resource_link",
-    "uri": "file:///output.json"
-  }]
+  "content": [
+    {
+      "type": "resource_link",
+      "uri": "file:///output.json"
+    }
+  ]
 }
 ```
 
 After namespacing (from `data-server`):
+
 ```json
 {
-  "content": [{
-    "type": "resource_link",
-    "uri": "mcp://data-server/file:///output.json"
-  }]
+  "content": [
+    {
+      "type": "resource_link",
+      "uri": "mcp://data-server/file:///output.json"
+    }
+  ]
 }
 ```
 
@@ -254,14 +265,14 @@ The `src/utils/resource-uri.ts` module provides:
 ### namespaceResourceUri
 
 ```typescript
-namespaceResourceUri("data-server", "file:///data.json")
+namespaceResourceUri("data-server", "file:///data.json");
 // → "mcp://data-server/file:///data.json"
 ```
 
 ### parseResourceUri
 
 ```typescript
-parseResourceUri("mcp://data-server/file:///data.json")
+parseResourceUri("mcp://data-server/file:///data.json");
 // → { serverName: "data-server", originalUri: "file:///data.json" }
 ```
 
@@ -270,7 +281,7 @@ parseResourceUri("mcp://data-server/file:///data.json")
 Namespaces a full resource object:
 
 ```typescript
-namespaceResource("server", { uri: "file:///x", name: "X" })
+namespaceResource("server", { uri: "file:///x", name: "X" });
 // → { uri: "mcp://server/file:///x", name: "X" }
 ```
 
@@ -304,12 +315,12 @@ Error: Invalid namespaced URI format
 
 ## Implementation Files
 
-| File | Purpose |
-|------|---------|
-| `src/utils/resource-uri.ts` | URI namespacing/parsing utilities |
-| `src/mcp/resource-aggregation-service.ts` | Resource listing and reading |
-| `src/mcp/prompt-aggregation-service.ts` | Prompt listing and getting |
-| `src/lua/runtime.ts` | Tool result namespacing |
+| File                                      | Purpose                           |
+| ----------------------------------------- | --------------------------------- |
+| `src/utils/resource-uri.ts`               | URI namespacing/parsing utilities |
+| `src/mcp/resource-aggregation-service.ts` | Resource listing and reading      |
+| `src/mcp/prompt-aggregation-service.ts`   | Prompt listing and getting        |
+| `src/lua/runtime.ts`                      | Tool result namespacing           |
 
 ## Design Decisions
 
@@ -322,6 +333,7 @@ Error: Invalid namespaced URI format
 ### Why Namespace in Runtime Too?
 
 The aggregation services handle list/read operations, but tool results also need namespacing because:
+
 - Tools can return resource links
 - The runtime knows the source server
 - Scripts can call multiple servers in one execution
@@ -329,6 +341,7 @@ The aggregation services handle list/read operations, but tool results also need
 ### Why Not Modify Original URIs?
 
 We preserve the original URI after the server name so:
+
 - Upstream servers receive the exact URIs they expect
 - Easy round-trip: namespace → parse → original
 - No information loss

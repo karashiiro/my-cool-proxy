@@ -7,36 +7,30 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 export interface ClientConfig {
   /** Port of the gateway server */
   gatewayPort: number;
-  /** Session ID for this client */
-  sessionId: string;
-  /** Optional client name (defaults to session ID) */
+  /** Optional client name */
   clientName?: string;
 }
 
 /**
  * Creates and connects an MCP client to the gateway.
- * Returns both the client and transport for cleanup.
+ * Session management is handled automatically by the MCP protocol.
+ * Returns the connected client.
  */
 export async function createGatewayClient(
   config: ClientConfig,
 ): Promise<Client> {
   const client = new Client(
     {
-      name: config.clientName || `client-${config.sessionId}`,
+      name: config.clientName || "test-client",
       version: "1.0.0",
     },
     { capabilities: {} },
   );
 
+  // Let the MCP SDK handle session negotiation automatically
+  // No need to provide a session ID - the server generates one
   const transport = new StreamableHTTPClientTransport(
     new URL(`http://localhost:${config.gatewayPort}/mcp`),
-    {
-      requestInit: {
-        headers: {
-          "mcp-session-id": config.sessionId,
-        },
-      },
-    },
   );
 
   await client.connect(transport);
@@ -44,16 +38,20 @@ export async function createGatewayClient(
 }
 
 /**
- * Creates multiple clients with different session IDs.
+ * Creates multiple clients, each with their own session.
+ * Each client will get a unique server-generated session ID.
  * Useful for multi-session testing.
  */
 export async function createMultipleClients(
   gatewayPort: number,
-  sessionIds: string[],
+  count: number,
 ): Promise<Client[]> {
   return Promise.all(
-    sessionIds.map((sessionId) =>
-      createGatewayClient({ gatewayPort, sessionId }),
+    Array.from({ length: count }, (_, i) =>
+      createGatewayClient({
+        gatewayPort,
+        clientName: `multi-client-${i + 1}`,
+      }),
     ),
   );
 }

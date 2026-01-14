@@ -5,6 +5,7 @@ This document explains how the MCP Gateway Proxy manages sessions, client connec
 ## Overview
 
 In HTTP mode, each client gets an isolated session with:
+
 - Dedicated MCP client connections to upstream servers
 - Separate caches for tools, resources, and prompts
 - Session ID propagation to upstream servers
@@ -38,12 +39,12 @@ flowchart TB
 
 MCP clients are stored in a map keyed by `${serverName}-${sessionId}`:
 
-| Session | Server | Client Key |
-|---------|--------|------------|
-| session-123 | calculator | `calculator-session-123` |
+| Session     | Server      | Client Key                |
+| ----------- | ----------- | ------------------------- |
+| session-123 | calculator  | `calculator-session-123`  |
 | session-123 | data-server | `data-server-session-123` |
-| session-456 | calculator | `calculator-session-456` |
-| default | calculator | `calculator-default` |
+| session-456 | calculator  | `calculator-session-456`  |
+| default     | calculator  | `calculator-default`      |
 
 This ensures complete isolation between sessions.
 
@@ -146,6 +147,7 @@ flowchart LR
 ```
 
 **Exception:** Pending and default session IDs are NOT propagated to avoid conflicts:
+
 - `pending-*` IDs are temporary and shouldn't create upstream sessions
 - `default` is reserved for stdio mode
 
@@ -154,7 +156,7 @@ Implementation in `src/mcp/client-manager.ts`:
 ```typescript
 const headers: Record<string, string> = { ...config.headers };
 if (sessionId !== "default" && !sessionId.startsWith("pending-")) {
-    headers["mcp-session-id"] = sessionId;
+  headers["mcp-session-id"] = sessionId;
 }
 ```
 
@@ -179,6 +181,7 @@ flowchart TB
 ### Race Condition Prevention
 
 Multiple concurrent requests might try to create the same transport. The manager uses:
+
 - `pendingCreation` Set to track in-progress creations
 - Polling loop (10ms intervals) to wait for pending transports
 - Cleanup of stale pending entries after 30 seconds
@@ -186,6 +189,7 @@ Multiple concurrent requests might try to create the same transport. The manager
 ### Transport Cleanup
 
 When a transport closes:
+
 1. `onclose` handler fires
 2. Both the SDK-generated and original session IDs are removed from cache
 3. Resources are freed
@@ -207,6 +211,7 @@ flowchart TB
 ```
 
 Cache invalidation:
+
 - On `tools/list_changed` notification from upstream
 - Cache is cleared, next call fetches fresh data
 
@@ -227,12 +232,14 @@ Optional `allowedTools` configuration restricts which tools are exposed:
 ```
 
 Filtering happens in `MCPClientSession.listTools()`:
+
 - If `allowedTools` is set, only matching tools are returned
 - If not set, all tools are available
 
 ### Resource/Prompt Caching
 
 Similar caching pattern for resources and prompts:
+
 - Cached after first fetch
 - Invalidated on `resources/list_changed` or `prompts/list_changed`
 - Supports pagination for large collections
@@ -266,27 +273,28 @@ sequenceDiagram
 
 ## Stdio Mode Differences
 
-| Aspect | HTTP Mode | Stdio Mode |
-|--------|-----------|------------|
-| Session ID | From header or generated | Fixed "default" |
-| Client init | Lazy (on first request) | Eager (at startup) |
-| Multiple sessions | Yes | No |
-| Transport manager | Used | Not used |
-| Session controller | Used | Not used |
+| Aspect             | HTTP Mode                | Stdio Mode         |
+| ------------------ | ------------------------ | ------------------ |
+| Session ID         | From header or generated | Fixed "default"    |
+| Client init        | Lazy (on first request)  | Eager (at startup) |
+| Multiple sessions  | Yes                      | No                 |
+| Transport manager  | Used                     | Not used           |
+| Session controller | Used                     | Not used           |
 
 In stdio mode:
+
 - All clients initialized during `startStdioMode()`
 - Single gateway server connects to `StdioServerTransport`
 - No session isolation needed
 
 ## Implementation Files
 
-| File | Purpose |
-|------|---------|
-| `src/mcp/client-manager.ts` | Client lifecycle and session keying |
-| `src/mcp/client-session.ts` | Per-client caching and filtering |
-| `src/mcp/transport-manager.ts` | HTTP transport caching |
-| `src/controllers/mcp-session-controller.ts` | Request routing and session init |
+| File                                        | Purpose                             |
+| ------------------------------------------- | ----------------------------------- |
+| `src/mcp/client-manager.ts`                 | Client lifecycle and session keying |
+| `src/mcp/client-session.ts`                 | Per-client caching and filtering    |
+| `src/mcp/transport-manager.ts`              | HTTP transport caching              |
+| `src/controllers/mcp-session-controller.ts` | Request routing and session init    |
 
 ## Best Practices
 

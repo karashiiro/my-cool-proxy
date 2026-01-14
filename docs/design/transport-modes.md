@@ -63,12 +63,12 @@ sequenceDiagram
 
 ### Key Characteristics
 
-| Aspect | Description |
-|--------|-------------|
-| **Sessions** | Each client gets an isolated session identified by `mcp-session-id` header |
-| **Client Init** | MCP clients created lazily when a session first makes a request |
-| **Transport** | Uses `WebStandardStreamableHTTPServerTransport` from MCP SDK |
-| **Endpoint** | Single `/mcp` endpoint handles GET (SSE), POST (messages), DELETE (cleanup) |
+| Aspect          | Description                                                                 |
+| --------------- | --------------------------------------------------------------------------- |
+| **Sessions**    | Each client gets an isolated session identified by `mcp-session-id` header  |
+| **Client Init** | MCP clients created lazily when a session first makes a request             |
+| **Transport**   | Uses `WebStandardStreamableHTTPServerTransport` from MCP SDK                |
+| **Endpoint**    | Single `/mcp` endpoint handles GET (SSE), POST (messages), DELETE (cleanup) |
 
 ### Session ID Handling
 
@@ -88,6 +88,7 @@ sequenceDiagram
 ```
 
 Environment overrides:
+
 - `PORT` - Override the port
 - `HOST` - Override the host
 
@@ -135,12 +136,12 @@ sequenceDiagram
 
 ### Key Characteristics
 
-| Aspect | Description |
-|--------|-------------|
-| **Sessions** | Single session with fixed ID "default" |
-| **Client Init** | All MCP clients initialized eagerly at startup |
-| **Transport** | Uses `StdioServerTransport` from MCP SDK |
-| **Communication** | JSON-RPC over stdin/stdout |
+| Aspect            | Description                                    |
+| ----------------- | ---------------------------------------------- |
+| **Sessions**      | Single session with fixed ID "default"         |
+| **Client Init**   | All MCP clients initialized eagerly at startup |
+| **Transport**     | Uses `StdioServerTransport` from MCP SDK       |
+| **Communication** | JSON-RPC over stdin/stdout                     |
 
 ### Configuration
 
@@ -167,14 +168,14 @@ Port and host settings are ignored in stdio mode.
 
 ## Comparison
 
-| Feature | HTTP Mode | Stdio Mode |
-|---------|-----------|------------|
-| Multiple sessions | Yes | No |
-| Client initialization | Lazy | Eager |
-| Session ID | From header | "default" |
-| Development server | Works | Not supported |
-| Typical use case | Web APIs | CLI tools |
-| Transport | SSE/HTTP | stdin/stdout |
+| Feature               | HTTP Mode   | Stdio Mode    |
+| --------------------- | ----------- | ------------- |
+| Multiple sessions     | Yes         | No            |
+| Client initialization | Lazy        | Eager         |
+| Session ID            | From header | "default"     |
+| Development server    | Works       | Not supported |
+| Typical use case      | Web APIs    | CLI tools     |
+| Transport             | SSE/HTTP    | stdin/stdout  |
 
 ## Implementation Details
 

@@ -2,9 +2,11 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { ReadResourceCallback } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
+import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import * as z from "zod";
+import { randomUUID } from "node:crypto";
 
 // Sample data for resources
 const testData = {
@@ -173,26 +175,52 @@ export async function startHttpDataServer(port: number): Promise<{
   // Create HTTP server with Hono
   const app = new Hono();
   app.all("/mcp", async (c) => {
-    // Get session ID from header (or use a default)
-    const sessionId = c.req.header("mcp-session-id") || "default";
+    const sessionId = c.req.header("mcp-session-id");
 
-    // Get or create transport for this session
-    let transport = transports.get(sessionId);
-    let server = servers.get(sessionId);
-
-    if (!transport || !server) {
-      // Create new transport and server for this session
-      transport = new WebStandardStreamableHTTPServerTransport({
-        sessionIdGenerator: () => sessionId,
-      });
-      server = createDataServer();
-      await server.connect(transport);
-
-      transports.set(sessionId, transport);
-      servers.set(sessionId, server);
+    // Parse body to check if it's an initialize request
+    const rawRequest = c.req.raw;
+    const bodyText = await rawRequest.text();
+    let body: unknown = null;
+    try {
+      body = bodyText ? JSON.parse(bodyText) : null;
+    } catch {
+      // Invalid JSON
     }
 
-    return transport.handleRequest(c.req.raw);
+    // Helper to recreate request (since we consumed the body)
+    const recreateRequest = () =>
+      new Request(rawRequest.url, {
+        method: rawRequest.method,
+        headers: rawRequest.headers,
+        body: bodyText || undefined,
+      });
+
+    // New session: no session ID and initialize request
+    if (!sessionId && body && isInitializeRequest(body)) {
+      const newSessionId = randomUUID();
+      const transport = new WebStandardStreamableHTTPServerTransport({
+        sessionIdGenerator: () => newSessionId,
+      });
+      const server = createDataServer();
+      await server.connect(transport);
+
+      transports.set(newSessionId, transport);
+      servers.set(newSessionId, server);
+
+      return transport.handleRequest(recreateRequest());
+    }
+
+    // Existing session
+    if (sessionId) {
+      const transport = transports.get(sessionId);
+      if (!transport) {
+        return c.text("Session not found", 404);
+      }
+      return transport.handleRequest(recreateRequest());
+    }
+
+    // Invalid request (no session ID, not an initialize request)
+    return c.text("Bad request - missing session ID", 400);
   });
 
   const httpServer = serve({

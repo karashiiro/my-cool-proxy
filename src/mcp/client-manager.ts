@@ -57,15 +57,12 @@ export class MCPClientManager implements IMCPClientManager {
       },
     );
 
-    // Only propagate real session IDs (not temporary/generated ones)
-    // This allows test servers to isolate sessions while avoiding issues with production servers
-    // Skip: "pending-..." (generated for new connections) and "default" (fallback when no session ID)
-    const shouldPropagateSessionId =
-      sessionId && !sessionId.startsWith("pending-") && sessionId !== "default";
-
+    // NOTE: We do NOT propagate session IDs to upstream servers.
+    // Each upstream MCP server connection goes through its own fresh initialization
+    // and gets its own session ID from that server. The gateway's internal session ID
+    // is only for tracking which gateway session owns which upstream client connections.
     const allHeaders = {
       ...headers,
-      ...(shouldPropagateSessionId ? { "mcp-session-id": sessionId } : {}),
     };
 
     const transport = new StreamableHTTPClientTransport(new URL(endpoint), {

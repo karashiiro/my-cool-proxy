@@ -5,20 +5,50 @@ import type { ContainerBindingMap } from "./container/binding-map.js";
 import { TYPES } from "./types/index.js";
 import type {
   ILogger,
-  IMCPSessionController,
   IMCPClientManager,
   IShutdownHandler,
   ServerConfig,
 } from "./types/interfaces.js";
-import { serve } from "@hono/node-server";
-import { Hono } from "hono";
-import { cors } from "hono/cors";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { serveHttp } from "@karashiiro/mcp/http";
+import { serveStdio } from "@karashiiro/mcp/stdio";
 import { loadConfig, mergeEnvConfig } from "./utils/config-loader.js";
-import type { MCPGatewayServer } from "./mcp/gateway-server.js";
+import { MCPGatewayServer } from "./mcp/gateway-server.js";
+import type { IToolRegistry } from "./tools/tool-registry.js";
+import type { ResourceAggregationService } from "./mcp/resource-aggregation-service.js";
+import type { PromptAggregationService } from "./mcp/prompt-aggregation-service.js";
 
 // Load configuration from file and merge with environment variables
 const config = mergeEnvConfig(loadConfig());
+
+/**
+ * Initialize MCP clients for a given session.
+ */
+async function initializeClientsForSession(
+  sessionId: string,
+  config: ServerConfig,
+  clientManager: IMCPClientManager,
+): Promise<void> {
+  for (const [name, clientConfig] of Object.entries(config.mcpClients)) {
+    if (clientConfig.type === "http") {
+      await clientManager.addHttpClient(
+        name,
+        clientConfig.url,
+        sessionId,
+        clientConfig.headers,
+        clientConfig.allowedTools,
+      );
+    } else if (clientConfig.type === "stdio") {
+      await clientManager.addStdioClient(
+        name,
+        clientConfig.command,
+        sessionId,
+        clientConfig.args,
+        clientConfig.env,
+        clientConfig.allowedTools,
+      );
+    }
+  }
+}
 
 async function startHttpMode(
   container: TypedContainer<ContainerBindingMap>,
@@ -31,53 +61,55 @@ async function startHttpMode(
     throw new Error("Port and host are required for HTTP mode");
   }
 
-  // Get session controller from DI container
-  const sessionController = container.get<IMCPSessionController>(
-    TYPES.MCPSessionController,
+  // Get shared services from DI container
+  const clientManager = container.get<IMCPClientManager>(
+    TYPES.MCPClientManager,
   );
-
-  // Get shutdown handler from DI container
+  const toolRegistry = container.get<IToolRegistry>(TYPES.ToolRegistry);
+  const resourceAggregation = container.get<ResourceAggregationService>(
+    TYPES.ResourceAggregationService,
+  );
+  const promptAggregation = container.get<PromptAggregationService>(
+    TYPES.PromptAggregationService,
+  );
   const shutdownHandler = container.get<IShutdownHandler>(
     TYPES.ShutdownHandler,
   );
 
-  // Setup Hono app
-  const app = new Hono();
+  // Start HTTP server with per-session factory
+  const handle = await serveHttp(
+    async (sessionId) => {
+      logger.info(`Creating gateway server for session ${sessionId}`);
 
-  // Enable CORS for all origins (matching MCP SDK example)
-  app.use(
-    "*",
-    cors({
-      origin: "*",
-      allowMethods: ["GET", "POST", "DELETE", "OPTIONS"],
-      allowHeaders: [
-        "Content-Type",
-        "mcp-session-id",
-        "Last-Event-ID",
-        "mcp-protocol-version",
-      ],
-      exposeHeaders: ["mcp-session-id", "mcp-protocol-version"],
-    }),
+      // Initialize MCP clients for this session
+      await initializeClientsForSession(sessionId, config, clientManager);
+
+      // Create new gateway server instance for this session
+      const gatewayServer = new MCPGatewayServer(
+        toolRegistry,
+        clientManager,
+        logger,
+        resourceAggregation,
+        promptAggregation,
+      );
+
+      return gatewayServer.getServer();
+    },
+    {
+      port: config.port,
+      host: config.host,
+      sessions: {},
+    },
   );
 
-  // Handle all HTTP methods (POST for messages, GET for SSE, DELETE for cleanup)
-  app.all("/mcp", async (c) => {
-    return await sessionController.handleRequest(c.req.raw);
-  });
-
-  // Start the server
   logger.info(
     `MCP Lua Gateway listening on http://${config.host}:${config.port}`,
   );
 
-  serve({
-    fetch: app.fetch,
-    port: config.port,
-  });
-
   // Graceful shutdown
-  process.on("SIGINT", () => {
-    void shutdownHandler.shutdown();
+  process.on("SIGINT", async () => {
+    await handle.close();
+    await shutdownHandler.shutdown();
   });
 }
 
@@ -86,46 +118,40 @@ async function startStdioMode(
   config: ServerConfig,
 ) {
   const logger = container.get<ILogger>(TYPES.Logger);
-  const gatewayServer = container.get<MCPGatewayServer>(TYPES.MCPGatewayServer);
   const clientManager = container.get<IMCPClientManager>(
     TYPES.MCPClientManager,
   );
+  const toolRegistry = container.get<IToolRegistry>(TYPES.ToolRegistry);
+  const resourceAggregation = container.get<ResourceAggregationService>(
+    TYPES.ResourceAggregationService,
+  );
+  const promptAggregation = container.get<PromptAggregationService>(
+    TYPES.PromptAggregationService,
+  );
 
   // Fixed session ID for stdio (single session mode)
-  // Use "default" to match what StdioServerTransport provides in tool context
   const SESSION_ID = "default";
 
   // Initialize all configured MCP clients upfront
-  for (const [name, clientConfig] of Object.entries(config.mcpClients)) {
-    if (clientConfig.type === "http") {
-      await clientManager.addHttpClient(
-        name,
-        clientConfig.url,
-        SESSION_ID,
-        clientConfig.headers,
-        clientConfig.allowedTools,
-      );
-    } else if (clientConfig.type === "stdio") {
-      await clientManager.addStdioClient(
-        name,
-        clientConfig.command,
-        SESSION_ID,
-        clientConfig.args,
-        clientConfig.env,
-        clientConfig.allowedTools,
-      );
-    }
-  }
+  await initializeClientsForSession(SESSION_ID, config, clientManager);
 
-  // Create and connect stdio transport
-  // Note: connect() automatically calls start() for us
-  const transport = new StdioServerTransport();
-  await gatewayServer.getServer().connect(transport);
+  // Start stdio server
+  const handle = await serveStdio(() => {
+    const gatewayServer = new MCPGatewayServer(
+      toolRegistry,
+      clientManager,
+      logger,
+      resourceAggregation,
+      promptAggregation,
+    );
+    return gatewayServer.getServer();
+  });
 
   logger.info("MCP Lua Gateway running in stdio mode");
 
   // Graceful shutdown
   process.on("SIGINT", async () => {
+    await handle.close();
     await clientManager.close();
     logger.info("Shutdown complete");
     process.exit(0);

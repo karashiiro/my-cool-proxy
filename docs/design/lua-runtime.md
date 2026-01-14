@@ -62,17 +62,18 @@ flowchart TB
 
 The runtime removes access to dangerous Lua APIs:
 
-| Removed Global | Why |
-|---------------|-----|
-| `os` | System commands, environment access |
-| `io` | File system operations |
-| `require` | Module loading |
-| `dofile` | Execute external files |
-| `loadfile` | Load external files |
-| `package` | Package/module system |
-| `debug` | Debug introspection |
+| Removed Global | Why                                 |
+| -------------- | ----------------------------------- |
+| `os`           | System commands, environment access |
+| `io`           | File system operations              |
+| `require`      | Module loading                      |
+| `dofile`       | Execute external files              |
+| `loadfile`     | Load external files                 |
+| `package`      | Package/module system               |
+| `debug`        | Debug introspection                 |
 
 Scripts can only:
+
 - Use basic Lua operations (math, strings, tables)
 - Call MCP server tools through injected globals
 - Return results via the `result()` function
@@ -245,6 +246,7 @@ Namespaced:  mcp://calculator/file:///data.json
 ```
 
 This happens in the runtime during tool execution because:
+
 - The runtime knows which server each tool came from
 - Scripts can call tools from multiple servers
 - Namespacing must happen per-call, not per-response
@@ -306,12 +308,12 @@ result({ user_names = names })
 
 ## Implementation Files
 
-| File | Purpose |
-|------|---------|
-| `src/lua/runtime.ts` | Main `WasmoonRuntime` class |
+| File                            | Purpose                           |
+| ------------------------------- | --------------------------------- |
+| `src/lua/runtime.ts`            | Main `WasmoonRuntime` class       |
 | `src/tools/execute-lua-tool.ts` | Gateway tool that invokes runtime |
-| `src/utils/lua-identifier.ts` | Name sanitization utilities |
-| `src/utils/resource-uri.ts` | URI namespacing for tool results |
+| `src/utils/lua-identifier.ts`   | Name sanitization utilities       |
+| `src/utils/resource-uri.ts`     | URI namespacing for tool results  |
 
 ## Related Documentation
 

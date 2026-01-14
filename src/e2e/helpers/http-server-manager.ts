@@ -1,19 +1,20 @@
 import "reflect-metadata";
-import { serve } from "@hono/node-server";
-import { Hono } from "hono";
-import { cors } from "hono/cors";
+import { serveHttp, type ServerHandle } from "@karashiiro/mcp/http";
 import { createContainer } from "../../container/inversify.config.js";
 import { TYPES } from "../../types/index.js";
 import type {
   ILogger,
-  IMCPSessionController,
   IMCPClientManager,
   ServerConfig,
+  MCPClientConfig,
 } from "../../types/interfaces.js";
+import { MCPGatewayServer } from "../../mcp/gateway-server.js";
+import type { ResourceAggregationService } from "../../mcp/resource-aggregation-service.js";
+import type { PromptAggregationService } from "../../mcp/prompt-aggregation-service.js";
+import type { IToolRegistry } from "../../tools/tool-registry.js";
 
 export class HttpServerManager {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private server: any = null;
+  private serverHandle: ServerHandle | null = null;
   private clientManager: IMCPClientManager | null = null;
 
   /**
@@ -22,7 +23,7 @@ export class HttpServerManager {
    * @param config - Server configuration
    */
   async start(config: ServerConfig): Promise<void> {
-    if (this.server) {
+    if (this.serverHandle) {
       throw new Error("Server is already running");
     }
 
@@ -34,45 +35,46 @@ export class HttpServerManager {
     const container = createContainer(config);
 
     const logger = container.get<ILogger>(TYPES.Logger);
-    const sessionController = container.get<IMCPSessionController>(
-      TYPES.MCPSessionController,
-    );
 
     // Store client manager for cleanup
     this.clientManager = container.get<IMCPClientManager>(
       TYPES.MCPClientManager,
     );
 
-    // Setup Hono app (same as src/index.ts)
-    const app = new Hono();
-
-    // Enable CORS for MCP protocol
-    app.use(
-      "*",
-      cors({
-        origin: "*",
-        allowMethods: ["GET", "POST", "DELETE", "OPTIONS"],
-        allowHeaders: [
-          "Content-Type",
-          "mcp-session-id",
-          "Last-Event-ID",
-          "mcp-protocol-version",
-        ],
-        exposeHeaders: ["mcp-session-id", "mcp-protocol-version"],
-      }),
+    // Get shared services from container
+    const toolRegistry = container.get<IToolRegistry>(TYPES.ToolRegistry);
+    const resourceAggregation = container.get<ResourceAggregationService>(
+      TYPES.ResourceAggregationService,
+    );
+    const promptAggregation = container.get<PromptAggregationService>(
+      TYPES.PromptAggregationService,
     );
 
-    // MCP endpoint
-    app.all("/mcp", async (c) => {
-      return await sessionController.handleRequest(c.req.raw);
-    });
+    const clientManager = this.clientManager;
 
-    // Start the server
-    this.server = serve({
-      fetch: app.fetch,
-      port: config.port,
-      hostname: config.host,
-    });
+    // Use @karashiiro/mcp's serveHttp with session-aware factory
+    this.serverHandle = await serveHttp(
+      async (sessionId) => {
+        // Initialize MCP clients for this session
+        await initializeClientsForSession(sessionId, config, clientManager);
+
+        // Create gateway server for this session
+        const gatewayServer = new MCPGatewayServer(
+          toolRegistry,
+          clientManager,
+          logger,
+          resourceAggregation,
+          promptAggregation,
+        );
+
+        return gatewayServer.getServer();
+      },
+      {
+        port: config.port,
+        host: config.host,
+        sessions: {},
+      },
+    );
 
     logger.info(
       `Test MCP Gateway started on http://${config.host}:${config.port}`,
@@ -86,22 +88,14 @@ export class HttpServerManager {
    * Stops the HTTP gateway server.
    */
   async stop(): Promise<void> {
+    if (this.serverHandle) {
+      await this.serverHandle.close();
+      this.serverHandle = null;
+    }
+
     if (this.clientManager) {
       await this.clientManager.close();
       this.clientManager = null;
-    }
-
-    if (this.server) {
-      await new Promise<void>((resolve, reject) => {
-        this.server!.close((err: Error | undefined) => {
-          if (err) {
-            reject(err);
-          } else {
-            resolve();
-          }
-        });
-      });
-      this.server = null;
     }
   }
 
@@ -146,5 +140,54 @@ export class HttpServerManager {
     }
 
     throw new Error(`Server did not become ready within ${timeoutMs}ms`);
+  }
+}
+
+/**
+ * Initialize MCP clients for a given session.
+ * This is called when a new session is created in HTTP mode.
+ */
+async function initializeClientsForSession(
+  sessionId: string,
+  config: ServerConfig,
+  clientManager: IMCPClientManager,
+): Promise<void> {
+  const initPromises: Promise<void>[] = [];
+
+  for (const [name, clientConfig] of Object.entries(config.mcpClients)) {
+    initPromises.push(
+      initializeSingleClient(name, clientConfig, sessionId, clientManager),
+    );
+  }
+
+  await Promise.all(initPromises);
+}
+
+/**
+ * Initialize a single MCP client.
+ */
+async function initializeSingleClient(
+  name: string,
+  clientConfig: MCPClientConfig,
+  sessionId: string,
+  clientManager: IMCPClientManager,
+): Promise<void> {
+  if (clientConfig.type === "http") {
+    await clientManager.addHttpClient(
+      name,
+      clientConfig.url,
+      sessionId,
+      clientConfig.headers,
+      clientConfig.allowedTools,
+    );
+  } else if (clientConfig.type === "stdio") {
+    await clientManager.addStdioClient(
+      name,
+      clientConfig.command,
+      sessionId,
+      clientConfig.args,
+      clientConfig.env,
+      clientConfig.allowedTools,
+    );
   }
 }

@@ -1,10 +1,8 @@
 import type {
   ILuaRuntime,
   IMCPClientManager,
-  ITransportManager,
   ILogger,
   ServerConfig,
-  IMCPSessionController,
   IShutdownHandler,
 } from "../types/interfaces.js";
 import type { MCPGatewayServer } from "../mcp/gateway-server.js";
@@ -24,13 +22,11 @@ export interface ContainerBindingMap {
   Logger: ILogger;
   LuaRuntime: ILuaRuntime;
   MCPClientManager: IMCPClientManager;
-  TransportManager: ITransportManager;
   MCPFormatterService: MCPFormatterService;
   ToolDiscoveryService: ToolDiscoveryService;
   ResourceAggregationService: ResourceAggregationService;
   PromptAggregationService: PromptAggregationService;
   MCPGatewayServer: MCPGatewayServer;
-  MCPSessionController: IMCPSessionController;
   ShutdownHandler: IShutdownHandler;
   Tool: ITool; // Multi-bound - use getAll() to retrieve all registered tools
   ToolRegistry: IToolRegistry;

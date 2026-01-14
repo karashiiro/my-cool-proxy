@@ -5,7 +5,6 @@
 export const TYPES = {
   LuaRuntime: "LuaRuntime",
   MCPClientManager: "MCPClientManager",
-  TransportManager: "TransportManager",
   SessionStore: "SessionStore",
   AuthStrategy: "AuthStrategy",
   ServerConfig: "ServerConfig",
@@ -15,7 +14,6 @@ export const TYPES = {
   PromptAggregationService: "PromptAggregationService",
   MCPFormatterService: "MCPFormatterService",
   MCPGatewayServer: "MCPGatewayServer",
-  MCPSessionController: "MCPSessionController",
   ShutdownHandler: "ShutdownHandler",
   CacheService: "CacheService",
   Tool: "Tool",

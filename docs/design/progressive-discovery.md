@@ -73,11 +73,13 @@ Discovers what MCP servers are available in the current session.
 **Input:** None
 
 **Output:** Formatted list of servers with:
+
 - Server name (original)
 - Lua identifier (sanitized for use in scripts)
 - Description, version, and instructions (if provided)
 
 **Example Output:**
+
 ```
 Available MCP Servers:
 
@@ -96,11 +98,13 @@ Provides data access tools
 Lists tools available on a specific server.
 
 **Input:**
+
 - `luaServerName` - The Lua identifier from `list-servers`
 
 **Output:** Brief descriptions of each tool with Lua identifiers
 
 **Example Output:**
+
 ```
 Tools for calculator:
 
@@ -116,15 +120,18 @@ Tools for calculator:
 Gets comprehensive information about a specific tool.
 
 **Input:**
+
 - `luaServerName` - Server's Lua identifier
 - `luaToolName` - Tool's Lua identifier
 
 **Output:**
+
 - Full description
 - Complete input schema with types and descriptions
 - Example usage in Lua
 
 **Example Output:**
+
 ```
 ## add
 
@@ -150,6 +157,7 @@ local result = calculator.add({
 Makes a sample call to see the actual response structure.
 
 **Input:**
+
 - `luaServerName` - Server's Lua identifier
 - `luaToolName` - Tool's Lua identifier
 - `sampleArgs` (optional) - Arguments for the sample call
@@ -157,6 +165,7 @@ Makes a sample call to see the actual response structure.
 **Output:** The actual response from calling the tool
 
 **Warning:** This tool **actually executes** the target tool. Only use with:
+
 - Read-only/idempotent operations
 - Tools with minimal cost
 - When you need to understand response structure
@@ -168,13 +177,16 @@ Makes a sample call to see the actual response structure.
 Executes a Lua script with access to all MCP servers.
 
 **Input:**
+
 - `script` - Lua code to execute
 
 **Output:** `CallToolResult` with:
+
 - Text content (always present)
 - Structured content (if result is an object)
 
 **Example:**
+
 ```lua
 local sum = calculator.add({ a = 10, b = 20 }):await()
 local product = calculator.multiply({ a = sum.result, b = 2 }):await()
@@ -222,25 +234,26 @@ flowchart TB
 
 ### Key Methods
 
-| Method | Purpose |
-|--------|---------|
-| `listServers()` | Gathers info from all clients for a session |
-| `listServerTools()` | Lists and sanitizes tool names for a server |
-| `getToolDetails()` | Formats full schema with Lua examples |
-| `inspectToolResponse()` | Generates and executes sample Lua script |
+| Method                  | Purpose                                     |
+| ----------------------- | ------------------------------------------- |
+| `listServers()`         | Gathers info from all clients for a session |
+| `listServerTools()`     | Lists and sanitizes tool names for a server |
+| `getToolDetails()`      | Formats full schema with Lua examples       |
+| `inspectToolResponse()` | Generates and executes sample Lua script    |
 
 ## Name Sanitization
 
 Server and tool names are sanitized to valid Lua identifiers:
 
-| Original | Lua Identifier |
-|----------|---------------|
-| `data-server` | `data_server` |
-| `my.api` | `my_api` |
-| `123numbers` | `_123numbers` |
-| `while` | `_while` |
+| Original      | Lua Identifier |
+| ------------- | -------------- |
+| `data-server` | `data_server`  |
+| `my.api`      | `my_api`       |
+| `123numbers`  | `_123numbers`  |
+| `while`       | `_while`       |
 
 The `sanitizeLuaIdentifier()` function in `src/utils/lua-identifier.ts` handles:
+
 - Replacing hyphens and dots with underscores
 - Prefixing names starting with digits
 - Escaping Lua reserved keywords

@@ -1,4 +1,3 @@
-import type { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import type { MCPClientSession } from "../mcp/client-session.js";
 
 export interface ILuaRuntime {
@@ -33,16 +32,6 @@ export interface IMCPClientManager {
     handler: (serverName: string, sessionId: string) => void,
   ): void;
   close(): Promise<void>;
-}
-
-export interface ITransportManager {
-  getOrCreate(sessionId: string): WebStandardStreamableHTTPServerTransport;
-  getOrCreateForRequest(
-    sessionId?: string,
-  ): WebStandardStreamableHTTPServerTransport;
-  has(sessionId: string): boolean;
-  remove(sessionId: string): void;
-  closeAll(): Promise<void>;
 }
 
 export interface ISessionStore {
@@ -112,10 +101,6 @@ export type ServerListItem = ServerInfo | ServerError;
 export interface ToolInfo {
   luaName: string;
   description: string;
-}
-
-export interface IMCPSessionController {
-  handleRequest(req: Request): Promise<Response>;
 }
 
 export interface IShutdownHandler {

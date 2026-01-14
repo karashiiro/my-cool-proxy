@@ -34,6 +34,7 @@ This keeps context minimal until tools are actually needed. See [Progressive Dis
 ### 2. Session Isolation
 
 In HTTP mode, each client session gets:
+
 - Isolated MCP client connections to upstream servers
 - Separate caches for resources, prompts, and tool lists
 - Session IDs propagated to upstream servers for request correlation
@@ -43,6 +44,7 @@ See [Session Management](./session-management.md) for details.
 ### 3. Lua Orchestration
 
 Tools are called through Lua scripts, enabling:
+
 - Multi-server tool calls in a single request
 - Result processing and transformation
 - Secure sandboxed execution
@@ -139,26 +141,26 @@ sequenceDiagram
 
 ## Key Components
 
-| Component | File | Purpose |
-|-----------|------|---------|
-| Entry Point | `src/index.ts` | Starts HTTP or stdio mode based on config |
-| DI Container | `src/container/inversify.config.ts` | Wires all dependencies together |
-| Gateway Server | `src/mcp/gateway-server.ts` | Main MCP server, registers tools |
-| Client Manager | `src/mcp/client-manager.ts` | Manages upstream MCP connections |
-| Transport Manager | `src/mcp/transport-manager.ts` | Caches HTTP transports per session |
-| Session Controller | `src/controllers/mcp-session-controller.ts` | Routes HTTP requests |
-| Lua Runtime | `src/lua/runtime.ts` | Executes user scripts |
-| Tool Discovery | `src/mcp/tool-discovery-service.ts` | Powers discovery tools |
+| Component          | File                                        | Purpose                                   |
+| ------------------ | ------------------------------------------- | ----------------------------------------- |
+| Entry Point        | `src/index.ts`                              | Starts HTTP or stdio mode based on config |
+| DI Container       | `src/container/inversify.config.ts`         | Wires all dependencies together           |
+| Gateway Server     | `src/mcp/gateway-server.ts`                 | Main MCP server, registers tools          |
+| Client Manager     | `src/mcp/client-manager.ts`                 | Manages upstream MCP connections          |
+| Transport Manager  | `src/mcp/transport-manager.ts`              | Caches HTTP transports per session        |
+| Session Controller | `src/controllers/mcp-session-controller.ts` | Routes HTTP requests                      |
+| Lua Runtime        | `src/lua/runtime.ts`                        | Executes user scripts                     |
+| Tool Discovery     | `src/mcp/tool-discovery-service.ts`         | Powers discovery tools                    |
 
 ## Transport Modes
 
 The gateway supports two transport modes:
 
-| Aspect | HTTP Mode | Stdio Mode |
-|--------|-----------|------------|
-| Sessions | Multiple concurrent | Single |
-| Client Init | Lazy (on first request) | Eager (at startup) |
-| Use Case | Web APIs, multiple agents | CLI tools, single agent |
+| Aspect      | HTTP Mode                 | Stdio Mode              |
+| ----------- | ------------------------- | ----------------------- |
+| Sessions    | Multiple concurrent       | Single                  |
+| Client Init | Lazy (on first request)   | Eager (at startup)      |
+| Use Case    | Web APIs, multiple agents | CLI tools, single agent |
 
 See [Transport Modes](./transport-modes.md) for details.
 

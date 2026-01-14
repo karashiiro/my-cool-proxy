@@ -2,7 +2,6 @@ import { injectable } from "inversify";
 import { $inject } from "../container/decorators.js";
 import { TYPES } from "../types/index.js";
 import type {
-  ITransportManager,
   IMCPClientManager,
   ILogger,
   IShutdownHandler,
@@ -15,10 +14,9 @@ import type {
  * receives a shutdown signal (e.g., SIGINT). It ensures all resources
  * are properly closed before the process exits.
  *
- * Shutdown order:
- * 1. Close all transports (disconnects active MCP sessions)
- * 2. Close all client connections
- * 3. Exit the process
+ * Note: Transport/server closing is handled by the @karashiiro/mcp library
+ * via ServerHandle.close(). This handler focuses on closing MCP client
+ * connections.
  *
  * Benefits of this extraction:
  * - Centralizes shutdown logic
@@ -29,8 +27,6 @@ import type {
 @injectable()
 export class ShutdownHandler implements IShutdownHandler {
   constructor(
-    @$inject(TYPES.TransportManager)
-    private transportManager: ITransportManager,
     @$inject(TYPES.MCPClientManager) private clientPool: IMCPClientManager,
     @$inject(TYPES.Logger) private logger: ILogger,
   ) {}
@@ -38,19 +34,15 @@ export class ShutdownHandler implements IShutdownHandler {
   /**
    * Perform graceful shutdown.
    *
-   * This method closes all transports and clients in the correct order,
-   * then exits the process.
+   * This method closes all client connections and exits the process.
+   * Note: Server handle should be closed before calling this.
    */
   async shutdown(): Promise<void> {
     this.logger.info("Shutting down...");
 
-    // Close all transports first (disconnects active sessions)
-    await this.transportManager.closeAll();
-
     // Close all client connections
     await this.clientPool.close();
 
-    // Gateway servers will be garbage collected when transports are destroyed
     this.logger.info("Shutdown complete");
 
     process.exit(0);
