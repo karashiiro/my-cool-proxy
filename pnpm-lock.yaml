@@ -15,8 +15,8 @@ importers:
         specifier: ^2.2.0
         version: 2.2.0(inversify@7.10.7(reflect-metadata@0.2.2))
       '@karashiiro/mcp':
-        specifier: 0.3.0
-        version: 0.3.0(@hono/node-server@1.19.7(hono@4.11.1))(@modelcontextprotocol/sdk@1.25.1(hono@4.11.1)(zod@4.2.1))(hono@4.11.1)
+        specifier: 0.4.0
+        version: 0.4.0(@hono/node-server@1.19.7(hono@4.11.1))(@modelcontextprotocol/sdk@1.25.1(hono@4.11.1)(zod@4.2.1))(hono@4.11.1)
       '@modelcontextprotocol/sdk':
         specifier: ^1.25.1
         version: 1.25.1(hono@4.11.1)(zod@4.2.1)
@@ -364,8 +364,8 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
-  '@karashiiro/mcp@0.3.0':
-    resolution: {integrity: sha512-1U9yxbBewWFO9XY7TKRmOFOi4TcPMiI3uKtf+ETyARvzxq+wHjDmZXPB4+hQNTx2rHbvnvDE41HNlkszmQb40g==}
+  '@karashiiro/mcp@0.4.0':
+    resolution: {integrity: sha512-4qi9FfL8KcyGCwVHMJ90IX68MW7I+mHbi8/rMUHc9UJRV0HXosZaJaMGK5Q+mMSmKBV7aRx8Ga/AdPVjEeMsYA==}
     peerDependencies:
       '@hono/node-server': ^1.19.8
       '@modelcontextprotocol/sdk': ^1.25.2
@@ -1849,7 +1849,7 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
 
-  '@karashiiro/mcp@0.3.0(@hono/node-server@1.19.7(hono@4.11.1))(@modelcontextprotocol/sdk@1.25.1(hono@4.11.1)(zod@4.2.1))(hono@4.11.1)':
+  '@karashiiro/mcp@0.4.0(@hono/node-server@1.19.7(hono@4.11.1))(@modelcontextprotocol/sdk@1.25.1(hono@4.11.1)(zod@4.2.1))(hono@4.11.1)':
     dependencies:
       '@modelcontextprotocol/sdk': 1.25.1(hono@4.11.1)(zod@4.2.1)
       uuid: 13.0.0
