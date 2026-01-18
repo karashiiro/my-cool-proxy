@@ -34,6 +34,7 @@ import type { IToolRegistry } from "../tools/tool-registry.js";
 // Mock logger
 const createMockLogger = (): ILogger => ({
   info: vi.fn(),
+  warn: vi.fn(),
   error: vi.fn(),
   debug: vi.fn(),
 });
@@ -46,6 +47,8 @@ const createMockClientManager = (
   addStdioClient: vi.fn(),
   getClient: vi.fn(),
   getClientsBySession: vi.fn(() => clients),
+  getFailedServers: vi.fn(() => new Map()),
+  closeSession: vi.fn(),
   setResourceListChangedHandler: vi.fn(),
   setPromptListChangedHandler: vi.fn(),
   close: vi.fn(),

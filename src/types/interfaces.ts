@@ -7,6 +7,12 @@ export interface ILuaRuntime {
   ): Promise<unknown>;
 }
 
+export interface ClientConnectionResult {
+  name: string;
+  success: boolean;
+  error?: string;
+}
+
 export interface IMCPClientManager {
   addHttpClient(
     name: string,
@@ -14,7 +20,7 @@ export interface IMCPClientManager {
     sessionId: string,
     headers?: Record<string, string>,
     allowedTools?: string[],
-  ): Promise<void>;
+  ): Promise<ClientConnectionResult>;
   addStdioClient(
     name: string,
     command: string,
@@ -22,9 +28,23 @@ export interface IMCPClientManager {
     args?: string[],
     env?: Record<string, string>,
     allowedTools?: string[],
-  ): Promise<void>;
+  ): Promise<ClientConnectionResult>;
   getClient(name: string, sessionId: string): Promise<MCPClientSession>;
   getClientsBySession(sessionId: string): Map<string, MCPClientSession>;
+  /**
+   * Get servers that failed to connect for a given session.
+   * Failed servers are tracked from connection attempts and remain until
+   * the session is closed via closeSession() or close().
+   * @param sessionId - The session ID to get failed servers for
+   * @returns Map of server name to error message
+   */
+  getFailedServers(sessionId: string): Map<string, string>;
+  /**
+   * Close all clients and clear failed server records for a specific session.
+   * Should be called when a session terminates to prevent memory leaks.
+   * @param sessionId - The session ID to clean up
+   */
+  closeSession(sessionId: string): Promise<void>;
   setResourceListChangedHandler(
     handler: (serverName: string, sessionId: string) => void,
   ): void;
@@ -77,6 +97,7 @@ export interface ServerConfig {
 
 export interface ILogger {
   info(message: string): void;
+  warn(message: string): void;
   error(message: string, error?: Error): void;
   debug(message: string): void;
 }

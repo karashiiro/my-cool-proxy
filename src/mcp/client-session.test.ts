@@ -11,6 +11,7 @@ import {
 // Mock logger
 const createMockLogger = (): ILogger => ({
   info: vi.fn(),
+  warn: vi.fn(),
   error: vi.fn(),
   debug: vi.fn(),
 });

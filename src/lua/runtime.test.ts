@@ -12,6 +12,7 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 // Mock logger - used for test servers
 const createMockLogger = () => ({
   info: vi.fn(),
+  warn: vi.fn(),
   error: vi.fn(),
   debug: vi.fn(),
 });

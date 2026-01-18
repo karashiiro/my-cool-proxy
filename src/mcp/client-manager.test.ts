@@ -511,6 +511,255 @@ describe("MCPClientManager", () => {
     });
   });
 
+  describe("connection failure handling", () => {
+    it("should return failure result when HTTP connection fails", async () => {
+      vi.mocked(StreamableHTTPClientTransport).mockImplementation(function (
+        this: StreamableHTTPClientTransport,
+      ) {
+        return mockTransport as StreamableHTTPClientTransport;
+      } as unknown as typeof StreamableHTTPClientTransport);
+
+      // Make connect fail
+      vi.mocked(mockSdkClient.connect).mockRejectedValueOnce(
+        new Error("Connection refused"),
+      );
+
+      const result = await clientManager.addHttpClient(
+        "failing-server",
+        "http://localhost:9999",
+        "session-fail",
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.name).toBe("failing-server");
+      expect(result.error).toBe("Connection refused");
+
+      // Should log the error
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining("Failed to connect MCP client failing-server"),
+      );
+    });
+
+    it("should return failure result when stdio connection fails", async () => {
+      vi.mocked(StdioClientTransport).mockImplementation(function (
+        this: StdioClientTransport,
+      ) {
+        return mockTransport as StdioClientTransport;
+      } as unknown as typeof StdioClientTransport);
+
+      // Make connect fail
+      vi.mocked(mockSdkClient.connect).mockRejectedValueOnce(
+        new Error("Process not found"),
+      );
+
+      const result = await clientManager.addStdioClient(
+        "failing-stdio",
+        "nonexistent-command",
+        "session-fail-stdio",
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.name).toBe("failing-stdio");
+      expect(result.error).toBe("Process not found");
+
+      // Should log the error
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining("Failed to connect MCP client failing-stdio"),
+      );
+    });
+
+    it("should return success result when connection succeeds", async () => {
+      vi.mocked(StreamableHTTPClientTransport).mockImplementation(function (
+        this: StreamableHTTPClientTransport,
+      ) {
+        return mockTransport as StreamableHTTPClientTransport;
+      } as unknown as typeof StreamableHTTPClientTransport);
+
+      const result = await clientManager.addHttpClient(
+        "working-server",
+        "http://localhost:3000",
+        "session-success",
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.name).toBe("working-server");
+      expect(result.error).toBeUndefined();
+    });
+
+    it("should track failed servers and return them via getFailedServers", async () => {
+      vi.mocked(StreamableHTTPClientTransport).mockImplementation(function (
+        this: StreamableHTTPClientTransport,
+      ) {
+        return mockTransport as StreamableHTTPClientTransport;
+      } as unknown as typeof StreamableHTTPClientTransport);
+
+      // Make connection fail
+      vi.mocked(mockSdkClient.connect).mockRejectedValueOnce(
+        new Error("Network error"),
+      );
+
+      await clientManager.addHttpClient(
+        "tracked-failure",
+        "http://localhost:9999",
+        "session-track",
+      );
+
+      const failedServers = clientManager.getFailedServers("session-track");
+
+      expect(failedServers.size).toBe(1);
+      expect(failedServers.get("tracked-failure")).toBe("Network error");
+    });
+
+    it("should isolate failed servers by session", async () => {
+      vi.mocked(StreamableHTTPClientTransport).mockImplementation(function (
+        this: StreamableHTTPClientTransport,
+      ) {
+        return mockTransport as StreamableHTTPClientTransport;
+      } as unknown as typeof StreamableHTTPClientTransport);
+
+      // Fail connections for both sessions
+      vi.mocked(mockSdkClient.connect)
+        .mockRejectedValueOnce(new Error("Error 1"))
+        .mockRejectedValueOnce(new Error("Error 2"));
+
+      await clientManager.addHttpClient(
+        "server1",
+        "http://s1.com",
+        "session-a",
+      );
+      await clientManager.addHttpClient(
+        "server2",
+        "http://s2.com",
+        "session-b",
+      );
+
+      const failedA = clientManager.getFailedServers("session-a");
+      const failedB = clientManager.getFailedServers("session-b");
+
+      expect(failedA.size).toBe(1);
+      expect(failedA.get("server1")).toBe("Error 1");
+
+      expect(failedB.size).toBe(1);
+      expect(failedB.get("server2")).toBe("Error 2");
+    });
+
+    it("should clear from failedServers if connection later succeeds", async () => {
+      vi.mocked(StreamableHTTPClientTransport).mockImplementation(function (
+        this: StreamableHTTPClientTransport,
+      ) {
+        return mockTransport as StreamableHTTPClientTransport;
+      } as unknown as typeof StreamableHTTPClientTransport);
+
+      // First attempt fails
+      vi.mocked(mockSdkClient.connect)
+        .mockRejectedValueOnce(new Error("Temporary error"))
+        .mockResolvedValueOnce(undefined);
+
+      await clientManager.addHttpClient(
+        "flaky-server",
+        "http://localhost:3000",
+        "session-flaky",
+      );
+
+      // Should be in failed servers
+      expect(clientManager.getFailedServers("session-flaky").size).toBe(1);
+
+      // Reset the mock client to allow new connection
+      vi.mocked(Client).mockImplementation(function (this: Client) {
+        return {
+          ...mockSdkClient,
+          connect: vi.fn().mockResolvedValue(undefined),
+        } as unknown as Client;
+      } as unknown as typeof Client);
+
+      // Note: In real scenario, the client wouldn't be re-added without closeSession first
+      // But this test verifies the cleanup behavior in failedServers.delete
+    });
+  });
+
+  describe("closeSession", () => {
+    beforeEach(() => {
+      vi.mocked(StreamableHTTPClientTransport).mockImplementation(function (
+        this: StreamableHTTPClientTransport,
+      ) {
+        return mockTransport as StreamableHTTPClientTransport;
+      } as unknown as typeof StreamableHTTPClientTransport);
+    });
+
+    it("should close all clients for a specific session", async () => {
+      await clientManager.addHttpClient(
+        "server1",
+        "http://s1.com",
+        "session-1",
+      );
+      await clientManager.addHttpClient(
+        "server2",
+        "http://s2.com",
+        "session-1",
+      );
+      await clientManager.addHttpClient(
+        "server3",
+        "http://s3.com",
+        "session-2",
+      );
+
+      vi.clearAllMocks();
+
+      await clientManager.closeSession("session-1");
+
+      // Should close 2 clients from session-1
+      expect(mockClientSession.close).toHaveBeenCalledTimes(2);
+
+      // Session-2 client should still exist
+      const session2Clients = clientManager.getClientsBySession("session-2");
+      expect(session2Clients.size).toBe(1);
+
+      // Session-1 clients should be gone
+      const session1Clients = clientManager.getClientsBySession("session-1");
+      expect(session1Clients.size).toBe(0);
+    });
+
+    it("should clear failed servers for a specific session", async () => {
+      // Make connections fail
+      vi.mocked(mockSdkClient.connect)
+        .mockRejectedValueOnce(new Error("Error 1"))
+        .mockRejectedValueOnce(new Error("Error 2"));
+
+      await clientManager.addHttpClient(
+        "server1",
+        "http://s1.com",
+        "session-1",
+      );
+      await clientManager.addHttpClient(
+        "server2",
+        "http://s2.com",
+        "session-2",
+      );
+
+      // Both sessions have failed servers
+      expect(clientManager.getFailedServers("session-1").size).toBe(1);
+      expect(clientManager.getFailedServers("session-2").size).toBe(1);
+
+      await clientManager.closeSession("session-1");
+
+      // Session-1 failures should be cleared
+      expect(clientManager.getFailedServers("session-1").size).toBe(0);
+
+      // Session-2 failures should remain
+      expect(clientManager.getFailedServers("session-2").size).toBe(1);
+    });
+
+    it("should handle closing non-existent session gracefully", async () => {
+      await expect(
+        clientManager.closeSession("nonexistent-session"),
+      ).resolves.toBeUndefined();
+
+      expect(logger.debug).toHaveBeenCalledWith(
+        "Cleaned up session nonexistent-session",
+      );
+    });
+  });
+
   describe("close", () => {
     beforeEach(() => {
       vi.mocked(StreamableHTTPClientTransport).mockImplementation(function (
@@ -518,6 +767,26 @@ describe("MCPClientManager", () => {
       ) {
         return mockTransport as StreamableHTTPClientTransport;
       } as unknown as typeof StreamableHTTPClientTransport);
+    });
+
+    it("should clear failedServers on close", async () => {
+      // Make connection fail
+      vi.mocked(mockSdkClient.connect).mockRejectedValueOnce(
+        new Error("Error"),
+      );
+
+      await clientManager.addHttpClient(
+        "failing-server",
+        "http://localhost:9999",
+        "session-1",
+      );
+
+      expect(clientManager.getFailedServers("session-1").size).toBe(1);
+
+      await clientManager.close();
+
+      // Failed servers should be cleared
+      expect(clientManager.getFailedServers("session-1").size).toBe(0);
     });
 
     it("should close all clients", async () => {

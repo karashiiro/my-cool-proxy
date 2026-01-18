@@ -18,6 +18,10 @@ export class ConsoleLogger implements ILogger {
     this.logger.info(message);
   }
 
+  warn(message: string): void {
+    this.logger.warn(message);
+  }
+
   error(msgOrErr: string | Error, error?: Error): void {
     if (typeof msgOrErr === "string") {
       if (error) {

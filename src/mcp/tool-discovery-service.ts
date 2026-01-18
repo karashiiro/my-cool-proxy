@@ -55,12 +55,27 @@ export class ToolDiscoveryService {
 
   async listServers(sessionId: string): Promise<CallToolResult> {
     try {
-      const mcpServers = this.clientPool.getClientsBySession(
-        sessionId || "default",
-      );
+      const effectiveSessionId = sessionId || "default";
+      const mcpServers =
+        this.clientPool.getClientsBySession(effectiveSessionId);
+      const failedServers =
+        this.clientPool.getFailedServers(effectiveSessionId);
+
+      // Gather info from connected servers
       const serverList = this.gatherServerInfo(mcpServers);
+
+      // Add failed servers to the list with error status
+      // Note: We don't expose internal error details to clients for security
+      // Detailed errors are logged server-side in client-manager.ts
+      for (const [name] of failedServers.entries()) {
+        serverList.push({
+          luaIdentifier: sanitizeLuaIdentifier(name),
+          error: "Connection failed",
+        });
+      }
+
       const formattedOutput = this.formatter.formatServerList(
-        sessionId || "default",
+        effectiveSessionId,
         serverList,
       );
 

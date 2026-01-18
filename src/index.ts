@@ -4,6 +4,7 @@ import { createContainer } from "./container/inversify.config.js";
 import type { ContainerBindingMap } from "./container/binding-map.js";
 import { TYPES } from "./types/index.js";
 import type {
+  ClientConnectionResult,
   ILogger,
   IMCPClientManager,
   IShutdownHandler,
@@ -20,34 +21,83 @@ import type { PromptAggregationService } from "./mcp/prompt-aggregation-service.
 // Load configuration from file and merge with environment variables
 const config = mergeEnvConfig(loadConfig());
 
+interface InitializationResult {
+  successful: string[];
+  failed: Array<{ name: string; error: string }>;
+}
+
 /**
  * Initialize MCP clients for a given session.
+ * Uses Promise.allSettled to connect to all servers in parallel and continue
+ * even if some fail.
  */
 async function initializeClientsForSession(
   sessionId: string,
   config: ServerConfig,
   clientManager: IMCPClientManager,
-): Promise<void> {
-  for (const [name, clientConfig] of Object.entries(config.mcpClients)) {
-    if (clientConfig.type === "http") {
-      await clientManager.addHttpClient(
-        name,
-        clientConfig.url,
-        sessionId,
-        clientConfig.headers,
-        clientConfig.allowedTools,
-      );
-    } else if (clientConfig.type === "stdio") {
-      await clientManager.addStdioClient(
-        name,
-        clientConfig.command,
-        sessionId,
-        clientConfig.args,
-        clientConfig.env,
-        clientConfig.allowedTools,
-      );
+): Promise<InitializationResult> {
+  const connectionPromises = Object.entries(config.mcpClients).map(
+    async ([name, clientConfig]): Promise<ClientConnectionResult> => {
+      if (clientConfig.type === "http") {
+        return clientManager.addHttpClient(
+          name,
+          clientConfig.url,
+          sessionId,
+          clientConfig.headers,
+          clientConfig.allowedTools,
+        );
+      } else if (clientConfig.type === "stdio") {
+        return clientManager.addStdioClient(
+          name,
+          clientConfig.command,
+          sessionId,
+          clientConfig.args,
+          clientConfig.env,
+          clientConfig.allowedTools,
+        );
+      } else {
+        // Exhaustiveness check - TypeScript will error if a new type is added
+        // but not handled above
+        const _exhaustiveCheck: never = clientConfig;
+        return {
+          name,
+          success: false,
+          error: `Unknown client type: ${(_exhaustiveCheck as { type: string }).type}`,
+        };
+      }
+    },
+  );
+
+  const results = await Promise.allSettled(connectionPromises);
+
+  const successful: string[] = [];
+  const failed: Array<{ name: string; error: string }> = [];
+
+  for (const result of results) {
+    if (result.status === "fulfilled") {
+      if (result.value.success) {
+        successful.push(result.value.name);
+      } else {
+        failed.push({
+          name: result.value.name,
+          error: result.value.error || "Unknown error",
+        });
+      }
+    } else {
+      // Promise rejection (shouldn't happen with our try-catch, but safety)
+      // Handle both Error objects and non-Error rejections
+      const errorMessage =
+        result.reason instanceof Error
+          ? result.reason.message
+          : String(result.reason ?? "Unknown rejection");
+      failed.push({
+        name: "unknown",
+        error: errorMessage,
+      });
     }
   }
+
+  return { successful, failed };
 }
 
 async function startHttpMode(
@@ -81,8 +131,32 @@ async function startHttpMode(
     async (sessionId) => {
       logger.info(`Creating gateway server for session ${sessionId}`);
 
-      // Initialize MCP clients for this session
-      await initializeClientsForSession(sessionId, config, clientManager);
+      // Initialize MCP clients for this session (resilient - continues even if some fail)
+      const initResult = await initializeClientsForSession(
+        sessionId,
+        config,
+        clientManager,
+      );
+
+      if (initResult.failed.length > 0) {
+        logger.warn(
+          `Session ${sessionId}: ${initResult.failed.length} server(s) failed to connect: ` +
+            initResult.failed.map((f) => `${f.name} (${f.error})`).join(", "),
+        );
+      }
+
+      if (
+        initResult.successful.length === 0 &&
+        Object.keys(config.mcpClients).length > 0
+      ) {
+        logger.warn(
+          `Session ${sessionId}: All configured servers failed to connect. Session created but no servers available.`,
+        );
+      }
+
+      logger.info(
+        `Session ${sessionId}: ${initResult.successful.length} server(s) connected successfully`,
+      );
 
       // Create new gateway server instance for this session
       const gatewayServer = new MCPGatewayServer(
@@ -98,7 +172,21 @@ async function startHttpMode(
     {
       port: config.port,
       host: config.host,
-      sessions: {},
+      sessions: {
+        // Clean up session-scoped state when sessions are closed
+        onSessionClosed: async (sessionId) => {
+          logger.debug(`Session ${sessionId} closed, cleaning up...`);
+          try {
+            await clientManager.closeSession(sessionId);
+          } catch (error) {
+            // Log but don't re-throw - ensure callback doesn't fail the cleanup
+            logger.error(
+              `Failed to close session ${sessionId}`,
+              error instanceof Error ? error : new Error(String(error)),
+            );
+          }
+        },
+      },
     },
   );
 
@@ -132,8 +220,32 @@ async function startStdioMode(
   // Fixed session ID for stdio (single session mode)
   const SESSION_ID = "default";
 
-  // Initialize all configured MCP clients upfront
-  await initializeClientsForSession(SESSION_ID, config, clientManager);
+  // Initialize all configured MCP clients upfront (resilient - continues even if some fail)
+  const initResult = await initializeClientsForSession(
+    SESSION_ID,
+    config,
+    clientManager,
+  );
+
+  if (initResult.failed.length > 0) {
+    logger.warn(
+      `${initResult.failed.length} server(s) failed to connect: ` +
+        initResult.failed.map((f) => `${f.name} (${f.error})`).join(", "),
+    );
+  }
+
+  if (
+    initResult.successful.length === 0 &&
+    Object.keys(config.mcpClients).length > 0
+  ) {
+    logger.warn(
+      `All configured servers failed to connect. Gateway starting but no servers available.`,
+    );
+  }
+
+  logger.info(
+    `${initResult.successful.length} server(s) connected successfully`,
+  );
 
   // Start stdio server
   const handle = await serveStdio(() => {
