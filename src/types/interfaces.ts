@@ -20,6 +20,7 @@ export interface IMCPClientManager {
     sessionId: string,
     headers?: Record<string, string>,
     allowedTools?: string[],
+    clientCapabilities?: DownstreamCapabilities,
   ): Promise<ClientConnectionResult>;
   addStdioClient(
     name: string,
@@ -28,6 +29,7 @@ export interface IMCPClientManager {
     args?: string[],
     env?: Record<string, string>,
     allowedTools?: string[],
+    clientCapabilities?: DownstreamCapabilities,
   ): Promise<ClientConnectionResult>;
   getClient(name: string, sessionId: string): Promise<MCPClientSession>;
   getClientsBySession(sessionId: string): Map<string, MCPClientSession>;
@@ -134,4 +136,53 @@ export interface ICacheService<T> {
   delete(key: string): void;
   clear(): void;
   has(key: string): boolean;
+}
+
+/**
+ * Downstream client capabilities that we care about for proxying.
+ * These are the capabilities that affect what we can forward to downstream clients.
+ */
+export interface DownstreamCapabilities {
+  sampling?: {
+    context?: object;
+    tools?: object;
+  };
+  elicitation?: {
+    form?: object;
+    url?: object;
+  };
+}
+
+/**
+ * Store for tracking downstream client capabilities per session.
+ * Used to determine what capabilities to advertise to upstream servers.
+ */
+export interface ICapabilityStore {
+  /**
+   * Store capabilities for a session.
+   */
+  setCapabilities(sessionId: string, caps: DownstreamCapabilities): void;
+
+  /**
+   * Get capabilities for a session.
+   */
+  getCapabilities(sessionId: string): DownstreamCapabilities | undefined;
+
+  /**
+   * Check if a session has a specific capability.
+   */
+  hasCapability(
+    sessionId: string,
+    capability: "sampling" | "elicitation",
+  ): boolean;
+
+  /**
+   * Check if a session has a specific elicitation mode.
+   */
+  hasElicitationMode(sessionId: string, mode: "form" | "url"): boolean;
+
+  /**
+   * Remove capabilities for a session (cleanup).
+   */
+  deleteCapabilities(sessionId: string): void;
 }

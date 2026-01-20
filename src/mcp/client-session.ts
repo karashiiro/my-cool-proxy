@@ -10,6 +10,19 @@ import {
   type Resource,
   type Prompt,
   type Tool,
+  type Request,
+  type Notification,
+  type Result,
+} from "@modelcontextprotocol/sdk/types.js";
+import type { RequestHandlerExtra } from "@modelcontextprotocol/sdk/shared/protocol.js";
+import type {
+  AnyObjectSchema,
+  SchemaOutput,
+} from "@modelcontextprotocol/sdk/server/zod-compat.js";
+import type {
+  ClientRequest,
+  ClientNotification,
+  ClientResult,
 } from "@modelcontextprotocol/sdk/types.js";
 import { createCache } from "../services/cache-service.js";
 
@@ -252,5 +265,33 @@ export class MCPClientSession {
 
   async close() {
     return this.client.close();
+  }
+
+  /**
+   * Register a request handler on the underlying SDK client.
+   * This is used to handle incoming requests from the connected MCP server
+   * (e.g., sampling/createMessage, elicitation/create).
+   *
+   * @param requestSchema The Zod schema for the request type to handle
+   * @param handler The handler function to process incoming requests
+   */
+  setRequestHandler<T extends AnyObjectSchema>(
+    requestSchema: T,
+    handler: (
+      request: SchemaOutput<T>,
+      extra: RequestHandlerExtra<
+        ClientRequest | Request,
+        ClientNotification | Notification
+      >,
+    ) => ClientResult | Result | Promise<ClientResult | Result>,
+  ): void {
+    this.client.setRequestHandler(requestSchema, handler);
+  }
+
+  /**
+   * Get the name of the server this client is connected to.
+   */
+  getServerName(): string {
+    return this.serverName;
   }
 }

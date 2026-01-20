@@ -9,6 +9,7 @@ import type {
   ILogger,
   ServerConfig,
   IShutdownHandler,
+  ICapabilityStore,
 } from "../types/interfaces.js";
 import { WasmoonRuntime } from "../lua/runtime.js";
 import { MCPClientManager } from "../mcp/client-manager.js";
@@ -19,6 +20,7 @@ import { ResourceAggregationService } from "../mcp/resource-aggregation-service.
 import { PromptAggregationService } from "../mcp/prompt-aggregation-service.js";
 import { MCPFormatterService } from "../mcp/mcp-formatter-service.js";
 import { ShutdownHandler } from "../handlers/shutdown-handler.js";
+import { CapabilityStore } from "../services/capability-store.js";
 import type { ITool } from "../tools/base-tool.js";
 import { ExecuteLuaTool } from "../tools/execute-lua-tool.js";
 import { ListServersTool } from "../tools/list-servers-tool.js";
@@ -101,6 +103,12 @@ export function createContainer(
   container
     .bind<IShutdownHandler>(TYPES.ShutdownHandler)
     .to(ShutdownHandler)
+    .inSingletonScope();
+
+  // Bind capability store for tracking downstream client capabilities
+  container
+    .bind<ICapabilityStore>(TYPES.CapabilityStore)
+    .to(CapabilityStore)
     .inSingletonScope();
 
   return container;

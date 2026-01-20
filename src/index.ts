@@ -5,6 +5,8 @@ import type { ContainerBindingMap } from "./container/binding-map.js";
 import { TYPES } from "./types/index.js";
 import type {
   ClientConnectionResult,
+  DownstreamCapabilities,
+  ICapabilityStore,
   ILogger,
   IMCPClientManager,
   IShutdownHandler,
@@ -14,6 +16,10 @@ import { serveHttp } from "@karashiiro/mcp/http";
 import { serveStdio } from "@karashiiro/mcp/stdio";
 import { loadConfig, mergeEnvConfig } from "./utils/config-loader.js";
 import { MCPGatewayServer } from "./mcp/gateway-server.js";
+import {
+  CreateMessageRequestSchema,
+  ElicitRequestSchema,
+} from "@modelcontextprotocol/sdk/types.js";
 import type { IToolRegistry } from "./tools/tool-registry.js";
 import type { ResourceAggregationService } from "./mcp/resource-aggregation-service.js";
 import type { PromptAggregationService } from "./mcp/prompt-aggregation-service.js";
@@ -27,14 +33,96 @@ interface InitializationResult {
 }
 
 /**
+ * Register sampling and elicitation request handlers on upstream clients.
+ * These handlers forward requests from upstream servers to the downstream client
+ * via the gateway server.
+ */
+function registerProxyHandlers(
+  sessionId: string,
+  clientManager: IMCPClientManager,
+  gatewayServer: MCPGatewayServer,
+  logger: ILogger,
+  capabilities: DownstreamCapabilities,
+): void {
+  const clients = clientManager.getClientsBySession(sessionId);
+
+  for (const [serverName, clientSession] of clients) {
+    // Register sampling handler if downstream supports it
+    if (capabilities.sampling) {
+      clientSession.setRequestHandler(
+        CreateMessageRequestSchema,
+        async (request) => {
+          logger.debug(
+            `Received sampling request from upstream server '${serverName}', forwarding to downstream`,
+          );
+          try {
+            const result = await gatewayServer.forwardSamplingRequest(
+              request.params,
+            );
+            return result;
+          } catch (error) {
+            logger.error(
+              `Failed to forward sampling request from '${serverName}'`,
+              error instanceof Error ? error : new Error(String(error)),
+            );
+            throw error;
+          }
+        },
+      );
+      logger.debug(
+        `Registered sampling request handler for upstream server '${serverName}'`,
+      );
+    }
+
+    // Register elicitation handler if downstream supports it
+    if (capabilities.elicitation) {
+      clientSession.setRequestHandler(ElicitRequestSchema, async (request) => {
+        logger.debug(
+          `Received elicitation request from upstream server '${serverName}', forwarding to downstream`,
+        );
+        try {
+          const result = await gatewayServer.forwardElicitationRequest(
+            request.params,
+          );
+          return result;
+        } catch (error) {
+          logger.error(
+            `Failed to forward elicitation request from '${serverName}'`,
+            error instanceof Error ? error : new Error(String(error)),
+          );
+          throw error;
+        }
+      });
+      logger.debug(
+        `Registered elicitation request handler for upstream server '${serverName}'`,
+      );
+    }
+  }
+
+  const clientCount = clients.size;
+  if (capabilities.sampling || capabilities.elicitation) {
+    logger.info(
+      `Registered proxy handlers on ${clientCount} upstream client(s): ` +
+        `sampling=${!!capabilities.sampling}, elicitation=${!!capabilities.elicitation}`,
+    );
+  }
+}
+
+/**
  * Initialize MCP clients for a given session.
  * Uses Promise.allSettled to connect to all servers in parallel and continue
  * even if some fail.
+ *
+ * @param sessionId - The session ID to initialize clients for
+ * @param config - Server configuration with MCP client definitions
+ * @param clientManager - The client manager to create clients with
+ * @param clientCapabilities - Optional downstream client capabilities to forward to upstream servers
  */
 async function initializeClientsForSession(
   sessionId: string,
   config: ServerConfig,
   clientManager: IMCPClientManager,
+  clientCapabilities?: DownstreamCapabilities,
 ): Promise<InitializationResult> {
   const connectionPromises = Object.entries(config.mcpClients).map(
     async ([name, clientConfig]): Promise<ClientConnectionResult> => {
@@ -45,6 +133,7 @@ async function initializeClientsForSession(
           sessionId,
           clientConfig.headers,
           clientConfig.allowedTools,
+          clientCapabilities,
         );
       } else if (clientConfig.type === "stdio") {
         return clientManager.addStdioClient(
@@ -54,6 +143,7 @@ async function initializeClientsForSession(
           clientConfig.args,
           clientConfig.env,
           clientConfig.allowedTools,
+          clientCapabilities,
         );
       } else {
         // Exhaustiveness check - TypeScript will error if a new type is added
@@ -125,40 +215,17 @@ async function startHttpMode(
   const shutdownHandler = container.get<IShutdownHandler>(
     TYPES.ShutdownHandler,
   );
+  const capabilityStore = container.get<ICapabilityStore>(
+    TYPES.CapabilityStore,
+  );
 
   // Start HTTP server with per-session factory
   const handle = await serveHttp(
     async (sessionId) => {
       logger.info(`Creating gateway server for session ${sessionId}`);
 
-      // Initialize MCP clients for this session (resilient - continues even if some fail)
-      const initResult = await initializeClientsForSession(
-        sessionId,
-        config,
-        clientManager,
-      );
-
-      if (initResult.failed.length > 0) {
-        logger.warn(
-          `Session ${sessionId}: ${initResult.failed.length} server(s) failed to connect: ` +
-            initResult.failed.map((f) => `${f.name} (${f.error})`).join(", "),
-        );
-      }
-
-      if (
-        initResult.successful.length === 0 &&
-        Object.keys(config.mcpClients).length > 0
-      ) {
-        logger.warn(
-          `Session ${sessionId}: All configured servers failed to connect. Session created but no servers available.`,
-        );
-      }
-
-      logger.info(
-        `Session ${sessionId}: ${initResult.successful.length} server(s) connected successfully`,
-      );
-
-      // Create new gateway server instance for this session
+      // Create gateway server FIRST (before upstream clients)
+      // This allows us to capture downstream client capabilities during initialization
       const gatewayServer = new MCPGatewayServer(
         toolRegistry,
         clientManager,
@@ -166,6 +233,56 @@ async function startHttpMode(
         resourceAggregation,
         promptAggregation,
       );
+
+      // Set up callback to initialize upstream clients when downstream client connects
+      // This ensures we forward the correct capabilities to upstream servers
+      gatewayServer.setOnDownstreamInitialized(async (capabilities) => {
+        logger.info(
+          `Session ${sessionId}: Downstream client initialized with capabilities: ` +
+            `sampling=${!!capabilities.sampling}, elicitation=${!!capabilities.elicitation}`,
+        );
+
+        // Store capabilities for this session
+        capabilityStore.setCapabilities(sessionId, capabilities);
+
+        // Now initialize upstream MCP clients with the downstream capabilities
+        // This tells upstream servers what requests they can send through the proxy
+        const initResult = await initializeClientsForSession(
+          sessionId,
+          config,
+          clientManager,
+          capabilities,
+        );
+
+        if (initResult.failed.length > 0) {
+          logger.warn(
+            `Session ${sessionId}: ${initResult.failed.length} server(s) failed to connect: ` +
+              initResult.failed.map((f) => `${f.name} (${f.error})`).join(", "),
+          );
+        }
+
+        if (
+          initResult.successful.length === 0 &&
+          Object.keys(config.mcpClients).length > 0
+        ) {
+          logger.warn(
+            `Session ${sessionId}: All configured servers failed to connect.`,
+          );
+        }
+
+        logger.info(
+          `Session ${sessionId}: ${initResult.successful.length} server(s) connected successfully`,
+        );
+
+        // Register proxy handlers for sampling/elicitation forwarding
+        registerProxyHandlers(
+          sessionId,
+          clientManager,
+          gatewayServer,
+          logger,
+          capabilities,
+        );
+      });
 
       return gatewayServer.getServer();
     },
@@ -178,6 +295,7 @@ async function startHttpMode(
           logger.debug(`Session ${sessionId} closed, cleaning up...`);
           try {
             await clientManager.closeSession(sessionId);
+            capabilityStore.deleteCapabilities(sessionId);
           } catch (error) {
             // Log but don't re-throw - ensure callback doesn't fail the cleanup
             logger.error(
@@ -216,39 +334,16 @@ async function startStdioMode(
   const promptAggregation = container.get<PromptAggregationService>(
     TYPES.PromptAggregationService,
   );
+  const capabilityStore = container.get<ICapabilityStore>(
+    TYPES.CapabilityStore,
+  );
 
   // Fixed session ID for stdio (single session mode)
   const SESSION_ID = "default";
 
-  // Initialize all configured MCP clients upfront (resilient - continues even if some fail)
-  const initResult = await initializeClientsForSession(
-    SESSION_ID,
-    config,
-    clientManager,
-  );
-
-  if (initResult.failed.length > 0) {
-    logger.warn(
-      `${initResult.failed.length} server(s) failed to connect: ` +
-        initResult.failed.map((f) => `${f.name} (${f.error})`).join(", "),
-    );
-  }
-
-  if (
-    initResult.successful.length === 0 &&
-    Object.keys(config.mcpClients).length > 0
-  ) {
-    logger.warn(
-      `All configured servers failed to connect. Gateway starting but no servers available.`,
-    );
-  }
-
-  logger.info(
-    `${initResult.successful.length} server(s) connected successfully`,
-  );
-
-  // Start stdio server
+  // Start stdio server - upstream clients are initialized when downstream connects
   const handle = await serveStdio(() => {
+    // Create gateway server FIRST
     const gatewayServer = new MCPGatewayServer(
       toolRegistry,
       clientManager,
@@ -256,6 +351,55 @@ async function startStdioMode(
       resourceAggregation,
       promptAggregation,
     );
+
+    // Set up callback to initialize upstream clients when downstream client connects
+    gatewayServer.setOnDownstreamInitialized(async (capabilities) => {
+      logger.info(
+        `Downstream client initialized with capabilities: ` +
+          `sampling=${!!capabilities.sampling}, elicitation=${!!capabilities.elicitation}`,
+      );
+
+      // Store capabilities
+      capabilityStore.setCapabilities(SESSION_ID, capabilities);
+
+      // Initialize upstream MCP clients with downstream capabilities
+      const initResult = await initializeClientsForSession(
+        SESSION_ID,
+        config,
+        clientManager,
+        capabilities,
+      );
+
+      if (initResult.failed.length > 0) {
+        logger.warn(
+          `${initResult.failed.length} server(s) failed to connect: ` +
+            initResult.failed.map((f) => `${f.name} (${f.error})`).join(", "),
+        );
+      }
+
+      if (
+        initResult.successful.length === 0 &&
+        Object.keys(config.mcpClients).length > 0
+      ) {
+        logger.warn(
+          `All configured servers failed to connect. Gateway running but no servers available.`,
+        );
+      }
+
+      logger.info(
+        `${initResult.successful.length} server(s) connected successfully`,
+      );
+
+      // Register proxy handlers for sampling/elicitation forwarding
+      registerProxyHandlers(
+        SESSION_ID,
+        clientManager,
+        gatewayServer,
+        logger,
+        capabilities,
+      );
+    });
+
     return gatewayServer.getServer();
   });
 

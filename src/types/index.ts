@@ -18,4 +18,5 @@ export const TYPES = {
   CacheService: "CacheService",
   Tool: "Tool",
   ToolRegistry: "ToolRegistry",
+  CapabilityStore: "CapabilityStore",
 } as const;

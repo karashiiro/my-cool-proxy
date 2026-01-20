@@ -6,6 +6,7 @@ import type {
   ClientConnectionResult,
   ILogger,
   IMCPClientManager,
+  DownstreamCapabilities,
 } from "../types/interfaces.js";
 import { $inject } from "../container/decorators.js";
 import { TYPES } from "../types/index.js";
@@ -41,6 +42,7 @@ export class MCPClientManager implements IMCPClientManager {
     sessionId: string,
     headers?: Record<string, string>,
     allowedTools?: string[],
+    clientCapabilities?: DownstreamCapabilities,
   ): Promise<ClientConnectionResult> {
     const key = `${name}-${sessionId}`;
     if (this.clients.has(key)) {
@@ -51,6 +53,11 @@ export class MCPClientManager implements IMCPClientManager {
     }
 
     try {
+      // Build capabilities to advertise to the upstream server
+      // These should match what the downstream client supports, so upstream
+      // servers know they can send sampling/elicitation requests through us
+      const capsToAdvertise = this.buildClientCapabilities(clientCapabilities);
+
       // Create underlying SDK client
       const sdkClient = new Client(
         {
@@ -58,7 +65,7 @@ export class MCPClientManager implements IMCPClientManager {
           version: "1.0.0",
         },
         {
-          capabilities: {},
+          capabilities: capsToAdvertise,
           enforceStrictCapabilities: true,
         },
       );
@@ -125,6 +132,7 @@ export class MCPClientManager implements IMCPClientManager {
     args?: string[],
     env?: Record<string, string>,
     allowedTools?: string[],
+    clientCapabilities?: DownstreamCapabilities,
   ): Promise<ClientConnectionResult> {
     const key = `${name}-${sessionId}`;
     if (this.clients.has(key)) {
@@ -135,6 +143,9 @@ export class MCPClientManager implements IMCPClientManager {
     }
 
     try {
+      // Build capabilities to advertise to the upstream server
+      const capsToAdvertise = this.buildClientCapabilities(clientCapabilities);
+
       // Create underlying SDK client
       const sdkClient = new Client(
         {
@@ -142,7 +153,7 @@ export class MCPClientManager implements IMCPClientManager {
           version: "1.0.0",
         },
         {
-          capabilities: {},
+          capabilities: capsToAdvertise,
           enforceStrictCapabilities: true,
         },
       );
@@ -253,6 +264,40 @@ export class MCPClientManager implements IMCPClientManager {
     }
 
     this.logger.debug(`Cleaned up session ${sessionId}`);
+  }
+
+  /**
+   * Build the capabilities object to advertise to upstream servers.
+   * These match what the downstream client supports, so upstream servers
+   * know they can send sampling/elicitation requests through the proxy.
+   */
+  private buildClientCapabilities(
+    downstreamCaps?: DownstreamCapabilities,
+  ): Record<string, unknown> {
+    if (!downstreamCaps) {
+      // No downstream capabilities known yet - don't advertise any special caps
+      return {};
+    }
+
+    const caps: Record<string, unknown> = {};
+
+    // Forward sampling capability if downstream supports it
+    if (downstreamCaps.sampling) {
+      caps.sampling = downstreamCaps.sampling;
+      this.logger.debug(
+        `Advertising sampling capability to upstream (context: ${!!downstreamCaps.sampling.context}, tools: ${!!downstreamCaps.sampling.tools})`,
+      );
+    }
+
+    // Forward elicitation capability if downstream supports it
+    if (downstreamCaps.elicitation) {
+      caps.elicitation = downstreamCaps.elicitation;
+      this.logger.debug(
+        `Advertising elicitation capability to upstream (form: ${!!downstreamCaps.elicitation.form}, url: ${!!downstreamCaps.elicitation.url})`,
+      );
+    }
+
+    return caps;
   }
 
   async close(): Promise<void> {

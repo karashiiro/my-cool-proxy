@@ -5,13 +5,19 @@ import { TYPES } from "../../types/index.js";
 import type {
   ILogger,
   IMCPClientManager,
+  ICapabilityStore,
   ServerConfig,
   MCPClientConfig,
+  DownstreamCapabilities,
 } from "../../types/interfaces.js";
 import { MCPGatewayServer } from "../../mcp/gateway-server.js";
 import type { ResourceAggregationService } from "../../mcp/resource-aggregation-service.js";
 import type { PromptAggregationService } from "../../mcp/prompt-aggregation-service.js";
 import type { IToolRegistry } from "../../tools/tool-registry.js";
+import {
+  CreateMessageRequestSchema,
+  ElicitRequestSchema,
+} from "@modelcontextprotocol/sdk/types.js";
 
 export class HttpServerManager {
   private serverHandle: ServerHandle | null = null;
@@ -51,14 +57,15 @@ export class HttpServerManager {
     );
 
     const clientManager = this.clientManager;
+    const capabilityStore = container.get<ICapabilityStore>(
+      TYPES.CapabilityStore,
+    );
 
     // Use @karashiiro/mcp's serveHttp with session-aware factory
     this.serverHandle = await serveHttp(
       async (sessionId) => {
-        // Initialize MCP clients for this session
-        await initializeClientsForSession(sessionId, config, clientManager);
-
-        // Create gateway server for this session
+        // Create gateway server FIRST (before upstream clients)
+        // This allows us to capture downstream client capabilities during initialization
         const gatewayServer = new MCPGatewayServer(
           toolRegistry,
           clientManager,
@@ -67,12 +74,50 @@ export class HttpServerManager {
           promptAggregation,
         );
 
+        // Set up callback to initialize upstream clients when downstream client connects
+        // This ensures we forward the correct capabilities to upstream servers
+        gatewayServer.setOnDownstreamInitialized(async (capabilities) => {
+          logger.debug(
+            `Session ${sessionId}: Downstream client initialized with capabilities: ` +
+              `sampling=${!!capabilities.sampling}, elicitation=${!!capabilities.elicitation}`,
+          );
+
+          // Store capabilities for this session
+          capabilityStore.setCapabilities(sessionId, capabilities);
+
+          // Initialize upstream MCP clients with the downstream capabilities
+          await initializeClientsForSession(
+            sessionId,
+            config,
+            clientManager,
+            capabilities,
+          );
+
+          // Register proxy handlers for sampling/elicitation forwarding
+          registerProxyHandlers(
+            sessionId,
+            clientManager,
+            gatewayServer,
+            logger,
+            capabilities,
+          );
+        });
+
         return gatewayServer.getServer();
       },
       {
         port: config.port,
         host: config.host,
-        sessions: {},
+        sessions: {
+          onSessionClosed: async (sessionId) => {
+            try {
+              await clientManager.closeSession(sessionId);
+              capabilityStore.deleteCapabilities(sessionId);
+            } catch {
+              // Ignore cleanup errors
+            }
+          },
+        },
       },
     );
 
@@ -144,6 +189,82 @@ export class HttpServerManager {
 }
 
 /**
+ * Register sampling and elicitation request handlers on upstream clients.
+ * These handlers forward requests from upstream servers to the downstream client
+ * via the gateway server.
+ */
+function registerProxyHandlers(
+  sessionId: string,
+  clientManager: IMCPClientManager,
+  gatewayServer: MCPGatewayServer,
+  logger: ILogger,
+  capabilities: DownstreamCapabilities,
+): void {
+  const clients = clientManager.getClientsBySession(sessionId);
+
+  for (const [serverName, clientSession] of clients) {
+    // Register sampling handler if downstream supports it
+    if (capabilities.sampling) {
+      clientSession.setRequestHandler(
+        CreateMessageRequestSchema,
+        async (request) => {
+          logger.debug(
+            `Received sampling request from upstream server '${serverName}', forwarding to downstream`,
+          );
+          try {
+            const result = await gatewayServer.forwardSamplingRequest(
+              request.params,
+            );
+            return result;
+          } catch (error) {
+            logger.error(
+              `Failed to forward sampling request from '${serverName}'`,
+              error instanceof Error ? error : new Error(String(error)),
+            );
+            throw error;
+          }
+        },
+      );
+      logger.debug(
+        `Registered sampling request handler for upstream server '${serverName}'`,
+      );
+    }
+
+    // Register elicitation handler if downstream supports it
+    if (capabilities.elicitation) {
+      clientSession.setRequestHandler(ElicitRequestSchema, async (request) => {
+        logger.debug(
+          `Received elicitation request from upstream server '${serverName}', forwarding to downstream`,
+        );
+        try {
+          const result = await gatewayServer.forwardElicitationRequest(
+            request.params,
+          );
+          return result;
+        } catch (error) {
+          logger.error(
+            `Failed to forward elicitation request from '${serverName}'`,
+            error instanceof Error ? error : new Error(String(error)),
+          );
+          throw error;
+        }
+      });
+      logger.debug(
+        `Registered elicitation request handler for upstream server '${serverName}'`,
+      );
+    }
+  }
+
+  const clientCount = clients.size;
+  if (capabilities.sampling || capabilities.elicitation) {
+    logger.info(
+      `Registered proxy handlers on ${clientCount} upstream client(s): ` +
+        `sampling=${!!capabilities.sampling}, elicitation=${!!capabilities.elicitation}`,
+    );
+  }
+}
+
+/**
  * Initialize MCP clients for a given session.
  * This is called when a new session is created in HTTP mode.
  */
@@ -151,12 +272,19 @@ async function initializeClientsForSession(
   sessionId: string,
   config: ServerConfig,
   clientManager: IMCPClientManager,
+  capabilities?: DownstreamCapabilities,
 ): Promise<void> {
   const initPromises: Promise<void>[] = [];
 
   for (const [name, clientConfig] of Object.entries(config.mcpClients)) {
     initPromises.push(
-      initializeSingleClient(name, clientConfig, sessionId, clientManager),
+      initializeSingleClient(
+        name,
+        clientConfig,
+        sessionId,
+        clientManager,
+        capabilities,
+      ),
     );
   }
 
@@ -171,6 +299,7 @@ async function initializeSingleClient(
   clientConfig: MCPClientConfig,
   sessionId: string,
   clientManager: IMCPClientManager,
+  capabilities?: DownstreamCapabilities,
 ): Promise<void> {
   if (clientConfig.type === "http") {
     await clientManager.addHttpClient(
@@ -179,6 +308,7 @@ async function initializeSingleClient(
       sessionId,
       clientConfig.headers,
       clientConfig.allowedTools,
+      capabilities,
     );
   } else if (clientConfig.type === "stdio") {
     await clientManager.addStdioClient(
@@ -188,6 +318,7 @@ async function initializeSingleClient(
       clientConfig.args,
       clientConfig.env,
       clientConfig.allowedTools,
+      capabilities,
     );
   }
 }
