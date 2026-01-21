@@ -136,14 +136,14 @@ sequenceDiagram
 
 ## Key Components
 
-| Component        | File                                | Purpose                                   |
-| ---------------- | ----------------------------------- | ----------------------------------------- |
-| Entry Point      | `src/index.ts`                      | Starts HTTP or stdio mode based on config |
-| DI Container     | `src/container/inversify.config.ts` | Wires all dependencies together           |
-| Gateway Server   | `src/mcp/gateway-server.ts`         | Main MCP server, registers tools          |
-| Client Manager   | `src/mcp/client-manager.ts`         | Manages upstream MCP connections          |
-| Lua Runtime      | `src/lua/runtime.ts`                | Executes user scripts                     |
-| Tool Discovery   | `src/mcp/tool-discovery-service.ts` | Powers discovery tools                    |
+| Component      | File                                | Purpose                                   |
+| -------------- | ----------------------------------- | ----------------------------------------- |
+| Entry Point    | `src/index.ts`                      | Starts HTTP or stdio mode based on config |
+| DI Container   | `src/container/inversify.config.ts` | Wires all dependencies together           |
+| Gateway Server | `src/mcp/gateway-server.ts`         | Main MCP server, registers tools          |
+| Client Manager | `src/mcp/client-manager.ts`         | Manages upstream MCP connections          |
+| Lua Runtime    | `src/lua/runtime.ts`                | Executes user scripts                     |
+| Tool Discovery | `src/mcp/tool-discovery-service.ts` | Powers discovery tools                    |
 
 ## Transport Modes
 

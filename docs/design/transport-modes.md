@@ -178,6 +178,7 @@ The entry point reads the transport configuration and starts the appropriate mod
 - **Stdio mode**: Uses `serveStdio()` with a single Gateway instance
 
 Session management in HTTP mode is handled via callbacks:
+
 - `sessionFactory`: Creates a new `MCPGatewayServer` for each session
 - `onSessionInitialized`: Initializes MCP clients for the new session
 - `onSessionClosed`: Cleans up session resources

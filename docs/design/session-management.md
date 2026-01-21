@@ -252,13 +252,13 @@ sequenceDiagram
 
 ## Stdio Mode Differences
 
-| Aspect            | HTTP Mode                      | Stdio Mode             |
-| ----------------- | ------------------------------ | ---------------------- |
-| Session ID        | From header or generated       | Fixed "default"        |
-| Client init       | Lazy (on first request)        | Eager (at startup)     |
-| Multiple sessions | Yes                            | No                     |
-| Server factory    | `serveHttp()` with factory     | `serveStdio()` direct  |
-| Gateway instances | One per session                | Single instance        |
+| Aspect            | HTTP Mode                  | Stdio Mode            |
+| ----------------- | -------------------------- | --------------------- |
+| Session ID        | From header or generated   | Fixed "default"       |
+| Client init       | Lazy (on first request)    | Eager (at startup)    |
+| Multiple sessions | Yes                        | No                    |
+| Server factory    | `serveHttp()` with factory | `serveStdio()` direct |
+| Gateway instances | One per session            | Single instance       |
 
 In stdio mode:
 
