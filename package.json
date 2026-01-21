@@ -1,10 +1,10 @@
 {
   "name": "@karashiiro/my-cool-proxy",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "MCP gateway server that lets you call multiple MCP servers from Lua scripts.",
   "main": "dist/index.js",
   "bin": {
-    "my-cool-proxy": "./bin/my-cool-proxy.js"
+    "my-cool-proxy": "./bin/my-cool-proxy.mjs"
   },
   "files": [
     "dist",

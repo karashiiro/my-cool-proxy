@@ -46,15 +46,40 @@ end
 result({ total = #results, data = results })
 ```
 
-## Quick Start
+## Installation
 
-### 1. Install
+### From npm (Recommended)
+
+Install globally to use as a CLI tool:
 
 ```bash
-pnpm install
+npm install -g @karashiiro/my-cool-proxy
 ```
 
-### 2. Configure
+Or run directly without installing:
+
+```bash
+# Using pnpm (recommended)
+pnpm dlx @karashiiro/my-cool-proxy
+
+# Using npx
+npx @karashiiro/my-cool-proxy
+```
+
+### From Source
+
+Clone and build for development:
+
+```bash
+git clone https://github.com/karashiiro/my-cool-proxy.git
+cd my-cool-proxy
+pnpm install
+pnpm build
+```
+
+## Quick Start
+
+### 1. Configure
 
 Create the config directory and copy the example config:
 
@@ -87,15 +112,19 @@ Edit `config.json` to add your MCP servers (see [CONFIG.md](./CONFIG.md) for all
 }
 ```
 
-> **Tip:** Run `node dist/index.js --config-path` to see exactly where your config should be located.
+> **Tip:** Run `my-cool-proxy --config-path` (or `node dist/index.js --config-path` if running from source) to see exactly where your config should be located.
 
-### 3. Run
+### 2. Run
 
 ```bash
+# If installed globally
+my-cool-proxy
+
+# If running from source
 pnpm dev
 ```
 
-### 4. Connect
+### 3. Connect
 
 Add to your MCP client config (e.g., Claude Desktop):
 
@@ -109,7 +138,7 @@ Add to your MCP client config (e.g., Claude Desktop):
 }
 ```
 
-### 5. Use It
+### 4. Use It
 
 The proxy exposes these tools:
 
@@ -212,22 +241,25 @@ Add your config (port and host are ignored in stdio mode):
 }
 ```
 
-> **Tip:** Run `node dist/index.js --config-path` to see exactly where your config should be located.
+> **Tip:** Run `my-cool-proxy --config-path` to see exactly where your config should be located.
 
-#### 2. Build
-
-Stdio mode requires a compiled build:
-
-```bash
-pnpm install
-pnpm build
-```
-
-#### 3. Connect from MCP Client
+#### 2. Connect from MCP Client
 
 Add to your MCP client config (e.g., Claude Desktop's `claude_desktop_config.json`):
 
-**macOS/Linux:**
+**If installed globally via npm:**
+
+```json
+{
+  "mcpServers": {
+    "my-cool-proxy": {
+      "command": "my-cool-proxy"
+    }
+  }
+}
+```
+
+**If running from source (macOS/Linux):**
 
 ```json
 {
@@ -240,7 +272,7 @@ Add to your MCP client config (e.g., Claude Desktop's `claude_desktop_config.jso
 }
 ```
 
-**Windows:**
+**If running from source (Windows):**
 
 ```json
 {
@@ -253,7 +285,7 @@ Add to your MCP client config (e.g., Claude Desktop's `claude_desktop_config.jso
 }
 ```
 
-#### 4. Restart Your MCP Client
+#### 3. Restart Your MCP Client
 
 Restart Claude Desktop (or your MCP client) to pick up the new config. The gateway will start automatically when you begin a conversation.
 
@@ -267,7 +299,7 @@ Restart Claude Desktop (or your MCP client) to pick up the new config. The gatew
 
 **Config not found?**
 
-- Run `node dist/index.js --config-path` from the project directory to see expected location
+- Run `my-cool-proxy --config-path` to see expected location
 - Or set `CONFIG_PATH` environment variable to override:
 
 ```json
