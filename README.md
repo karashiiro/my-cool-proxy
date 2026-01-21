@@ -216,9 +216,9 @@ pnpm build && node dist/index.js
 
 Run the gateway as a stdio-based MCP server that clients launch directly. This is ideal when:
 
-- You want the MCP client (e.g., Claude Desktop) to manage the gateway lifecycle
+- You want the MCP client to manage the gateway process's lifecycle
 - You're running everything locally and don't need a persistent server
-- You prefer simpler deployment without managing an HTTP server
+- You prefer simpler deployment without managing an HTTP server, or your client doesn't support localhost HTTP (e.g. Claude Desktop)
 
 **Key differences from HTTP mode:**
 
