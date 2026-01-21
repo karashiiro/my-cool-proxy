@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { writeFileSync, unlinkSync, existsSync } from "fs";
 import { resolve } from "path";
 import { loadConfig, mergeEnvConfig } from "./config-loader.js";
@@ -43,10 +43,29 @@ describe("loadConfig", () => {
     expect(config).toEqual(testConfig);
   });
 
-  it("should throw error if config file not found", () => {
-    process.env.CONFIG_PATH = "/nonexistent/path/config.json";
+  it("should throw error if config file not found", async () => {
+    // Reset modules and mock config-paths to simulate no config found anywhere
+    vi.resetModules();
+    vi.doMock("./config-paths.js", () => ({
+      getActiveConfigPath: () => null,
+      getConfigPaths: () => [
+        { path: "/nonexistent/env.json", source: "env", exists: false },
+        {
+          path: "/nonexistent/platform.json",
+          source: "platform",
+          exists: false,
+        },
+      ],
+      getPlatformConfigPath: () => "/nonexistent/platform.json",
+    }));
 
-    expect(() => loadConfig()).toThrow(/Configuration file not found/);
+    // Re-import to get mocked version
+    const { loadConfig: mockedLoadConfig } = await import("./config-loader.js");
+
+    expect(() => mockedLoadConfig()).toThrow(/Configuration file not found/);
+
+    vi.doUnmock("./config-paths.js");
+    vi.resetModules();
   });
 
   it("should throw error if port is not a number", () => {
