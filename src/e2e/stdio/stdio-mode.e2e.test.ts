@@ -9,6 +9,46 @@ import type {
 import { generateStdioTestConfig } from "../helpers/test-config-generator.js";
 import { resolve } from "node:path";
 
+/**
+ * Waits for upstream servers to be available by polling list-servers.
+ * This is necessary because upstream MCP clients are created asynchronously
+ * after the downstream client connects and its capabilities are captured.
+ */
+async function waitForServersReady(
+  client: Client,
+  timeoutMs = 5000,
+): Promise<void> {
+  const startTime = Date.now();
+
+  while (Date.now() - startTime < timeoutMs) {
+    try {
+      const result = await client.callTool({
+        name: "list-servers",
+        arguments: {},
+      });
+
+      // Check if servers are available
+      const content = result.content as Array<{ type: string; text?: string }>;
+      const firstContent = content[0];
+      if (firstContent && "text" in firstContent && firstContent.text) {
+        const text = firstContent.text;
+        // If we see "Available MCP Servers: X" where X > 0, servers are ready
+        const match = text.match(/Available MCP Servers: (\d+)/);
+        if (match && match[1] && parseInt(match[1], 10) > 0) {
+          return;
+        }
+      }
+    } catch {
+      // Ignore errors during polling
+    }
+
+    // Wait a bit before retrying
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+
+  throw new Error(`Servers did not become ready within ${timeoutMs}ms`);
+}
+
 describe("Stdio Mode E2E", () => {
   let gatewayClient: Client;
   let configCleanup: () => void;
@@ -59,6 +99,10 @@ describe("Stdio Mode E2E", () => {
     });
 
     await gatewayClient.connect(transport);
+
+    // Wait for upstream servers to be ready
+    // This is necessary because upstream clients are created asynchronously
+    await waitForServersReady(gatewayClient);
   }, 60000);
 
   afterAll(async () => {
