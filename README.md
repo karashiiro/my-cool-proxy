@@ -172,37 +172,123 @@ pnpm build && node dist/index.js
 
 ### Stdio Mode
 
-Run the gateway as a stdio-based MCP server that clients launch directly:
+Run the gateway as a stdio-based MCP server that clients launch directly. This is ideal when:
 
-**Configure** - Set `transport: "stdio"` in config.json (port and host are optional):
+- You want the MCP client (e.g., Claude Desktop) to manage the gateway lifecycle
+- You're running everything locally and don't need a persistent server
+- You prefer simpler deployment without managing an HTTP server
+
+**Key differences from HTTP mode:**
+
+- Single session only (no multi-client support)
+- All upstream MCP clients initialize at startup (not lazily)
+- Must build before running (`pnpm dev` won't work - stdout is used for MCP protocol)
+
+#### 1. Configure
+
+Create your config file with `transport: "stdio"`:
+
+```bash
+# Linux
+mkdir -p ~/.config/my-cool-proxy
+# macOS
+mkdir -p ~/Library/Preferences/my-cool-proxy
+# Windows (PowerShell)
+mkdir "$env:APPDATA\my-cool-proxy\Config"
+```
+
+Add your config (port and host are ignored in stdio mode):
 
 ```json
 {
   "transport": "stdio",
-  "mcpClients": { ... }
+  "mcpClients": {
+    "filesystem": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-everything"]
+    }
+  }
 }
 ```
 
-**Build:**
+> **Tip:** Run `node dist/index.js --config-path` to see exactly where your config should be located.
+
+#### 2. Build
+
+Stdio mode requires a compiled build:
 
 ```bash
+pnpm install
 pnpm build
 ```
 
-**Connect from MCP client:**
+#### 3. Connect from MCP Client
+
+Add to your MCP client config (e.g., Claude Desktop's `claude_desktop_config.json`):
+
+**macOS/Linux:**
 
 ```json
 {
   "mcpServers": {
     "my-cool-proxy": {
       "command": "node",
-      "args": ["path/to/my-cool-proxy/dist/index.js"]
+      "args": ["/absolute/path/to/my-cool-proxy/dist/index.js"]
     }
   }
 }
 ```
 
-**Note:** Stdio mode requires building first - `pnpm dev` won't work properly with stdio since stdout is used for the MCP protocol.
+**Windows:**
+
+```json
+{
+  "mcpServers": {
+    "my-cool-proxy": {
+      "command": "node",
+      "args": ["C:\\Users\\yourname\\path\\to\\my-cool-proxy\\dist\\index.js"]
+    }
+  }
+}
+```
+
+#### 4. Restart Your MCP Client
+
+Restart Claude Desktop (or your MCP client) to pick up the new config. The gateway will start automatically when you begin a conversation.
+
+#### Troubleshooting Stdio Mode
+
+**Gateway not starting?**
+
+- Check your MCP client's logs for error messages
+- Verify the path to `dist/index.js` is correct and absolute
+- Ensure you ran `pnpm build` after any code changes
+
+**Config not found?**
+
+- Run `node dist/index.js --config-path` from the project directory to see expected location
+- Or set `CONFIG_PATH` environment variable to override:
+
+```json
+{
+  "mcpServers": {
+    "my-cool-proxy": {
+      "command": "node",
+      "args": ["path/to/my-cool-proxy/dist/index.js"],
+      "env": {
+        "CONFIG_PATH": "/path/to/your/config.json"
+      }
+    }
+  }
+}
+```
+
+**Upstream servers failing to connect?**
+
+- All configured MCP clients must connect successfully at startup in stdio mode
+- Check that commands in your config are correct and dependencies are installed
+- Try running the upstream servers individually first to verify they work
 
 ## MCP Client Transport Types
 
