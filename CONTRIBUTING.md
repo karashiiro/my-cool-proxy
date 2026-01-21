@@ -218,26 +218,25 @@ pnpm test:watch
 
 - **Gateway Server** (`src/mcp/gateway-server.ts`) - Main MCP server wrapper
 - **Client Manager** (`src/mcp/client-manager.ts`) - Manages MCP client connections
-- **Transport Manager** (`src/mcp/transport-manager.ts`) - Handles session transports
 - **Lua Runtime** (`src/lua/runtime.ts`) - Executes Lua scripts with Wasmoon
 - **DI Container** (`src/container/inversify.config.ts`) - Wires everything together
 
 ### Transport Modes
 
-The proxy supports both the stdio and sHTTP transports (see `src/index.ts`):
+The proxy supports both the stdio and streamable HTTP transports (see `src/index.ts`):
 
 **Streamable HTTP**:
 
-- Sets up an Express server with a `/mcp` endpoint
+- Uses `serveHttp()` from `@karashiiro/mcp` with session factory pattern
 - Supports multiple concurrent sessions with isolated state
-- Uses `TransportManager` to create and cache transports per session
+- Each session gets its own Gateway server instance via the session factory
 - Clients are initialized on-demand when sessions start
 - Each session gets its own set of MCP client instances (keyed as `${name}-${sessionId}`)
 - Clients that don't support sessions use the `default` session
 
 **stdio**:
 
-- Gateway connects directly to `StdioServerTransport`
+- Uses `serveStdio()` from `@karashiiro/mcp`
 - Single-session model (uses `default` as the session ID)
 - All MCP clients initialized upfront during startup
 - Reads from stdin, writes to stdout (incompatible with `pnpm dev`)

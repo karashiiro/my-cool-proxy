@@ -82,7 +82,6 @@ flowchart TB
     subgraph Clients["Client Management"]
         ClientManager["Client Manager"]
         ClientSession["Client Sessions"]
-        TransportMgr["Transport Manager"]
     end
 
     subgraph Upstream["Upstream MCP Servers"]
@@ -109,22 +108,18 @@ This sequence diagram shows the complete flow when an agent executes a Lua scrip
 ```mermaid
 sequenceDiagram
     participant Agent
-    participant Hono as HTTP Server
-    participant Session as Session Controller
-    participant Transport as Transport Manager
+    participant HTTP as HTTP Server
     participant Gateway as Gateway Server
     participant Execute as Execute Tool
     participant Lua as Lua Runtime
     participant Client as Client Manager
     participant Upstream as MCP Server
 
-    Agent->>Hono: POST /mcp (tool call)
-    Hono->>Session: handleRequest()
-    Session->>Transport: getOrCreateForRequest(sessionId)
-    Transport-->>Session: SSE Transport
-    Session->>Client: initializeClientsForSession()
+    Agent->>HTTP: POST /mcp (tool call)
+    Note over HTTP,Gateway: Session factory creates<br/>Gateway per session
+    HTTP->>Client: initializeClientsForSession()
     Client->>Upstream: Connect (if new session)
-    Session->>Gateway: connect(transport)
+    HTTP->>Gateway: Route request
     Gateway->>Execute: execute(script, context)
     Execute->>Client: getClientsBySession()
     Client-->>Execute: Map of MCP clients
@@ -141,16 +136,14 @@ sequenceDiagram
 
 ## Key Components
 
-| Component          | File                                        | Purpose                                   |
-| ------------------ | ------------------------------------------- | ----------------------------------------- |
-| Entry Point        | `src/index.ts`                              | Starts HTTP or stdio mode based on config |
-| DI Container       | `src/container/inversify.config.ts`         | Wires all dependencies together           |
-| Gateway Server     | `src/mcp/gateway-server.ts`                 | Main MCP server, registers tools          |
-| Client Manager     | `src/mcp/client-manager.ts`                 | Manages upstream MCP connections          |
-| Transport Manager  | `src/mcp/transport-manager.ts`              | Caches HTTP transports per session        |
-| Session Controller | `src/controllers/mcp-session-controller.ts` | Routes HTTP requests                      |
-| Lua Runtime        | `src/lua/runtime.ts`                        | Executes user scripts                     |
-| Tool Discovery     | `src/mcp/tool-discovery-service.ts`         | Powers discovery tools                    |
+| Component      | File                                | Purpose                                   |
+| -------------- | ----------------------------------- | ----------------------------------------- |
+| Entry Point    | `src/index.ts`                      | Starts HTTP or stdio mode based on config |
+| DI Container   | `src/container/inversify.config.ts` | Wires all dependencies together           |
+| Gateway Server | `src/mcp/gateway-server.ts`         | Main MCP server, registers tools          |
+| Client Manager | `src/mcp/client-manager.ts`         | Manages upstream MCP connections          |
+| Lua Runtime    | `src/lua/runtime.ts`                | Executes user scripts                     |
+| Tool Discovery | `src/mcp/tool-discovery-service.ts` | Powers discovery tools                    |
 
 ## Transport Modes
 
