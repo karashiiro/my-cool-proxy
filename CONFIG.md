@@ -9,7 +9,7 @@ The gateway looks for `config.json` in the following locations (in priority orde
 1. **Environment variable**: Path specified in `CONFIG_PATH`
 2. **Platform-specific user directory**:
    - **Windows**: `%APPDATA%\my-cool-proxy\Config\config.json`
-   - **macOS**: `~/Library/Application Support/my-cool-proxy/config.json`
+   - **macOS**: `~/Library/Preferences/my-cool-proxy/config.json`
    - **Linux**: `~/.config/my-cool-proxy/config.json` (respects `$XDG_CONFIG_HOME`)
 
 ### Finding Your Config Location
@@ -29,8 +29,11 @@ pnpm build && node dist/index.js --config-path
 1. Create the config directory:
 
    ```bash
-   # Linux/macOS
+   # Linux
    mkdir -p ~/.config/my-cool-proxy
+
+   # macOS
+   mkdir -p ~/Library/Preferences/my-cool-proxy
 
    # Windows (PowerShell)
    mkdir "$env:APPDATA\my-cool-proxy\Config"
@@ -39,8 +42,11 @@ pnpm build && node dist/index.js --config-path
 2. Copy the example config:
 
    ```bash
-   # Linux/macOS
+   # Linux
    cp config.example.json ~/.config/my-cool-proxy/config.json
+
+   # macOS
+   cp config.example.json ~/Library/Preferences/my-cool-proxy/config.json
 
    # Windows (PowerShell)
    Copy-Item config.example.json "$env:APPDATA\my-cool-proxy\Config\config.json"

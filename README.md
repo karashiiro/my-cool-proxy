@@ -59,9 +59,13 @@ pnpm install
 Create the config directory and copy the example config:
 
 ```bash
-# Linux/macOS
+# Linux
 mkdir -p ~/.config/my-cool-proxy
 cp config.example.json ~/.config/my-cool-proxy/config.json
+
+# macOS
+mkdir -p ~/Library/Preferences/my-cool-proxy
+cp config.example.json ~/Library/Preferences/my-cool-proxy/config.json
 
 # Windows (PowerShell)
 mkdir "$env:APPDATA\my-cool-proxy\Config"
