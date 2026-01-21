@@ -205,7 +205,7 @@ describe("loadConfig", () => {
     writeFileSync(testConfigPath, "{ invalid json }");
     process.env.CONFIG_PATH = testConfigPath;
 
-    expect(() => loadConfig()).toThrow();
+    expect(() => loadConfig()).toThrow(/Invalid JSON in config file/);
   });
 });
 

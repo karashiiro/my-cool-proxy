@@ -45,6 +45,7 @@
     "@inversifyjs/strongly-typed": "^2.2.0",
     "@karashiiro/mcp": "0.4.1",
     "@modelcontextprotocol/sdk": "^1.25.2",
+    "env-paths": "^3.0.0",
     "hono": "^4.11.4",
     "inversify": "^7.10.7",
     "pino": "^10.1.0",

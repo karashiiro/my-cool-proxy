@@ -1,18 +1,39 @@
 import { readFileSync } from "fs";
-import { resolve } from "path";
 import type { ServerConfig } from "../types/interfaces.js";
+import {
+  getActiveConfigPath,
+  getConfigPaths,
+  getPlatformConfigPath,
+} from "./config-paths.js";
 
 /**
  * Loads server configuration from a JSON file.
- * The config file path can be specified via the CONFIG_PATH environment variable.
- * Defaults to 'config.json' in the current working directory.
+ *
+ * Search order:
+ * 1. CONFIG_PATH environment variable (explicit override)
+ * 2. Platform-specific user directory:
+ *    - Windows: %APPDATA%\my-cool-proxy\config.json
+ *    - macOS: ~/Library/Application Support/my-cool-proxy/config.json
+ *    - Linux: ~/.config/my-cool-proxy/config.json (respects $XDG_CONFIG_HOME)
  *
  * @returns The loaded server configuration
  * @throws Error if the config file cannot be read or parsed
  */
 export function loadConfig(): ServerConfig {
-  const configPath =
-    process.env.CONFIG_PATH || resolve(process.cwd(), "config.json");
+  const activePath = getActiveConfigPath();
+
+  if (!activePath) {
+    const searchedPaths = getConfigPaths();
+    const pathsList = searchedPaths
+      .map((p) => `  - ${p.path} (${p.source})`)
+      .join("\n");
+    throw new Error(
+      `Configuration file not found. Searched locations:\n${pathsList}\n\n` +
+        `Create a config file at ${getPlatformConfigPath()} or set the CONFIG_PATH environment variable.`,
+    );
+  }
+
+  const configPath = activePath.path;
 
   try {
     const configContent = readFileSync(configPath, "utf-8");
@@ -101,11 +122,9 @@ export function loadConfig(): ServerConfig {
 
     return config;
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      throw new Error(
-        `Configuration file not found at: ${configPath}\n` +
-          `You can create a config.json file or set the CONFIG_PATH environment variable.`,
-      );
+    // Re-throw with more context for parse errors
+    if (error instanceof SyntaxError) {
+      throw new Error(`Invalid JSON in config file at ${configPath}: ${error.message}`);
     }
     throw error;
   }

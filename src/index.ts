@@ -24,9 +24,11 @@ import {
 import type { IToolRegistry } from "./tools/tool-registry.js";
 import type { ResourceAggregationService } from "./mcp/resource-aggregation-service.js";
 import type { PromptAggregationService } from "./mcp/prompt-aggregation-service.js";
-
-// Load configuration from file and merge with environment variables
-const config = mergeEnvConfig(loadConfig());
+import { parseArgs } from "./utils/cli-args.js";
+import {
+  getConfigPaths,
+  getPlatformConfigDir,
+} from "./utils/config-paths.js";
 
 interface InitializationResult {
   successful: string[];
@@ -443,7 +445,61 @@ async function startStdioMode(
   });
 }
 
+/**
+ * Print help information and exit.
+ *
+ * Note: We use console.log here instead of the injected logger because
+ * these CLI utilities run before the DI container is created (which requires
+ * loading config first). This is intentional - we want to show help/config
+ * info even when config is missing or invalid.
+ */
+function printHelp(): void {
+  console.log("MCP Lua Gateway - Proxy for multiple MCP servers with Lua scripting\n");
+  console.log("Usage: my-cool-proxy [options]\n");
+  console.log("Options:");
+  console.log("  -c, --config-path    Show config file search paths and exit");
+  console.log("  -h, --help           Show this help message and exit\n");
+  console.log("Environment variables:");
+  console.log("  CONFIG_PATH          Override config file location");
+  console.log("  PORT                 Override server port (HTTP mode)");
+  console.log("  HOST                 Override server host (HTTP mode)\n");
+  console.log("See CONFIG.md for full configuration reference.");
+}
+
+/**
+ * Print config path information and exit.
+ *
+ * Note: We use console.log here instead of the injected logger because
+ * these CLI utilities run before the DI container is created.
+ */
+function printConfigPaths(): void {
+  console.log("Config file search order:\n");
+  const paths = getConfigPaths();
+  for (const p of paths) {
+    const status = p.exists ? "[EXISTS]" : "[NOT FOUND]";
+    const label = p.source === "env" ? "ENV: CONFIG_PATH" : "Platform config";
+    console.log(`  ${status} ${label}`);
+    console.log(`          ${p.path}\n`);
+  }
+  console.log(`Platform config directory: ${getPlatformConfigDir()}`);
+}
+
 async function main() {
+  // Handle CLI arguments before loading config
+  const args = parseArgs(process.argv.slice(2));
+
+  if (args.help) {
+    printHelp();
+    process.exit(0);
+  }
+
+  if (args.showConfigPath) {
+    printConfigPaths();
+    process.exit(0);
+  }
+
+  // Load configuration from file and merge with environment variables
+  const config = mergeEnvConfig(loadConfig());
   const container = createContainer(config);
 
   // Route to appropriate mode based on transport config

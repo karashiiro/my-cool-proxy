@@ -2,28 +2,60 @@
 
 This project uses a JSON-based configuration system with environment variable overrides.
 
-## Quick Start
+## Configuration File Location
 
-1. Copy the example config:
+The gateway looks for `config.json` in the following locations (in priority order):
+
+1. **Environment variable**: Path specified in `CONFIG_PATH`
+2. **Platform-specific user directory**:
+   - **Windows**: `%APPDATA%\my-cool-proxy\Config\config.json`
+   - **macOS**: `~/Library/Application Support/my-cool-proxy/config.json`
+   - **Linux**: `~/.config/my-cool-proxy/config.json` (respects `$XDG_CONFIG_HOME`)
+
+### Finding Your Config Location
+
+Run with `--config-path` to see all searched paths and which one will be used:
+
+```bash
+# After building
+node dist/index.js --config-path
+
+# Or with pnpm
+pnpm build && node dist/index.js --config-path
+```
+
+### Setting Up Your Config
+
+1. Create the config directory:
 
    ```bash
-   cp config.example.json config.json
+   # Linux/macOS
+   mkdir -p ~/.config/my-cool-proxy
+
+   # Windows (PowerShell)
+   mkdir "$env:APPDATA\my-cool-proxy\Config"
    ```
 
-2. Edit `config.json` with your settings
+2. Copy the example config:
 
-3. Run the server:
+   ```bash
+   # Linux/macOS
+   cp config.example.json ~/.config/my-cool-proxy/config.json
+
+   # Windows (PowerShell)
+   Copy-Item config.example.json "$env:APPDATA\my-cool-proxy\Config\config.json"
+   ```
+
+3. Edit the config file with your settings
+
+4. Run the server:
    ```bash
    pnpm dev
    ```
 
-## Configuration File
-
-By default, the server looks for `config.json` in the current working directory.
-
 ### Custom Config Path
 
-You can specify a custom config file path using the `CONFIG_PATH` environment variable:
+You can override the default location using the `CONFIG_PATH` environment variable:
 
 ```bash
 CONFIG_PATH=/path/to/custom-config.json pnpm dev

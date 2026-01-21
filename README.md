@@ -56,10 +56,16 @@ pnpm install
 
 ### 2. Configure
 
-Copy the example config:
+Create the config directory and copy the example config:
 
 ```bash
-cp config.example.json config.json
+# Linux/macOS
+mkdir -p ~/.config/my-cool-proxy
+cp config.example.json ~/.config/my-cool-proxy/config.json
+
+# Windows (PowerShell)
+mkdir "$env:APPDATA\my-cool-proxy\Config"
+Copy-Item config.example.json "$env:APPDATA\my-cool-proxy\Config\config.json"
 ```
 
 Edit `config.json` to add your MCP servers (see [CONFIG.md](./CONFIG.md) for all options):
@@ -76,6 +82,8 @@ Edit `config.json` to add your MCP servers (see [CONFIG.md](./CONFIG.md) for all
   }
 }
 ```
+
+> **Tip:** Run `node dist/index.js --config-path` to see exactly where your config should be located.
 
 ### 3. Run
 
