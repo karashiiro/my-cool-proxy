@@ -17,7 +17,9 @@ const MAX_INSTRUCTION_EXCERPT_LENGTH = 200;
 export class ServerInfoPreloader implements IServerInfoPreloader {
   constructor(@$inject(TYPES.Logger) private logger: ILogger) {}
 
-  async preloadServerInfo(config: ServerConfig): Promise<PreloadedServerInfo[]> {
+  async preloadServerInfo(
+    config: ServerConfig,
+  ): Promise<PreloadedServerInfo[]> {
     const results: PreloadedServerInfo[] = [];
 
     const probePromises = Object.entries(config.mcpClients).map(
@@ -108,7 +110,6 @@ export class ServerInfoPreloader implements IServerInfoPreloader {
     ];
 
     for (const server of servers) {
-      const displayName = server.serverName || server.name;
       lines.push("");
       lines.push(`## ${server.name}`);
 
@@ -140,7 +141,10 @@ export class ServerInfoPreloader implements IServerInfoPreloader {
     return lines.join("\n");
   }
 
-  private truncateInstructions(instructions: string, maxLength: number): string {
+  private truncateInstructions(
+    instructions: string,
+    maxLength: number,
+  ): string {
     // Normalize whitespace
     const normalized = instructions.replace(/\s+/g, " ").trim();
 
