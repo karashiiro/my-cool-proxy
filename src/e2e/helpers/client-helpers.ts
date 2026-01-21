@@ -13,6 +13,8 @@ export interface ClientConfig {
   gatewayPort: number;
   /** Optional client name */
   clientName?: string;
+  /** Number of upstream servers to wait for (default: 2) */
+  expectedServerCount?: number;
 }
 
 /**
@@ -42,7 +44,7 @@ export async function createGatewayClient(
   // Wait for upstream servers to be ready by polling list-servers
   // This is necessary because upstream clients are created asynchronously
   // after the downstream client's capabilities are captured
-  await waitForServersReady(client);
+  await waitForServersReady(client, config.expectedServerCount ?? 2);
 
   return client;
 }
@@ -192,7 +194,7 @@ export async function createCapableGatewayClient(
   // Wait for upstream servers to be ready by polling list-servers
   // This is necessary because upstream clients are created asynchronously
   // after the downstream client's capabilities are captured
-  await waitForServersReady(client);
+  await waitForServersReady(client, config.expectedServerCount ?? 2);
 
   return client;
 }
@@ -201,9 +203,14 @@ export async function createCapableGatewayClient(
  * Waits for upstream servers to be available by polling list-servers.
  * This is necessary because upstream MCP clients are created asynchronously
  * after the downstream client connects and its capabilities are captured.
+ *
+ * @param client - The MCP client to poll
+ * @param expectedServerCount - Number of servers to wait for
+ * @param timeoutMs - Maximum time to wait
  */
 async function waitForServersReady(
   client: Client,
+  expectedServerCount: number,
   timeoutMs = 5000,
 ): Promise<void> {
   const startTime = Date.now();
@@ -215,14 +222,18 @@ async function waitForServersReady(
         arguments: {},
       });
 
-      // Check if servers are available
+      // Check if all expected servers are available
       const content = result.content as Array<{ type: string; text?: string }>;
       const firstContent = content[0];
       if (firstContent && "text" in firstContent && firstContent.text) {
         const text = firstContent.text;
-        // If we see "Available MCP Servers: X" where X > 0, servers are ready
+        // Wait until we have the expected number of servers
         const match = text.match(/Available MCP Servers: (\d+)/);
-        if (match && match[1] && parseInt(match[1], 10) > 0) {
+        if (
+          match &&
+          match[1] &&
+          parseInt(match[1], 10) >= expectedServerCount
+        ) {
           return;
         }
       }
@@ -234,5 +245,7 @@ async function waitForServersReady(
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
 
-  throw new Error(`Servers did not become ready within ${timeoutMs}ms`);
+  throw new Error(
+    `Expected ${expectedServerCount} servers but they did not become ready within ${timeoutMs}ms`,
+  );
 }
