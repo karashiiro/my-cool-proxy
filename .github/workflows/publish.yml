@@ -27,11 +27,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Validate (lint, typecheck, test)
-        run: pnpm check
-
       - name: Build
         run: pnpm build
+
+      - name: Validate (lint, typecheck, test)
+        run: pnpm check
 
       - name: Publish to npm
         run: npm publish --access public
