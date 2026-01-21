@@ -3,6 +3,13 @@
   "version": "1.0.0",
   "description": "",
   "main": "dist/index.js",
+  "bin": {
+    "my-cool-proxy": "./bin/my-cool-proxy.js"
+  },
+  "files": [
+    "dist",
+    "bin"
+  ],
   "type": "module",
   "scripts": {
     "format": "prettier --write .",
