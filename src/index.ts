@@ -9,6 +9,7 @@ import type {
   ICapabilityStore,
   ILogger,
   IMCPClientManager,
+  IServerInfoPreloader,
   IShutdownHandler,
   ServerConfig,
 } from "./types/interfaces.js";
@@ -218,6 +219,18 @@ async function startHttpMode(
   const capabilityStore = container.get<ICapabilityStore>(
     TYPES.CapabilityStore,
   );
+  const serverInfoPreloader = container.get<IServerInfoPreloader>(
+    TYPES.ServerInfoPreloader,
+  );
+
+  // Preload upstream server info at startup to populate gateway instructions
+  logger.info("Preloading upstream server info...");
+  const preloadedServers = await serverInfoPreloader.preloadServerInfo(config);
+  const aggregatedInstructions =
+    serverInfoPreloader.buildAggregatedInstructions(preloadedServers);
+  logger.info(
+    `Preloaded info from ${preloadedServers.length} server(s) for gateway instructions`,
+  );
 
   // Start HTTP server with per-session factory
   const handle = await serveHttp(
@@ -226,12 +239,14 @@ async function startHttpMode(
 
       // Create gateway server FIRST (before upstream clients)
       // This allows us to capture downstream client capabilities during initialization
+      // Pass preloaded instructions so downstream clients can see available servers
       const gatewayServer = new MCPGatewayServer(
         toolRegistry,
         clientManager,
         logger,
         resourceAggregation,
         promptAggregation,
+        aggregatedInstructions,
       );
 
       // Set up callback to initialize upstream clients when downstream client connects
@@ -337,19 +352,33 @@ async function startStdioMode(
   const capabilityStore = container.get<ICapabilityStore>(
     TYPES.CapabilityStore,
   );
+  const serverInfoPreloader = container.get<IServerInfoPreloader>(
+    TYPES.ServerInfoPreloader,
+  );
 
   // Fixed session ID for stdio (single session mode)
   const SESSION_ID = "default";
 
+  // Preload upstream server info at startup to populate gateway instructions
+  logger.info("Preloading upstream server info...");
+  const preloadedServers = await serverInfoPreloader.preloadServerInfo(config);
+  const aggregatedInstructions =
+    serverInfoPreloader.buildAggregatedInstructions(preloadedServers);
+  logger.info(
+    `Preloaded info from ${preloadedServers.length} server(s) for gateway instructions`,
+  );
+
   // Start stdio server - upstream clients are initialized when downstream connects
   const handle = await serveStdio(() => {
     // Create gateway server FIRST
+    // Pass preloaded instructions so downstream clients can see available servers
     const gatewayServer = new MCPGatewayServer(
       toolRegistry,
       clientManager,
       logger,
       resourceAggregation,
       promptAggregation,
+      aggregatedInstructions,
     );
 
     // Set up callback to initialize upstream clients when downstream client connects

@@ -1,4 +1,4 @@
-import { injectable } from "inversify";
+import { injectable, unmanaged } from "inversify";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import {
   ListResourcesRequestSchema,
@@ -75,11 +75,13 @@ export class MCPGatewayServer {
     private resourceAggregation: ResourceAggregationService,
     @$inject(TYPES.PromptAggregationService)
     private promptAggregation: PromptAggregationService,
+    @unmanaged() private instructions?: string,
   ) {
     this.server = new McpServer(
       {
         name: this.serverId,
         version: "1.0.0",
+        ...(this.instructions && { instructions: this.instructions }),
       },
       {
         capabilities: {
