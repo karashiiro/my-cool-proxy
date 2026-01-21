@@ -39,7 +39,11 @@ async function waitForServersReady(
         const text = firstContent.text;
         // Wait until we have the expected number of servers
         const match = text.match(/Available MCP Servers: (\d+)/);
-        if (match && match[1] && parseInt(match[1], 10) >= expectedServerCount) {
+        if (
+          match &&
+          match[1] &&
+          parseInt(match[1], 10) >= expectedServerCount
+        ) {
           return;
         }
       }
