@@ -63,11 +63,13 @@ describe("HTTP Multi-Session E2E", () => {
     client1 = await createGatewayClient({
       gatewayPort,
       clientName: "e2e-client-1",
+      expectedServerCount: 1,
     });
 
     client2 = await createGatewayClient({
       gatewayPort,
       clientName: "e2e-client-2",
+      expectedServerCount: 1,
     });
   }, 30000);
 

@@ -60,6 +60,7 @@ describe("Elicitation Proxy E2E (HTTP Mode)", () => {
       gatewayPort,
       clientName: "elicitation-e2e-client",
       elicitation: true,
+      expectedServerCount: 1,
     });
   }, 30000);
 
@@ -138,6 +139,7 @@ describe("Elicitation Proxy E2E (HTTP Mode)", () => {
         gatewayPort,
         clientName: "custom-elicitation-client",
         elicitation: true,
+        expectedServerCount: 1,
         mockElicitationResponse: {
           name: "Alice",
           age: 30,
@@ -175,6 +177,7 @@ describe("Elicitation Proxy E2E (HTTP Mode)", () => {
         gatewayPort,
         clientName: "declining-elicitation-client",
         elicitation: true,
+        expectedServerCount: 1,
         mockElicitationAction: "decline",
       });
     });

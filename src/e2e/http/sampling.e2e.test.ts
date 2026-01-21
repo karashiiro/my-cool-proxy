@@ -60,6 +60,7 @@ describe("Sampling Proxy E2E (HTTP Mode)", () => {
       gatewayPort,
       clientName: "sampling-e2e-client",
       sampling: true,
+      expectedServerCount: 1,
     });
   }, 30000);
 
@@ -138,6 +139,7 @@ describe("Sampling Proxy E2E (HTTP Mode)", () => {
         gatewayPort,
         clientName: "custom-sampling-client",
         sampling: true,
+        expectedServerCount: 1,
         mockSamplingResponse: "The answer is 42!",
       });
     });
