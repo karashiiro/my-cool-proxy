@@ -1,5 +1,5 @@
 {
-  "name": "my-cool-proxy",
+  "name": "@karashiiro/my-cool-proxy",
   "version": "1.0.0",
   "description": "",
   "main": "dist/index.js",
