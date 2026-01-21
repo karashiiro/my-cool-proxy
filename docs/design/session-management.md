@@ -73,22 +73,13 @@ classDiagram
         +callTool(name, args)
     }
 
-    class TransportManager {
-        -transports: Map~string, Transport~
-        -pendingCreation: Set~string~
-        +getOrCreateForRequest(sessionId)
-        +deleteTransport(sessionId)
-    }
-
-    class MCPSessionController {
-        +handleRequest(request)
-        -initializeClientsForSession(sessionId)
-        -connectGatewayServer(transport, sessionId)
+    class MCPGatewayServer {
+        -clientManager: MCPClientManager
+        +getServer()
     }
 
     MCPClientManager "1" --> "*" MCPClientSession
-    MCPSessionController --> MCPClientManager
-    MCPSessionController --> TransportManager
+    MCPGatewayServer --> MCPClientManager
 ```
 
 ## Session Lifecycle (HTTP Mode)
@@ -96,16 +87,15 @@ classDiagram
 ```mermaid
 sequenceDiagram
     participant Client
-    participant Controller as Session Controller
-    participant Transport as Transport Manager
+    participant HTTP as HTTP Server
+    participant Gateway as Gateway Server
     participant ClientMgr as Client Manager
     participant Upstream as Upstream Servers
 
     Note over Client,Upstream: Session Start
-    Client->>Controller: First request with mcp-session-id
-    Controller->>Transport: getOrCreateForRequest(sessionId)
-    Transport-->>Controller: New transport
-    Controller->>ClientMgr: initializeClientsForSession(sessionId)
+    Client->>HTTP: First request with mcp-session-id
+    Note over HTTP: Session factory creates<br/>new Gateway instance
+    HTTP->>ClientMgr: initializeClientsForSession(sessionId)
 
     loop For each configured server
         ClientMgr->>Upstream: Connect with session header
@@ -113,18 +103,18 @@ sequenceDiagram
         ClientMgr->>ClientMgr: Store as serverName-sessionId
     end
 
-    Controller->>Controller: Connect gateway to transport
+    HTTP->>Gateway: Connect to transport
 
     Note over Client,Upstream: Active Session
-    Client->>Controller: Tool call request
-    Controller->>Controller: Route to gateway
-    Controller-->>Client: Response
+    Client->>HTTP: Tool call request
+    HTTP->>Gateway: Route to gateway
+    Gateway-->>Client: Response
 
     Note over Client,Upstream: Session End
-    Client->>Controller: DELETE request
-    Controller->>Transport: deleteTransport(sessionId)
-    Transport->>Transport: Close transport
-    Note over ClientMgr: Clients remain until<br/>explicit cleanup
+    Client->>HTTP: DELETE request
+    Note over HTTP: onSessionClosed callback
+    HTTP->>ClientMgr: closeClientsForSession(sessionId)
+    Note over ClientMgr: Session clients cleaned up
 ```
 
 ## Session ID Handling
@@ -160,39 +150,28 @@ if (sessionId !== "default" && !sessionId.startsWith("pending-")) {
 }
 ```
 
-## Transport Management
+## Session Management
 
-The `TransportManager` handles HTTP transport lifecycle:
+Session management is handled via the `@karashiiro/mcp` abstraction layer in `src/index.ts`:
 
-### Transport Caching
+### Session Factory Pattern
 
 ```mermaid
 flowchart TB
-    Request["Incoming Request"] --> Check{"Transport exists?"}
-    Check -->|Yes| Return["Return cached transport"]
-    Check -->|No| Pending{"Creation pending?"}
-    Pending -->|Yes| Wait["Wait for completion"]
-    Pending -->|No| Create["Create new transport"]
-    Create --> Cache["Cache transport"]
-    Cache --> Return
-    Wait --> Return
+    Request["Incoming Request"] --> Check{"Session exists?"}
+    Check -->|Yes| Route["Route to existing Gateway"]
+    Check -->|No| Create["Create new Gateway via factory"]
+    Create --> Init["Initialize clients for session"]
+    Init --> Route
 ```
 
-### Race Condition Prevention
+### Session Lifecycle Callbacks
 
-Multiple concurrent requests might try to create the same transport. The manager uses:
+The HTTP server uses three callbacks for session management:
 
-- `pendingCreation` Set to track in-progress creations
-- Polling loop (10ms intervals) to wait for pending transports
-- Cleanup of stale pending entries after 30 seconds
-
-### Transport Cleanup
-
-When a transport closes:
-
-1. `onclose` handler fires
-2. Both the SDK-generated and original session IDs are removed from cache
-3. Resources are freed
+- `sessionFactory`: Creates a new `MCPGatewayServer` instance for each session
+- `onSessionInitialized`: Called after session is ready, initializes MCP clients
+- `onSessionClosed`: Cleans up session resources (closes clients)
 
 ## Client Session Features
 
@@ -273,28 +252,28 @@ sequenceDiagram
 
 ## Stdio Mode Differences
 
-| Aspect             | HTTP Mode                | Stdio Mode         |
-| ------------------ | ------------------------ | ------------------ |
-| Session ID         | From header or generated | Fixed "default"    |
-| Client init        | Lazy (on first request)  | Eager (at startup) |
-| Multiple sessions  | Yes                      | No                 |
-| Transport manager  | Used                     | Not used           |
-| Session controller | Used                     | Not used           |
+| Aspect            | HTTP Mode                      | Stdio Mode             |
+| ----------------- | ------------------------------ | ---------------------- |
+| Session ID        | From header or generated       | Fixed "default"        |
+| Client init       | Lazy (on first request)        | Eager (at startup)     |
+| Multiple sessions | Yes                            | No                     |
+| Server factory    | `serveHttp()` with factory     | `serveStdio()` direct  |
+| Gateway instances | One per session                | Single instance        |
 
 In stdio mode:
 
-- All clients initialized during `startStdioMode()`
-- Single gateway server connects to `StdioServerTransport`
+- All clients initialized at startup via `serveStdio()`
+- Single gateway server connects to stdio transport
 - No session isolation needed
 
 ## Implementation Files
 
-| File                                        | Purpose                             |
-| ------------------------------------------- | ----------------------------------- |
-| `src/mcp/client-manager.ts`                 | Client lifecycle and session keying |
-| `src/mcp/client-session.ts`                 | Per-client caching and filtering    |
-| `src/mcp/transport-manager.ts`              | HTTP transport caching              |
-| `src/controllers/mcp-session-controller.ts` | Request routing and session init    |
+| File                        | Purpose                                          |
+| --------------------------- | ------------------------------------------------ |
+| `src/index.ts`              | Session factory and lifecycle callbacks          |
+| `src/mcp/client-manager.ts` | Client lifecycle and session keying              |
+| `src/mcp/client-session.ts` | Per-client caching and filtering                 |
+| `src/mcp/gateway-server.ts` | Per-session Gateway server with tool integration |
 
 ## Best Practices
 

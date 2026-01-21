@@ -32,31 +32,22 @@ HTTP mode runs the gateway as an HTTP server, supporting multiple concurrent ses
 ```mermaid
 sequenceDiagram
     participant Client as MCP Client
-    participant Hono as Hono Server
-    participant Session as Session Controller
-    participant Transport as Transport Manager
+    participant HTTP as HTTP Server
     participant Gateway as Gateway Server
     participant Clients as Client Manager
 
     Note over Client,Clients: First Request (Session Start)
-    Client->>Hono: GET /mcp (SSE connect)
-    Hono->>Session: handleRequest()
-    Session->>Transport: getOrCreateForRequest(sessionId)
-    Note over Transport: Creates new transport<br/>for this session
-    Transport-->>Session: WebStandardStreamableHTTPServerTransport
-    Session->>Clients: initializeClientsForSession(sessionId)
+    Client->>HTTP: GET /mcp (SSE connect)
+    Note over HTTP: Session factory creates<br/>new Gateway instance
+    HTTP->>Clients: initializeClientsForSession(sessionId)
     Note over Clients: Creates MCP clients<br/>for all configured servers
-    Session->>Gateway: connect(transport)
+    HTTP->>Gateway: connect(transport)
     Note over Gateway: Registers tools,<br/>ready for requests
     Gateway-->>Client: SSE stream established
 
     Note over Client,Clients: Subsequent Requests
-    Client->>Hono: POST /mcp (tool call)
-    Hono->>Session: handleRequest()
-    Session->>Transport: getOrCreateForRequest(sessionId)
-    Note over Transport: Returns cached transport
-    Transport-->>Session: Existing transport
-    Session->>Gateway: (already connected)
+    Client->>HTTP: POST /mcp (tool call)
+    Note over HTTP: Routes to existing<br/>session Gateway
     Gateway->>Gateway: Process tool call
     Gateway-->>Client: Result via SSE
 ```
@@ -67,7 +58,7 @@ sequenceDiagram
 | --------------- | --------------------------------------------------------------------------- |
 | **Sessions**    | Each client gets an isolated session identified by `mcp-session-id` header  |
 | **Client Init** | MCP clients created lazily when a session first makes a request             |
-| **Transport**   | Uses `WebStandardStreamableHTTPServerTransport` from MCP SDK                |
+| **Transport**   | Streamable HTTP transport via `@karashiiro/mcp` abstraction                 |
 | **Endpoint**    | Single `/mcp` endpoint handles GET (SSE), POST (messages), DELETE (cleanup) |
 
 ### Session ID Handling
@@ -75,7 +66,7 @@ sequenceDiagram
 1. Client sends `mcp-session-id` header with requests
 2. If no header provided, a pending ID is generated: `pending-${timestamp}-${random}`
 3. Session IDs are propagated to upstream MCP servers (unless pending or "default")
-4. Transport manager caches transports keyed by session ID
+4. Each session gets its own Gateway server instance via the session factory
 
 ### Configuration
 
@@ -181,37 +172,15 @@ Port and host settings are ignored in stdio mode.
 
 ### Entry Point (`src/index.ts`)
 
-The entry point reads the transport configuration and starts the appropriate mode:
+The entry point reads the transport configuration and starts the appropriate mode using the `@karashiiro/mcp` abstraction layer:
 
-```typescript
-const config = loadConfig();
-const container = createContainer(config);
+- **HTTP mode**: Uses `serveHttp()` with a session factory that creates isolated Gateway instances per session
+- **Stdio mode**: Uses `serveStdio()` with a single Gateway instance
 
-if (config.transport === "stdio") {
-  await startStdioMode(container);
-} else {
-  await startHttpMode(container, config);
-}
-```
-
-### Transport Manager (`src/mcp/transport-manager.ts`)
-
-HTTP mode only. Manages transport lifecycle:
-
-- Creates `WebStandardStreamableHTTPServerTransport` instances
-- Caches transports by session ID
-- Handles cleanup when transports close
-- Prevents race conditions during transport creation
-
-### Session Controller (`src/controllers/mcp-session-controller.ts`)
-
-HTTP mode only. Orchestrates request handling:
-
-- Extracts session ID from headers
-- Gets or creates transport for session
-- Initializes clients for new sessions
-- Connects gateway server to transport
-- Delegates to transport for message handling
+Session management in HTTP mode is handled via callbacks:
+- `sessionFactory`: Creates a new `MCPGatewayServer` for each session
+- `onSessionInitialized`: Initializes MCP clients for the new session
+- `onSessionClosed`: Cleans up session resources
 
 ## Related Documentation
 
