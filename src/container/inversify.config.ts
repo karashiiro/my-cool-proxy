@@ -29,6 +29,7 @@ import { ListServersTool } from "../tools/list-servers-tool.js";
 import { ListServerToolsTool } from "../tools/list-server-tools-tool.js";
 import { ToolDetailsTool } from "../tools/tool-details-tool.js";
 import { InspectToolResponseTool } from "../tools/inspect-tool-response-tool.js";
+import { SummaryStatsTool } from "../tools/summary-stats-tool.js";
 import type { IToolRegistry } from "../tools/tool-registry.js";
 import { ToolRegistry } from "../tools/tool-registry.js";
 
@@ -79,6 +80,7 @@ export function createContainer(
   container.bind<ITool>(TYPES.Tool).to(ListServerToolsTool);
   container.bind<ITool>(TYPES.Tool).to(ToolDetailsTool);
   container.bind<ITool>(TYPES.Tool).to(InspectToolResponseTool);
+  container.bind<ITool>(TYPES.Tool).to(SummaryStatsTool);
 
   // Bind tool registry and populate it with all registered tools
   container
