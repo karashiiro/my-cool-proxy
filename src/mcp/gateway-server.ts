@@ -81,7 +81,6 @@ export class MCPGatewayServer {
       {
         name: this.serverId,
         version: "1.0.0",
-        ...(this.instructions && { instructions: this.instructions }),
       },
       {
         capabilities: {
@@ -95,6 +94,7 @@ export class MCPGatewayServer {
             listChanged: true,
           },
         },
+        ...(this.instructions && { instructions: this.instructions }),
       },
     );
 
