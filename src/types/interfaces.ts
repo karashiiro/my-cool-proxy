@@ -189,3 +189,32 @@ export interface ICapabilityStore {
    */
   deleteCapabilities(sessionId: string): void;
 }
+
+/**
+ * Preloaded server information gathered at startup.
+ * Used to populate gateway instructions before downstream clients connect.
+ */
+export interface PreloadedServerInfo {
+  name: string;
+  serverName?: string;
+  description?: string;
+  version?: string;
+  instructions?: string;
+}
+
+/**
+ * Service for preloading MCP server information at startup.
+ */
+export interface IServerInfoPreloader {
+  /**
+   * Probe all configured MCP servers and gather their info.
+   * This creates temporary connections just to get server metadata.
+   */
+  preloadServerInfo(config: ServerConfig): Promise<PreloadedServerInfo[]>;
+
+  /**
+   * Build aggregated instructions from preloaded server info.
+   * Returns a formatted string suitable for the gateway's instructions field.
+   */
+  buildAggregatedInstructions(servers: PreloadedServerInfo[]): string;
+}

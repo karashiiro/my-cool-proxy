@@ -19,4 +19,5 @@ export const TYPES = {
   Tool: "Tool",
   ToolRegistry: "ToolRegistry",
   CapabilityStore: "CapabilityStore",
+  ServerInfoPreloader: "ServerInfoPreloader",
 } as const;

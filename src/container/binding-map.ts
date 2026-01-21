@@ -5,6 +5,7 @@ import type {
   ServerConfig,
   IShutdownHandler,
   ICapabilityStore,
+  IServerInfoPreloader,
 } from "../types/interfaces.js";
 import type { MCPGatewayServer } from "../mcp/gateway-server.js";
 import type { ToolDiscoveryService } from "../mcp/tool-discovery-service.js";
@@ -32,4 +33,5 @@ export interface ContainerBindingMap {
   Tool: ITool; // Multi-bound - use getAll() to retrieve all registered tools
   ToolRegistry: IToolRegistry;
   CapabilityStore: ICapabilityStore;
+  ServerInfoPreloader: IServerInfoPreloader;
 }

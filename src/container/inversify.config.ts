@@ -10,6 +10,7 @@ import type {
   ServerConfig,
   IShutdownHandler,
   ICapabilityStore,
+  IServerInfoPreloader,
 } from "../types/interfaces.js";
 import { WasmoonRuntime } from "../lua/runtime.js";
 import { MCPClientManager } from "../mcp/client-manager.js";
@@ -21,6 +22,7 @@ import { PromptAggregationService } from "../mcp/prompt-aggregation-service.js";
 import { MCPFormatterService } from "../mcp/mcp-formatter-service.js";
 import { ShutdownHandler } from "../handlers/shutdown-handler.js";
 import { CapabilityStore } from "../services/capability-store.js";
+import { ServerInfoPreloader } from "../services/server-info-preloader.js";
 import type { ITool } from "../tools/base-tool.js";
 import { ExecuteLuaTool } from "../tools/execute-lua-tool.js";
 import { ListServersTool } from "../tools/list-servers-tool.js";
@@ -109,6 +111,12 @@ export function createContainer(
   container
     .bind<ICapabilityStore>(TYPES.CapabilityStore)
     .to(CapabilityStore)
+    .inSingletonScope();
+
+  // Bind server info preloader for gathering upstream server info at startup
+  container
+    .bind<IServerInfoPreloader>(TYPES.ServerInfoPreloader)
+    .to(ServerInfoPreloader)
     .inSingletonScope();
 
   return container;
