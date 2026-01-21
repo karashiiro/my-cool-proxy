@@ -25,10 +25,7 @@ import type { IToolRegistry } from "./tools/tool-registry.js";
 import type { ResourceAggregationService } from "./mcp/resource-aggregation-service.js";
 import type { PromptAggregationService } from "./mcp/prompt-aggregation-service.js";
 import { parseArgs } from "./utils/cli-args.js";
-import {
-  getConfigPaths,
-  getPlatformConfigDir,
-} from "./utils/config-paths.js";
+import { getConfigPaths, getPlatformConfigDir } from "./utils/config-paths.js";
 
 interface InitializationResult {
   successful: string[];
@@ -454,7 +451,9 @@ async function startStdioMode(
  * info even when config is missing or invalid.
  */
 function printHelp(): void {
-  console.log("MCP Lua Gateway - Proxy for multiple MCP servers with Lua scripting\n");
+  console.log(
+    "MCP Lua Gateway - Proxy for multiple MCP servers with Lua scripting\n",
+  );
   console.log("Usage: my-cool-proxy [options]\n");
   console.log("Options:");
   console.log("  -c, --config-path    Show config file search paths and exit");

@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdirSync, writeFileSync, rmSync, existsSync } from "fs";
-import { resolve, join } from "path";
+import { resolve } from "path";
 import { tmpdir } from "os";
 import {
   getConfigPaths,
@@ -81,7 +81,10 @@ describe("config-paths", () => {
   describe("getActiveConfigPath", () => {
     it("should return null when CONFIG_PATH does not exist and platform path does not exist", () => {
       // Set CONFIG_PATH to a non-existent file
-      process.env.CONFIG_PATH = resolve(tempDir, "definitely-does-not-exist.json");
+      process.env.CONFIG_PATH = resolve(
+        tempDir,
+        "definitely-does-not-exist.json",
+      );
 
       const result = getActiveConfigPath();
 

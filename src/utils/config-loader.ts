@@ -124,7 +124,9 @@ export function loadConfig(): ServerConfig {
   } catch (error) {
     // Re-throw with more context for parse errors
     if (error instanceof SyntaxError) {
-      throw new Error(`Invalid JSON in config file at ${configPath}: ${error.message}`);
+      throw new Error(
+        `Invalid JSON in config file at ${configPath}: ${error.message}`,
+      );
     }
     throw error;
   }
