@@ -53,6 +53,9 @@ export interface IMCPClientManager {
   setPromptListChangedHandler(
     handler: (serverName: string, sessionId: string) => void,
   ): void;
+  setToolListChangedHandler(
+    handler: (serverName: string, sessionId: string) => void,
+  ): void;
   close(): Promise<void>;
 }
 

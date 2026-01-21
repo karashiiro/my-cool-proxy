@@ -115,6 +115,19 @@ export class MCPGatewayServer {
       },
     );
 
+    // Register handler for tool list changes from clients
+    // Note: We don't send tools/list_changed downstream because the gateway's own
+    // tools never change. This handler is for logging/observability only.
+    // The tool cache in MCPClientSession is automatically invalidated, so subsequent
+    // calls to list-server-tools will return fresh data.
+    this.clientPool.setToolListChangedHandler(
+      (serverName: string, sessionId: string) => {
+        this.logger.info(
+          `Upstream server '${serverName}' reported tool list changed (session: ${sessionId})`,
+        );
+      },
+    );
+
     this.setupTools();
   }
 

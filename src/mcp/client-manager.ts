@@ -21,6 +21,7 @@ export class MCPClientManager implements IMCPClientManager {
     sessionId: string,
   ) => void;
   private onPromptListChanged?: (serverName: string, sessionId: string) => void;
+  private onToolListChanged?: (serverName: string, sessionId: string) => void;
 
   constructor(@$inject(TYPES.Logger) private logger: ILogger) {}
 
@@ -34,6 +35,12 @@ export class MCPClientManager implements IMCPClientManager {
     handler: (serverName: string, sessionId: string) => void,
   ): void {
     this.onPromptListChanged = handler;
+  }
+
+  setToolListChangedHandler(
+    handler: (serverName: string, sessionId: string) => void,
+  ): void {
+    this.onToolListChanged = handler;
   }
 
   async addHttpClient(
@@ -97,6 +104,9 @@ export class MCPClientManager implements IMCPClientManager {
           : undefined,
         this.onPromptListChanged
           ? (serverName) => this.onPromptListChanged!(serverName, sessionId)
+          : undefined,
+        this.onToolListChanged
+          ? (serverName) => this.onToolListChanged!(serverName, sessionId)
           : undefined,
       );
 
@@ -177,6 +187,9 @@ export class MCPClientManager implements IMCPClientManager {
           : undefined,
         this.onPromptListChanged
           ? (serverName) => this.onPromptListChanged!(serverName, sessionId)
+          : undefined,
+        this.onToolListChanged
+          ? (serverName) => this.onToolListChanged!(serverName, sessionId)
           : undefined,
       );
 

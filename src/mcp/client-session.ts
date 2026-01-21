@@ -36,6 +36,7 @@ export class MCPClientSession {
   private promptCache: ICacheService<Prompt[]>;
   private onResourceListChanged?: (serverName: string) => void;
   private onPromptListChanged?: (serverName: string) => void;
+  private onToolListChanged?: (serverName: string) => void;
 
   constructor(
     client: Client,
@@ -44,6 +45,7 @@ export class MCPClientSession {
     logger: ILogger,
     onResourceListChanged?: (serverName: string) => void,
     onPromptListChanged?: (serverName: string) => void,
+    onToolListChanged?: (serverName: string) => void,
   ) {
     this.client = client;
     this.serverName = serverName;
@@ -51,6 +53,7 @@ export class MCPClientSession {
     this.logger = logger;
     this.onResourceListChanged = onResourceListChanged;
     this.onPromptListChanged = onPromptListChanged;
+    this.onToolListChanged = onToolListChanged;
 
     // Initialize cache instances
     this.toolCache = createCache<Tool[]>(logger);
@@ -70,6 +73,11 @@ export class MCPClientSession {
           `Server '${this.serverName}': Tool list changed, invalidating cache`,
         );
         this.clearToolCache();
+
+        // Notify gateway server if callback is provided
+        if (this.onToolListChanged) {
+          this.onToolListChanged(this.serverName);
+        }
       },
     );
 
