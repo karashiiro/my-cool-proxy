@@ -1,0 +1,49 @@
+{
+  "name": "@karashiiro/my-cool-proxy",
+  "version": "1.1.0",
+  "description": "MCP gateway server that lets you call multiple MCP servers from Lua scripts.",
+  "main": "dist/index.js",
+  "bin": {
+    "my-cool-proxy": "./bin/my-cool-proxy.mjs"
+  },
+  "files": [
+    "dist",
+    "bin"
+  ],
+  "type": "module",
+  "scripts": {
+    "build": "tsgo -p tsconfig.build.json",
+    "dev": "tsx src/index.ts",
+    "typecheck": "tsgo --noEmit"
+  },
+  "keywords": [],
+  "author": "karashiiro",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/karashiiro/my-cool-proxy.git"
+  },
+  "devDependencies": {
+    "@suites/di.inversify": "4.0.0-alpha.0",
+    "@suites/doubles.vitest": "^3.0.1",
+    "@suites/unit": "^3.0.1",
+    "@types/node": "^25.0.3",
+    "@typescript/native-preview": "7.0.0-dev.20251217.1",
+    "jiti": "^2.6.1",
+    "tsx": "^4.21.0"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.19.9",
+    "@inversifyjs/strongly-typed": "^2.2.0",
+    "@karashiiro/mcp": "0.4.1",
+    "@modelcontextprotocol/sdk": "^1.25.2",
+    "env-paths": "^3.0.0",
+    "hono": "^4.11.4",
+    "inversify": "^7.10.7",
+    "pino": "^10.1.0",
+    "pino-pretty": "^13.1.3",
+    "reflect-metadata": "^0.2.2",
+    "wasmoon": "^1.16.0",
+    "zod": "^4.3.5"
+  }
+}

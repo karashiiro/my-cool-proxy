@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import type {
-  TextContent,
-  ImageContent,
-  EmbeddedResource,
+import {
+  type TextContent,
+  type ImageContent,
+  type EmbeddedResource,
 } from "@modelcontextprotocol/sdk/types.js";
 import { generateStdioTestConfig } from "../helpers/test-config-generator.js";
 import { resolve } from "node:path";
@@ -75,7 +75,7 @@ describe("Stdio Mode E2E", () => {
           args: [
             resolve(
               process.cwd(),
-              "dist/e2e/fixtures/toy-servers/calculator-server.js",
+              "apps/gateway/dist/e2e/fixtures/toy-servers/calculator-server.js",
             ),
           ],
         },
@@ -85,7 +85,7 @@ describe("Stdio Mode E2E", () => {
           args: [
             resolve(
               process.cwd(),
-              "dist/e2e/fixtures/toy-servers/data-server.js",
+              "apps/gateway/dist/e2e/fixtures/toy-servers/data-server.js",
             ),
           ],
         },
@@ -102,7 +102,7 @@ describe("Stdio Mode E2E", () => {
     // Create transport that spawns gateway process
     const transport = new StdioClientTransport({
       command: "node",
-      args: [resolve(process.cwd(), "dist/index.js")],
+      args: [resolve(process.cwd(), "apps/gateway/dist/index.js")],
       env: {
         ...process.env,
         CONFIG_PATH: configResult.configPath,
