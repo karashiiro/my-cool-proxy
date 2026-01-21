@@ -1,7 +1,7 @@
 {
   "name": "@karashiiro/my-cool-proxy",
   "version": "1.0.0",
-  "description": "",
+  "description": "MCP gateway server that lets you call multiple MCP servers from Lua scripts.",
   "main": "dist/index.js",
   "bin": {
     "my-cool-proxy": "./bin/my-cool-proxy.js"
@@ -29,6 +29,10 @@
   "keywords": [],
   "author": "karashiiro",
   "license": "MTI",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/karashiiro/my-cool-proxy.git"
+  },
   "packageManager": "pnpm@10.26.0+sha512.3b3f6c725ebe712506c0ab1ad4133cf86b1f4b687effce62a9b38b4d72e3954242e643190fc51fa1642949c735f403debd44f5cb0edd657abe63a8b6a7e1e402",
   "devDependencies": {
     "@eslint/js": "^9.39.2",
