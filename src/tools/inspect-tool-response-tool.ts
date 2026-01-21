@@ -36,7 +36,7 @@ export class InspectToolResponseTool implements ITool {
     luaServerName: z.string().describe("The Lua identifier of the MCP server"),
     luaToolName: z.string().describe("The Lua identifier of the tool"),
     sampleArgs: z
-      .any()
+      .record(z.string(), z.unknown())
       .optional()
       .describe(
         "Minimal arguments for the sample call (e.g., {limit: 1} for pagination). " +
