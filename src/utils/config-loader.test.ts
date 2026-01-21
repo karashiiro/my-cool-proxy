@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { writeFileSync, unlinkSync, existsSync } from "fs";
+import { writeFileSync, unlinkSync, existsSync, rmSync } from "fs";
 import { resolve } from "path";
-import { loadConfig, mergeEnvConfig } from "./config-loader.js";
+import { tmpdir } from "os";
+import { loadConfig, mergeEnvConfig, DEFAULT_CONFIG } from "./config-loader.js";
 import type { ServerConfig } from "../types/interfaces.js";
 
 describe("loadConfig", () => {
@@ -43,27 +44,104 @@ describe("loadConfig", () => {
     expect(config).toEqual(testConfig);
   });
 
-  it("should throw error if config file not found", async () => {
+  it("should auto-create default config when no config exists", async () => {
     // Reset modules and mock config-paths to simulate no config found anywhere
     vi.resetModules();
+
+    // Create a temp directory for this test
+    const tempDir = resolve(tmpdir(), `config-test-${Date.now()}`);
+    const mockConfigPath = resolve(tempDir, "auto-created", "config.json");
+
     vi.doMock("./config-paths.js", () => ({
       getActiveConfigPath: () => null,
-      getConfigPaths: () => [
-        { path: "/nonexistent/env.json", source: "env", exists: false },
-        {
-          path: "/nonexistent/platform.json",
-          source: "platform",
-          exists: false,
-        },
-      ],
-      getPlatformConfigPath: () => "/nonexistent/platform.json",
+      getPlatformConfigPath: () => mockConfigPath,
     }));
+
+    // Suppress console.error output during test
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
     // Re-import to get mocked version
     const { loadConfig: mockedLoadConfig } = await import("./config-loader.js");
 
-    expect(() => mockedLoadConfig()).toThrow(/Configuration file not found/);
+    const config = mockedLoadConfig();
 
+    // Verify the returned config matches DEFAULT_CONFIG
+    expect(config.port).toBe(3000);
+    expect(config.host).toBe("localhost");
+    expect(config.transport).toBe("http");
+    expect(config.mcpClients).toEqual({});
+
+    // Verify the file was created
+    expect(existsSync(mockConfigPath)).toBe(true);
+
+    // Cleanup
+    consoleSpy.mockRestore();
+    rmSync(tempDir, { recursive: true, force: true });
+    vi.doUnmock("./config-paths.js");
+    vi.resetModules();
+  });
+
+  it("should create parent directories when auto-creating config", async () => {
+    vi.resetModules();
+
+    // Create a deeply nested path
+    const tempDir = resolve(tmpdir(), `config-test-${Date.now()}`);
+    const nestedPath = resolve(
+      tempDir,
+      "deeply",
+      "nested",
+      "dir",
+      "config.json",
+    );
+
+    vi.doMock("./config-paths.js", () => ({
+      getActiveConfigPath: () => null,
+      getPlatformConfigPath: () => nestedPath,
+    }));
+
+    // Suppress console.error output during test
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const { loadConfig: mockedLoadConfig } = await import("./config-loader.js");
+    mockedLoadConfig();
+
+    // Verify the file was created in the nested directory
+    expect(existsSync(nestedPath)).toBe(true);
+
+    // Cleanup
+    consoleSpy.mockRestore();
+    rmSync(tempDir, { recursive: true, force: true });
+    vi.doUnmock("./config-paths.js");
+    vi.resetModules();
+  });
+
+  it("should log helpful message when auto-creating config", async () => {
+    vi.resetModules();
+
+    const tempDir = resolve(tmpdir(), `config-test-${Date.now()}`);
+    const mockConfigPath = resolve(tempDir, "log-test", "config.json");
+
+    vi.doMock("./config-paths.js", () => ({
+      getActiveConfigPath: () => null,
+      getPlatformConfigPath: () => mockConfigPath,
+    }));
+
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const { loadConfig: mockedLoadConfig } = await import("./config-loader.js");
+    mockedLoadConfig();
+
+    // Verify helpful messages were logged
+    expect(consoleSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Created default config"),
+    );
+    expect(consoleSpy).toHaveBeenCalledWith(
+      expect.stringContaining("CONFIG.md"),
+    );
+
+    // Cleanup
+    consoleSpy.mockRestore();
+    rmSync(tempDir, { recursive: true, force: true });
     vi.doUnmock("./config-paths.js");
     vi.resetModules();
   });
@@ -309,5 +387,21 @@ describe("mergeEnvConfig", () => {
 
     const result = mergeEnvConfig(baseConfig);
     expect(result.mcpClients).toEqual(baseConfig.mcpClients);
+  });
+});
+
+describe("DEFAULT_CONFIG", () => {
+  it("should have expected default values", () => {
+    expect(DEFAULT_CONFIG).toEqual({
+      port: 3000,
+      host: "localhost",
+      transport: "http",
+      mcpClients: {},
+    });
+  });
+
+  it("should have empty mcpClients object", () => {
+    expect(DEFAULT_CONFIG.mcpClients).toEqual({});
+    expect(Object.keys(DEFAULT_CONFIG.mcpClients)).toHaveLength(0);
   });
 });

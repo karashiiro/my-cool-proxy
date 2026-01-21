@@ -1,10 +1,41 @@
-import { readFileSync } from "fs";
+import { mkdirSync, readFileSync, writeFileSync } from "fs";
+import { dirname } from "path";
 import type { ServerConfig } from "../types/interfaces.js";
-import {
-  getActiveConfigPath,
-  getConfigPaths,
-  getPlatformConfigPath,
-} from "./config-paths.js";
+import { getActiveConfigPath, getPlatformConfigPath } from "./config-paths.js";
+
+/**
+ * Default configuration for first-time setup.
+ * Uses HTTP transport with standard port/host.
+ */
+export const DEFAULT_CONFIG: ServerConfig = {
+  port: 3000,
+  host: "localhost",
+  transport: "http",
+  mcpClients: {},
+};
+
+/**
+ * Creates a default config file at the platform-specific location.
+ * Creates the parent directory if it doesn't exist.
+ *
+ * @returns The path where the config was created
+ */
+export function createDefaultConfig(): string {
+  const configPath = getPlatformConfigPath();
+  const configDir = dirname(configPath);
+
+  // Create directory recursively (handles nested paths)
+  mkdirSync(configDir, { recursive: true });
+
+  // Write pretty-printed JSON for readability
+  writeFileSync(
+    configPath,
+    JSON.stringify(DEFAULT_CONFIG, null, 2) + "\n",
+    "utf-8",
+  );
+
+  return configPath;
+}
 
 /**
  * Loads server configuration from a JSON file.
@@ -23,14 +54,16 @@ export function loadConfig(): ServerConfig {
   const activePath = getActiveConfigPath();
 
   if (!activePath) {
-    const searchedPaths = getConfigPaths();
-    const pathsList = searchedPaths
-      .map((p) => `  - ${p.path} (${p.source})`)
-      .join("\n");
-    throw new Error(
-      `Configuration file not found. Searched locations:\n${pathsList}\n\n` +
-        `Create a config file at ${getPlatformConfigPath()} or set the CONFIG_PATH environment variable.`,
-    );
+    // No config found - create a default one at the platform location
+    const createdPath = createDefaultConfig();
+
+    // Log to stderr (stdout may be used for MCP protocol in stdio mode)
+    console.error(`\n  Created default config at: ${createdPath}`);
+    console.error(`  Edit this file to add your MCP servers.`);
+    console.error(`  See CONFIG.md for configuration options.\n`);
+
+    // Return the default config directly (we know what we wrote)
+    return { ...DEFAULT_CONFIG };
   }
 
   const configPath = activePath.path;

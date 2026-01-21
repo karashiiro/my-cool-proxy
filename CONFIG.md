@@ -8,9 +8,31 @@ The gateway looks for `config.json` in the following locations (in priority orde
 
 1. **Environment variable**: Path specified in `CONFIG_PATH`
 2. **Platform-specific user directory**:
-   - **Windows**: `%APPDATA%\my-cool-proxy\Config\config.json`
-   - **macOS**: `~/Library/Preferences/my-cool-proxy/config.json`
+   - **Windows**: `%APPDATA%\my-cool-proxy\config.json`
+   - **macOS**: `~/Library/Application Support/my-cool-proxy/config.json`
    - **Linux**: `~/.config/my-cool-proxy/config.json` (respects `$XDG_CONFIG_HOME`)
+
+## Automatic Config Creation
+
+When you run the gateway for the first time without a config file, it **automatically creates a minimal default config** at the platform-specific location listed above.
+
+The default config starts the gateway in HTTP mode with no MCP servers:
+
+```json
+{
+  "port": 3000,
+  "host": "localhost",
+  "transport": "http",
+  "mcpClients": {}
+}
+```
+
+After creating the config, the gateway continues to start. You can then:
+
+1. Edit the config file to add your MCP servers
+2. Restart the gateway to pick up your changes
+
+This eliminates the need to manually create the config directory and file for first-time setup.
 
 ### Finding Your Config Location
 
@@ -26,38 +48,39 @@ pnpm build && node dist/index.js --config-path
 
 ### Setting Up Your Config
 
-1. Create the config directory:
+**Option 1: Auto-create (Recommended)**
 
-   ```bash
-   # Linux
-   mkdir -p ~/.config/my-cool-proxy
+Just run the gateway - it will automatically create a default config file:
 
-   # macOS
-   mkdir -p ~/Library/Preferences/my-cool-proxy
+```bash
+my-cool-proxy  # Creates config and starts
+```
 
-   # Windows (PowerShell)
-   mkdir "$env:APPDATA\my-cool-proxy\Config"
-   ```
+Then edit the config to add your MCP servers (see [Config Structure](#config-structure) below).
 
-2. Copy the example config:
+**Option 2: Copy the example config**
 
-   ```bash
-   # Linux
-   cp config.example.json ~/.config/my-cool-proxy/config.json
+For a more complete starting point with examples:
 
-   # macOS
-   cp config.example.json ~/Library/Preferences/my-cool-proxy/config.json
+```bash
+# Linux
+mkdir -p ~/.config/my-cool-proxy
+cp config.example.json ~/.config/my-cool-proxy/config.json
 
-   # Windows (PowerShell)
-   Copy-Item config.example.json "$env:APPDATA\my-cool-proxy\Config\config.json"
-   ```
+# macOS
+mkdir -p ~/Library/Application\ Support/my-cool-proxy
+cp config.example.json ~/Library/Application\ Support/my-cool-proxy/config.json
 
-3. Edit the config file with your settings
+# Windows (PowerShell)
+mkdir "$env:APPDATA\my-cool-proxy"
+Copy-Item config.example.json "$env:APPDATA\my-cool-proxy\config.json"
+```
 
-4. Run the server:
-   ```bash
-   pnpm dev
-   ```
+Then edit the config file with your settings and run the server:
+
+```bash
+pnpm dev
+```
 
 ### Custom Config Path
 

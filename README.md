@@ -81,23 +81,22 @@ pnpm build
 
 ### 1. Configure
 
-Create the config directory and copy the example config:
+The gateway **auto-creates a default config** on first run. Just run it once to generate the config file:
 
 ```bash
-# Linux
-mkdir -p ~/.config/my-cool-proxy
-cp config.example.json ~/.config/my-cool-proxy/config.json
-
-# macOS
-mkdir -p ~/Library/Preferences/my-cool-proxy
-cp config.example.json ~/Library/Preferences/my-cool-proxy/config.json
-
-# Windows (PowerShell)
-mkdir "$env:APPDATA\my-cool-proxy\Config"
-Copy-Item config.example.json "$env:APPDATA\my-cool-proxy\Config\config.json"
+my-cool-proxy  # Creates config and starts (with no servers)
 ```
 
-Edit `config.json` to add your MCP servers (see [CONFIG.md](./CONFIG.md) for all options):
+Then edit the config to add your MCP servers:
+
+```bash
+# Find your config location
+my-cool-proxy --config-path
+
+# Edit to add servers (see CONFIG.md for all options)
+```
+
+Example config structure:
 
 ```json
 {
@@ -112,7 +111,21 @@ Edit `config.json` to add your MCP servers (see [CONFIG.md](./CONFIG.md) for all
 }
 ```
 
-> **Tip:** Run `my-cool-proxy --config-path` (or `node dist/index.js --config-path` if running from source) to see exactly where your config should be located.
+**Or**, copy the example config for a more complete starting point:
+
+```bash
+# Linux
+mkdir -p ~/.config/my-cool-proxy
+cp config.example.json ~/.config/my-cool-proxy/config.json
+
+# macOS
+mkdir -p ~/Library/Application\ Support/my-cool-proxy
+cp config.example.json ~/Library/Application\ Support/my-cool-proxy/config.json
+
+# Windows (PowerShell)
+mkdir "$env:APPDATA\my-cool-proxy"
+Copy-Item config.example.json "$env:APPDATA\my-cool-proxy\config.json"
+```
 
 ### 2. Run
 
@@ -215,18 +228,9 @@ Run the gateway as a stdio-based MCP server that clients launch directly. This i
 
 #### 1. Configure
 
-Create your config file with `transport: "stdio"`:
+The gateway auto-creates a config on first run, but for stdio mode you'll need to edit it to set `transport: "stdio"`. You can find your config location with `my-cool-proxy --config-path`.
 
-```bash
-# Linux
-mkdir -p ~/.config/my-cool-proxy
-# macOS
-mkdir -p ~/Library/Preferences/my-cool-proxy
-# Windows (PowerShell)
-mkdir "$env:APPDATA\my-cool-proxy\Config"
-```
-
-Add your config (port and host are ignored in stdio mode):
+Example config (port and host are ignored in stdio mode):
 
 ```json
 {
