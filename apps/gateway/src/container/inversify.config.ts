@@ -11,6 +11,7 @@ import type {
   IShutdownHandler,
   ICapabilityStore,
   IServerInfoPreloader,
+  ISkillDiscoveryService,
 } from "../types/interfaces.js";
 // Import from workspace packages
 import { WasmoonRuntime } from "@my-cool-proxy/lua-runtime";
@@ -27,6 +28,7 @@ import { MCPGatewayServer } from "../mcp/gateway-server.js";
 import { ShutdownHandler } from "../handlers/shutdown-handler.js";
 import { CapabilityStore } from "../services/capability-store.js";
 import { ServerInfoPreloader } from "../services/server-info-preloader.js";
+import { SkillDiscoveryService } from "../services/skill-discovery-service.js";
 import type { ITool } from "../tools/base-tool.js";
 import { ExecuteLuaTool } from "../tools/execute-lua-tool.js";
 import { ListServersTool } from "../tools/list-servers-tool.js";
@@ -34,6 +36,7 @@ import { ListServerToolsTool } from "../tools/list-server-tools-tool.js";
 import { ToolDetailsTool } from "../tools/tool-details-tool.js";
 import { InspectToolResponseTool } from "../tools/inspect-tool-response-tool.js";
 import { SummaryStatsTool } from "../tools/summary-stats-tool.js";
+import { LoadGatewaySkillTool } from "../tools/load-gateway-skill-tool.js";
 import type { IToolRegistry } from "../tools/tool-registry.js";
 import { ToolRegistry } from "../tools/tool-registry.js";
 
@@ -121,6 +124,7 @@ export function createContainer(
   container.bind<ITool>(TYPES.Tool).to(ToolDetailsTool);
   container.bind<ITool>(TYPES.Tool).to(InspectToolResponseTool);
   container.bind<ITool>(TYPES.Tool).to(SummaryStatsTool);
+  container.bind<ITool>(TYPES.Tool).to(LoadGatewaySkillTool);
 
   // Bind tool registry and populate it with all registered tools
   container
@@ -159,6 +163,12 @@ export function createContainer(
   container
     .bind<IServerInfoPreloader>(TYPES.ServerInfoPreloader)
     .to(ServerInfoPreloader)
+    .inSingletonScope();
+
+  // Bind skill discovery service for loading gateway skills
+  container
+    .bind<ISkillDiscoveryService>(TYPES.SkillDiscoveryService)
+    .to(SkillDiscoveryService)
     .inSingletonScope();
 
   return container;

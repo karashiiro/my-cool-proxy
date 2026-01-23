@@ -1,4 +1,5 @@
 import type { MCPClientSession } from "@my-cool-proxy/mcp-client";
+import type { SkillMetadata } from "./skill.js";
 
 export interface ILuaRuntime {
   executeScript(
@@ -217,4 +218,15 @@ export interface IServerInfoPreloader {
    * Returns a formatted string suitable for the gateway's instructions field.
    */
   buildAggregatedInstructions(servers: PreloadedServerInfo[]): string;
+
+  /**
+   * Build skill instructions section from discovered skills.
+   * Returns a formatted string with skill metadata in XML format.
+   * Returns empty string if no skills are available.
+   */
+  buildSkillInstructions(skills: SkillMetadata[]): string;
 }
+
+// Re-export skill types for convenience
+export type { ISkillDiscoveryService } from "./skill.js";
+export type { SkillMetadata };

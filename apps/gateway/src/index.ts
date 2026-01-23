@@ -11,6 +11,7 @@ import type {
   IMCPClientManager,
   IServerInfoPreloader,
   IShutdownHandler,
+  ISkillDiscoveryService,
   ServerConfig,
 } from "./types/interfaces.js";
 import { serveHttp } from "@karashiiro/mcp/http";
@@ -223,15 +224,26 @@ async function startHttpMode(
   const serverInfoPreloader = container.get<IServerInfoPreloader>(
     TYPES.ServerInfoPreloader,
   );
+  const skillDiscoveryService = container.get<ISkillDiscoveryService>(
+    TYPES.SkillDiscoveryService,
+  );
 
   // Preload upstream server info at startup to populate gateway instructions
   logger.info("Preloading upstream server info...");
   const preloadedServers = await serverInfoPreloader.preloadServerInfo(config);
-  const aggregatedInstructions =
+  let aggregatedInstructions =
     serverInfoPreloader.buildAggregatedInstructions(preloadedServers);
   logger.info(
     `Preloaded info from ${preloadedServers.length} server(s) for gateway instructions`,
   );
+
+  // Discover and append skill instructions
+  const skills = await skillDiscoveryService.discoverSkills();
+  if (skills.length > 0) {
+    const skillInstructions =
+      serverInfoPreloader.buildSkillInstructions(skills);
+    aggregatedInstructions += skillInstructions;
+  }
 
   // Start HTTP server with per-session factory
   const handle = await serveHttp(
@@ -356,6 +368,9 @@ async function startStdioMode(
   const serverInfoPreloader = container.get<IServerInfoPreloader>(
     TYPES.ServerInfoPreloader,
   );
+  const skillDiscoveryService = container.get<ISkillDiscoveryService>(
+    TYPES.SkillDiscoveryService,
+  );
 
   // Fixed session ID for stdio (single session mode)
   const SESSION_ID = "default";
@@ -363,11 +378,19 @@ async function startStdioMode(
   // Preload upstream server info at startup to populate gateway instructions
   logger.info("Preloading upstream server info...");
   const preloadedServers = await serverInfoPreloader.preloadServerInfo(config);
-  const aggregatedInstructions =
+  let aggregatedInstructions =
     serverInfoPreloader.buildAggregatedInstructions(preloadedServers);
   logger.info(
     `Preloaded info from ${preloadedServers.length} server(s) for gateway instructions`,
   );
+
+  // Discover and append skill instructions
+  const skills = await skillDiscoveryService.discoverSkills();
+  if (skills.length > 0) {
+    const skillInstructions =
+      serverInfoPreloader.buildSkillInstructions(skills);
+    aggregatedInstructions += skillInstructions;
+  }
 
   // Start stdio server - upstream clients are initialized when downstream connects
   const handle = await serveStdio(() => {
