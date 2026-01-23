@@ -3,7 +3,7 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { $inject } from "../container/decorators.js";
 import { TYPES } from "../types/index.js";
 import type { ITool, ToolExecutionContext } from "./base-tool.js";
-import { ToolDiscoveryService } from "../mcp/tool-discovery-service.js";
+import { ToolDiscoveryService } from "@my-cool-proxy/mcp-aggregation";
 
 /**
  * Tool that lists all available MCP servers for the current session.

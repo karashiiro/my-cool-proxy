@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { MCPGatewayServer } from "./gateway-server.js";
-import { WasmoonRuntime } from "../lua/runtime.js";
+import { WasmoonRuntime } from "@my-cool-proxy/lua-runtime";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
@@ -18,11 +18,13 @@ import type {
   IMCPClientManager,
 } from "../types/interfaces.js";
 import * as z from "zod";
-import { MCPClientSession } from "./client-session.js";
-import { ToolDiscoveryService } from "./tool-discovery-service.js";
-import { ResourceAggregationService } from "./resource-aggregation-service.js";
-import { PromptAggregationService } from "./prompt-aggregation-service.js";
-import { MCPFormatterService } from "./mcp-formatter-service.js";
+import { MCPClientSession } from "@my-cool-proxy/mcp-client";
+import {
+  ToolDiscoveryService,
+  ResourceAggregationService,
+  PromptAggregationService,
+  MCPFormatterService,
+} from "@my-cool-proxy/mcp-aggregation";
 import { ExecuteLuaTool } from "../tools/execute-lua-tool.js";
 import { ListServersTool } from "../tools/list-servers-tool.js";
 import { ListServerToolsTool } from "../tools/list-server-tools-tool.js";
@@ -64,8 +66,8 @@ const createToolRegistry = (
   const toolDiscovery = new ToolDiscoveryService(
     clientManager,
     logger,
-    new MCPFormatterService(),
     luaRuntime,
+    new MCPFormatterService(),
   );
 
   const registry = new ToolRegistry();
@@ -2596,7 +2598,7 @@ describe("MCPGatewayServer - Progressive Discovery with inspect-tool-response", 
     })) as CallToolResult;
     assertTextContentBlock(inspectResult.content[0]);
     const inspectText = inspectResult.content[0].text;
-    expect(inspectText).toContain("⚠️ Tool executed");
+    expect(inspectText).toContain("[!] Tool executed");
     expect(inspectText).toContain("Sample Response Structure");
     expect(inspectText).toContain("total_count");
     expect(inspectText).toContain("users");

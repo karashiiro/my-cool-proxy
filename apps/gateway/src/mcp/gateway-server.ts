@@ -19,8 +19,10 @@ import type {
 } from "../types/interfaces.js";
 import { $inject } from "../container/decorators.js";
 import { TYPES } from "../types/index.js";
-import { ResourceAggregationService } from "./resource-aggregation-service.js";
-import { PromptAggregationService } from "./prompt-aggregation-service.js";
+import {
+  ResourceAggregationService,
+  PromptAggregationService,
+} from "@my-cool-proxy/mcp-aggregation";
 import type { IToolRegistry } from "../tools/tool-registry.js";
 
 /**

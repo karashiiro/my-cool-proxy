@@ -22,8 +22,10 @@ import {
   ElicitRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import type { IToolRegistry } from "./tools/tool-registry.js";
-import type { ResourceAggregationService } from "./mcp/resource-aggregation-service.js";
-import type { PromptAggregationService } from "./mcp/prompt-aggregation-service.js";
+import type {
+  ResourceAggregationService,
+  PromptAggregationService,
+} from "@my-cool-proxy/mcp-aggregation";
 import { parseArgs } from "./utils/cli-args.js";
 import { getConfigPaths, getPlatformConfigDir } from "./utils/config-paths.js";
 

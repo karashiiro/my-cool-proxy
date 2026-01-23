@@ -1,26 +1,26 @@
-import { injectable } from "inversify";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import { sanitizeLuaIdentifier } from "@my-cool-proxy/mcp-utilities";
 import type {
   IMCPClientManager,
+  IMCPClientSession,
   ILogger,
-  ServerListItem,
   ILuaRuntime,
-} from "../types/interfaces.js";
-import { $inject } from "../container/decorators.js";
-import { TYPES } from "../types/index.js";
-import { sanitizeLuaIdentifier } from "../utils/lua-identifier.js";
-import type { MCPClientSession } from "./client-session.js";
+  ServerListItem,
+} from "./types.js";
 import { MCPFormatterService } from "./mcp-formatter-service.js";
 import { inspect } from "node:util";
 
-@injectable()
 export class ToolDiscoveryService {
+  private formatter: MCPFormatterService;
+
   constructor(
-    @$inject(TYPES.MCPClientManager) private clientPool: IMCPClientManager,
-    @$inject(TYPES.Logger) private logger: ILogger,
-    @$inject(TYPES.MCPFormatterService) private formatter: MCPFormatterService,
-    @$inject(TYPES.LuaRuntime) private luaRuntime: ILuaRuntime,
-  ) {}
+    private clientPool: IMCPClientManager,
+    private logger: ILogger,
+    private luaRuntime: ILuaRuntime,
+    formatter?: MCPFormatterService,
+  ) {
+    this.formatter = formatter ?? new MCPFormatterService();
+  }
 
   /**
    * Convert a JavaScript object to Lua table syntax
@@ -271,7 +271,7 @@ export class ToolDiscoveryService {
       const argsText = JSON.stringify(sampleArgs, null, 2);
 
       const output = [
-        `⚠️ Tool executed: ${luaServerName}.${luaToolName}`,
+        `[!] Tool executed: ${luaServerName}.${luaToolName}`,
         ``,
         `Arguments used:`,
         argsText,
@@ -279,10 +279,10 @@ export class ToolDiscoveryService {
         `Sample Response Structure (as seen from Lua):`,
         responseText,
         ``,
-        `💡 This is exactly what you'll see when calling this tool in an execute script.`,
-        `💡 Use this structure to extract only needed fields.`,
-        `💡 Example: local res = ${luaServerName}.${luaToolName}({...}):await()`,
-        `💡 Then access fields like: res.fieldName or res.items[1].fieldName`,
+        `[i] This is exactly what you'll see when calling this tool in an execute script.`,
+        `[i] Use this structure to extract only needed fields.`,
+        `[i] Example: local res = ${luaServerName}.${luaToolName}({...}):await()`,
+        `[i] Then access fields like: res.fieldName or res.items[1].fieldName`,
       ].join("\n");
 
       return { content: [{ type: "text", text: output }] };
@@ -291,7 +291,7 @@ export class ToolDiscoveryService {
         content: [
           {
             type: "text",
-            text: `Failed to inspect tool response: ${error}\n\n⚠️ The tool may have been executed before this error occurred.`,
+            text: `Failed to inspect tool response: ${error}\n\n[!] The tool may have been executed before this error occurred.`,
           },
         ],
         isError: true,
@@ -299,7 +299,7 @@ export class ToolDiscoveryService {
     }
   }
 
-  private gatherServerInfo(mcpServers: Map<string, MCPClientSession>) {
+  private gatherServerInfo(mcpServers: Map<string, IMCPClientSession>) {
     const serverList: Array<ServerListItem> = [];
 
     for (const [originalName, client] of mcpServers.entries()) {
@@ -339,7 +339,7 @@ export class ToolDiscoveryService {
     return serverList;
   }
 
-  private async gatherToolInfo(client: MCPClientSession) {
+  private async gatherToolInfo(client: IMCPClientSession) {
     const tools = await client.listTools();
     return tools.map((tool) => ({
       luaName: sanitizeLuaIdentifier(tool.name),
@@ -348,9 +348,9 @@ export class ToolDiscoveryService {
   }
 
   private findClientByLuaName(
-    mcpServers: Map<string, MCPClientSession>,
+    mcpServers: Map<string, IMCPClientSession>,
     luaName: string,
-  ): MCPClientSession | null {
+  ): IMCPClientSession | null {
     for (const [originalName, client] of mcpServers.entries()) {
       if (sanitizeLuaIdentifier(originalName) === luaName) {
         return client;

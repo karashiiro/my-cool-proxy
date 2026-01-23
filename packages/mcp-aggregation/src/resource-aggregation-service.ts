@@ -1,31 +1,27 @@
-import { injectable } from "inversify";
 import type {
   ListResourcesResult,
   ReadResourceResult,
   Resource,
 } from "@modelcontextprotocol/sdk/types.js";
-import type {
-  IMCPClientManager,
-  ILogger,
-  ICacheService,
-} from "../types/interfaces.js";
-import { $inject } from "../container/decorators.js";
-import { TYPES } from "../types/index.js";
 import {
   namespaceResource,
   namespaceResourceUri,
   parseResourceUri,
-} from "../utils/resource-uri.js";
-import type { MCPClientSession } from "./client-session.js";
-import { createCache } from "../services/cache-service.js";
+} from "@my-cool-proxy/mcp-utilities";
+import { createCache } from "@my-cool-proxy/mcp-client";
+import type {
+  IMCPClientManager,
+  IMCPClientSession,
+  ILogger,
+  ICacheService,
+} from "./types.js";
 
-@injectable()
 export class ResourceAggregationService {
   private cache: ICacheService<Resource[]>;
 
   constructor(
-    @$inject(TYPES.MCPClientManager) private clientPool: IMCPClientManager,
-    @$inject(TYPES.Logger) private logger: ILogger,
+    private clientPool: IMCPClientManager,
+    private logger: ILogger,
   ) {
     // Create a cache instance for this service
     this.cache = createCache<Resource[]>(logger);
@@ -106,7 +102,7 @@ export class ResourceAggregationService {
     const { serverName, originalUri } = parsed;
 
     const clients = this.clientPool.getClientsBySession(session);
-    const client = clients.get(serverName) as MCPClientSession | undefined;
+    const client = clients.get(serverName) as IMCPClientSession | undefined;
 
     if (!client) {
       const availableServers = Array.from(clients.keys()).join(", ");

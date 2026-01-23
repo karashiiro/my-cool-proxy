@@ -1,5 +1,5 @@
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import type { ILogger, ICacheService } from "../types/interfaces.js";
+import type { ILogger, ICacheService } from "./types.js";
 import {
   ToolListChangedNotificationSchema,
   ResourceListChangedNotificationSchema,
@@ -24,7 +24,7 @@ import type {
   ClientNotification,
   ClientResult,
 } from "@modelcontextprotocol/sdk/types.js";
-import { createCache } from "../services/cache-service.js";
+import { createCache } from "./cache-service.js";
 
 export class MCPClientSession {
   private client: Client;

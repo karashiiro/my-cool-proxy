@@ -1,28 +1,27 @@
-import { injectable } from "inversify";
 import type {
   ListPromptsResult,
   GetPromptResult,
   Prompt,
 } from "@modelcontextprotocol/sdk/types.js";
+import {
+  namespacePrompt,
+  parsePromptName,
+  namespaceGetPromptResultResources,
+} from "@my-cool-proxy/mcp-utilities";
+import { createCache } from "@my-cool-proxy/mcp-client";
 import type {
   IMCPClientManager,
+  IMCPClientSession,
   ILogger,
   ICacheService,
-} from "../types/interfaces.js";
-import { $inject } from "../container/decorators.js";
-import { TYPES } from "../types/index.js";
-import { namespacePrompt, parsePromptName } from "../utils/prompt-name.js";
-import { namespaceGetPromptResultResources } from "../utils/resource-uri.js";
-import type { MCPClientSession } from "./client-session.js";
-import { createCache } from "../services/cache-service.js";
+} from "./types.js";
 
-@injectable()
 export class PromptAggregationService {
   private cache: ICacheService<Prompt[]>;
 
   constructor(
-    @$inject(TYPES.MCPClientManager) private clientPool: IMCPClientManager,
-    @$inject(TYPES.Logger) private logger: ILogger,
+    private clientPool: IMCPClientManager,
+    private logger: ILogger,
   ) {
     // Create a cache instance for this service
     this.cache = createCache<Prompt[]>(logger);
@@ -102,7 +101,7 @@ export class PromptAggregationService {
 
     const { serverName, originalName } = parsed;
     const clients = this.clientPool.getClientsBySession(session);
-    const client = clients.get(serverName) as MCPClientSession | undefined;
+    const client = clients.get(serverName) as IMCPClientSession | undefined;
 
     if (!client) {
       const availableServers = Array.from(clients.keys()).join(", ");

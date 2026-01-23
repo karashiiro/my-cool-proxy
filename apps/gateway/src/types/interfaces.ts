@@ -1,4 +1,4 @@
-import type { MCPClientSession } from "../mcp/client-session.js";
+import type { MCPClientSession } from "@my-cool-proxy/mcp-client";
 
 export interface ILuaRuntime {
   executeScript(

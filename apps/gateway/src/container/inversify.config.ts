@@ -12,14 +12,18 @@ import type {
   ICapabilityStore,
   IServerInfoPreloader,
 } from "../types/interfaces.js";
-import { WasmoonRuntime } from "../lua/runtime.js";
-import { MCPClientManager } from "../mcp/client-manager.js";
+// Import from workspace packages
+import { WasmoonRuntime } from "@my-cool-proxy/lua-runtime";
+import { MCPClientManager } from "@my-cool-proxy/mcp-client";
+import {
+  MCPFormatterService,
+  ToolDiscoveryService,
+  ResourceAggregationService,
+  PromptAggregationService,
+} from "@my-cool-proxy/mcp-aggregation";
+// Import gateway-specific services
 import { ConsoleLogger } from "../utils/logger.js";
 import { MCPGatewayServer } from "../mcp/gateway-server.js";
-import { ToolDiscoveryService } from "../mcp/tool-discovery-service.js";
-import { ResourceAggregationService } from "../mcp/resource-aggregation-service.js";
-import { PromptAggregationService } from "../mcp/prompt-aggregation-service.js";
-import { MCPFormatterService } from "../mcp/mcp-formatter-service.js";
 import { ShutdownHandler } from "../handlers/shutdown-handler.js";
 import { CapabilityStore } from "../services/capability-store.js";
 import { ServerInfoPreloader } from "../services/server-info-preloader.js";
@@ -41,37 +45,73 @@ export function createContainer(
   // Bind configuration
   container.bind<ServerConfig>(TYPES.ServerConfig).toConstantValue(config);
 
-  // Bind logger
+  // Bind logger (gateway-specific, keeps Inversify decorator)
   container.bind<ILogger>(TYPES.Logger).to(ConsoleLogger).inSingletonScope();
 
-  // Bind Lua runtime
+  // Bind Lua runtime (from package - use factory binding)
   container
     .bind<ILuaRuntime>(TYPES.LuaRuntime)
-    .to(WasmoonRuntime)
+    .toDynamicValue(() => {
+      const logger = container.get<ILogger>(TYPES.Logger);
+      return new WasmoonRuntime(logger);
+    })
     .inSingletonScope();
 
-  // Bind MCP client manager
+  // Bind MCP client manager (from package - use factory binding)
   container
     .bind<IMCPClientManager>(TYPES.MCPClientManager)
-    .to(MCPClientManager)
+    .toDynamicValue(() => {
+      const logger = container.get<ILogger>(TYPES.Logger);
+      return new MCPClientManager(logger);
+    })
     .inSingletonScope();
 
-  // Bind refactored MCP services
+  // Bind MCP aggregation services (from package - use factory bindings)
   container
     .bind(TYPES.MCPFormatterService)
-    .to(MCPFormatterService)
+    .toDynamicValue(() => new MCPFormatterService())
     .inSingletonScope();
+
   container
     .bind(TYPES.ToolDiscoveryService)
-    .to(ToolDiscoveryService)
+    .toDynamicValue(() => {
+      const clientManager = container.get<IMCPClientManager>(
+        TYPES.MCPClientManager,
+      );
+      const logger = container.get<ILogger>(TYPES.Logger);
+      const luaRuntime = container.get<ILuaRuntime>(TYPES.LuaRuntime);
+      const formatter = container.get<MCPFormatterService>(
+        TYPES.MCPFormatterService,
+      );
+      return new ToolDiscoveryService(
+        clientManager,
+        logger,
+        luaRuntime,
+        formatter,
+      );
+    })
     .inSingletonScope();
+
   container
     .bind(TYPES.ResourceAggregationService)
-    .to(ResourceAggregationService)
+    .toDynamicValue(() => {
+      const clientManager = container.get<IMCPClientManager>(
+        TYPES.MCPClientManager,
+      );
+      const logger = container.get<ILogger>(TYPES.Logger);
+      return new ResourceAggregationService(clientManager, logger);
+    })
     .inSingletonScope();
+
   container
     .bind(TYPES.PromptAggregationService)
-    .to(PromptAggregationService)
+    .toDynamicValue(() => {
+      const clientManager = container.get<IMCPClientManager>(
+        TYPES.MCPClientManager,
+      );
+      const logger = container.get<ILogger>(TYPES.Logger);
+      return new PromptAggregationService(clientManager, logger);
+    })
     .inSingletonScope();
 
   // Bind all tools

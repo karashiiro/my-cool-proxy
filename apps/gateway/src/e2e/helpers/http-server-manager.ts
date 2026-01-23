@@ -11,8 +11,10 @@ import type {
   DownstreamCapabilities,
 } from "../../types/interfaces.js";
 import { MCPGatewayServer } from "../../mcp/gateway-server.js";
-import type { ResourceAggregationService } from "../../mcp/resource-aggregation-service.js";
-import type { PromptAggregationService } from "../../mcp/prompt-aggregation-service.js";
+import type {
+  ResourceAggregationService,
+  PromptAggregationService,
+} from "@my-cool-proxy/mcp-aggregation";
 import type { IToolRegistry } from "../../tools/tool-registry.js";
 import {
   CreateMessageRequestSchema,

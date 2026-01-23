@@ -1,7 +1,4 @@
-import { injectable } from "inversify";
-import { $inject } from "../container/decorators.js";
-import { TYPES } from "../types/index.js";
-import type { ICacheService, ILogger } from "../types/interfaces.js";
+import type { ICacheService, ILogger } from "./types.js";
 
 /**
  * In-memory cache service that stores values with timestamps.
@@ -22,12 +19,11 @@ import type { ICacheService, ILogger } from "../types/interfaces.js";
  * - Easy to swap implementations (e.g., Redis, LRU cache)
  * - Easier to test (can inject mock cache)
  */
-@injectable()
 export class MemoryCacheService<T> implements ICacheService<T> {
   private cache = new Map<string, { value: T; timestamp: number }>();
   private ttl?: number;
 
-  constructor(@$inject(TYPES.Logger) private logger: ILogger) {
+  constructor(private logger: ILogger) {
     // TTL can be configured per-instance if needed
     // For now, no TTL by default (cache never expires)
     this.ttl = undefined;

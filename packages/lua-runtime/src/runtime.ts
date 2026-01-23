@@ -1,32 +1,29 @@
-import { injectable } from "inversify";
 import { LuaFactory, LuaEngine } from "wasmoon";
-import type { ILuaRuntime, ILogger } from "../types/interfaces.js";
-import { $inject } from "../container/decorators.js";
-import { TYPES } from "../types/index.js";
-import { sanitizeLuaIdentifier } from "../utils/lua-identifier.js";
+import type { ILuaRuntime, ILogger, IMCPClientSession } from "./types.js";
+import {
+  sanitizeLuaIdentifier,
+  namespaceCallToolResultResources,
+} from "@my-cool-proxy/mcp-utilities";
 import {
   takeResult,
   type ResponseMessage,
 } from "@modelcontextprotocol/sdk/experimental";
-import type { MCPClientSession } from "../mcp/client-session.js";
 import {
   CallToolResultSchema,
   type CallToolResult,
 } from "@modelcontextprotocol/sdk/types.js";
-import { namespaceCallToolResultResources } from "../utils/resource-uri.js";
 import { inspect } from "node:util";
 
-@injectable()
 export class WasmoonRuntime implements ILuaRuntime {
   private factory: LuaFactory;
 
-  constructor(@$inject(TYPES.Logger) private logger: ILogger) {
+  constructor(private logger: ILogger) {
     this.factory = new LuaFactory();
   }
 
   async executeScript(
     script: string,
-    mcpServers: Map<string, MCPClientSession>,
+    mcpServers: Map<string, IMCPClientSession>,
   ): Promise<unknown> {
     this.logger.debug(`Executing Lua script:\n${script}`);
 
@@ -96,7 +93,7 @@ The 'result' function is global - don't use 'local result = ...' as this overwri
 
   private async injectMCPServers(
     engine: LuaEngine,
-    mcpServers: Map<string, MCPClientSession>,
+    mcpServers: Map<string, IMCPClientSession>,
   ): Promise<void> {
     for (const [originalServerName, client] of mcpServers.entries()) {
       try {
@@ -132,7 +129,7 @@ The 'result' function is global - don't use 'local result = ...' as this overwri
                     arguments: (args as Record<string, unknown>) || {},
                   },
                   CallToolResultSchema,
-                ),
+                ) as AsyncGenerator<ResponseMessage<CallToolResult>>,
               );
 
               // IMPORTANT: Namespace resource URIs in tool results here!

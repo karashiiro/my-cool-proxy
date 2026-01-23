@@ -8,10 +8,12 @@ import type {
   IServerInfoPreloader,
 } from "../types/interfaces.js";
 import type { MCPGatewayServer } from "../mcp/gateway-server.js";
-import type { ToolDiscoveryService } from "../mcp/tool-discovery-service.js";
-import type { ResourceAggregationService } from "../mcp/resource-aggregation-service.js";
-import type { PromptAggregationService } from "../mcp/prompt-aggregation-service.js";
-import type { MCPFormatterService } from "../mcp/mcp-formatter-service.js";
+import type {
+  ToolDiscoveryService,
+  ResourceAggregationService,
+  PromptAggregationService,
+  MCPFormatterService,
+} from "@my-cool-proxy/mcp-aggregation";
 import type { ITool } from "../tools/base-tool.js";
 import type { IToolRegistry } from "../tools/tool-registry.js";
 

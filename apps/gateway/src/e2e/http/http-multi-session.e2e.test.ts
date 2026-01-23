@@ -99,8 +99,8 @@ describe("HTTP Multi-Session E2E", () => {
       // Both should list the same servers
       expect(text1).toContain("Available MCP Servers: 1");
       expect(text2).toContain("Available MCP Servers: 1");
-      expect(text1).toContain("📦 calculator");
-      expect(text2).toContain("📦 calculator");
+      expect(text1).toContain("[*] calculator");
+      expect(text2).toContain("[*] calculator");
 
       // Both should have a session ID (server-generated UUIDs)
       expect(text1).toMatch(/Session: [\w-]+/);

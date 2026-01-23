@@ -4,7 +4,7 @@ import * as z from "zod";
 import { $inject } from "../container/decorators.js";
 import { TYPES } from "../types/index.js";
 import type { ITool, ToolExecutionContext } from "./base-tool.js";
-import { ToolDiscoveryService } from "../mcp/tool-discovery-service.js";
+import { ToolDiscoveryService } from "@my-cool-proxy/mcp-aggregation";
 
 /**
  * Tool that inspects a tool's response structure by making a sample call.

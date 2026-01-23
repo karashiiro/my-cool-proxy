@@ -1,8 +1,6 @@
-import { injectable } from "inversify";
-import { formatSchema } from "../utils/schema-formatter.js";
-import type { ServerListItem, ToolInfo } from "../types/interfaces.js";
+import { formatSchema } from "@my-cool-proxy/mcp-utilities";
+import type { ServerListItem, ToolInfo } from "./types.js";
 
-@injectable()
 export class MCPFormatterService {
   formatServerList(
     sessionId: string,
@@ -17,7 +15,7 @@ export class MCPFormatterService {
     if (serverList.length === 0) {
       lines.push("No servers available in this session.");
       lines.push(
-        "💡 Tip: Servers are configured when the session is initialized.",
+        "Tip: Servers are configured when the session is initialized.",
       );
       return lines.join("\n");
     }
@@ -25,14 +23,14 @@ export class MCPFormatterService {
     for (const server of serverList) {
       if ("error" in server) {
         lines.push(
-          `❌ ${server.luaIdentifier}`,
+          `[X] ${server.luaIdentifier}`,
           `   Error: ${server.error}`,
           "",
         );
         continue;
       }
 
-      lines.push(`📦 ${server.luaIdentifier}`);
+      lines.push(`[*] ${server.luaIdentifier}`);
 
       const fields: Array<[string, string | undefined]> = [
         ["Name", server.serverInfo.name],
@@ -52,7 +50,7 @@ export class MCPFormatterService {
     }
 
     lines.push(
-      "💡 Tip: Use list-server-tools to see available tools for each server",
+      "Tip: Use list-server-tools to see available tools for each server",
     );
 
     return lines.join("\n");
@@ -71,7 +69,7 @@ export class MCPFormatterService {
     }
 
     for (const tool of tools) {
-      lines.push(`🔧 ${tool.luaName}`);
+      lines.push(`[>] ${tool.luaName}`);
 
       const description = tool.description || "(No description provided)";
       const truncated =
@@ -84,7 +82,7 @@ export class MCPFormatterService {
     }
 
     lines.push(
-      `💡 Tip: Use tool-details with luaServerName="${luaServerName}" to see full schemas`,
+      `Tip: Use tool-details with luaServerName="${luaServerName}" to see full schemas`,
     );
 
     return lines.join("\n");

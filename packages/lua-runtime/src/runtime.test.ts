@@ -1,21 +1,43 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { TestBed } from "@suites/unit";
 import { WasmoonRuntime } from "./runtime.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { TYPES } from "../types/index.js";
 import * as z from "zod";
-import { MCPClientSession } from "../mcp/client-session.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import type { ILogger, IMCPClientSession } from "./types.js";
 
-// Mock logger - used for test servers
-const createMockLogger = () => ({
+// Mock logger factory
+const createMockLogger = (): ILogger => ({
   info: vi.fn(),
   warn: vi.fn(),
   error: vi.fn(),
   debug: vi.fn(),
 });
+
+/**
+ * Minimal MCPClientSession wrapper for tests.
+ * This wraps the SDK Client to match the IMCPClientSession interface.
+ */
+class TestMCPClientSession implements IMCPClientSession {
+  constructor(
+    private client: Client,
+    private serverName: string,
+  ) {}
+
+  async listTools() {
+    const result = await this.client.listTools();
+    return result.tools;
+  }
+
+  get experimental() {
+    return this.client.experimental as IMCPClientSession["experimental"];
+  }
+
+  async close() {
+    await this.client.close();
+  }
+}
 
 // Helper to create a test MCP server with tools
 async function createTestServer(
@@ -25,7 +47,7 @@ async function createTestServer(
     description: string;
     handler: (args: Record<string, unknown>) => Promise<CallToolResult>;
   }>,
-): Promise<{ server: McpServer; client: MCPClientSession }> {
+): Promise<{ server: McpServer; client: IMCPClientSession }> {
   const server = new McpServer(
     {
       name,
@@ -73,30 +95,20 @@ async function createTestServer(
 
   await client.connect(clientTransport);
 
-  // Wrap in MCPClientSession
-  const mcpClientSession = new MCPClientSession(
-    client,
-    name,
-    undefined,
-    createMockLogger(),
-  );
+  // Wrap in test MCPClientSession
+  const mcpClientSession = new TestMCPClientSession(client, name);
 
   return { server, client: mcpClientSession };
 }
 
 describe("WasmoonRuntime", () => {
   let runtime: WasmoonRuntime;
-  let logger: ReturnType<typeof unitRef.get>;
+  let logger: ILogger;
   const cleanupFns: Array<() => Promise<void>> = [];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let unitRef: any;
 
   beforeEach(async () => {
-    const { unit, unitRef: ref } =
-      await TestBed.solitary(WasmoonRuntime).compile();
-    runtime = unit;
-    unitRef = ref;
-    logger = unitRef.get(TYPES.Logger);
+    logger = createMockLogger();
+    runtime = new WasmoonRuntime(logger);
   });
 
   afterEach(async () => {
@@ -148,7 +160,7 @@ describe("WasmoonRuntime", () => {
         "TypeError: self is not a function",
       );
       expect((error as Error).message).toContain(
-        "💡 HINT: You may have shadowed the global 'result' function",
+        "HINT: You may have shadowed the global 'result' function",
       );
     });
 
@@ -321,7 +333,7 @@ describe("WasmoonRuntime", () => {
       const servers = new Map([["test-server", client]]);
 
       const script = `
-        -- Should be accessible as test_server (hyphen → underscore)
+        -- Should be accessible as test_server (hyphen -> underscore)
         result(test_server ~= nil)
       `;
 
@@ -637,7 +649,7 @@ describe("WasmoonRuntime", () => {
       // Create a bad client that throws on listTools
       const badClient = {
         listTools: vi.fn().mockRejectedValue(new Error("Failed to list tools")),
-      } as unknown as MCPClientSession;
+      } as unknown as IMCPClientSession;
 
       cleanupFns.push(async () => {
         await client.close();

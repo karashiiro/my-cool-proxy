@@ -4,8 +4,10 @@ import { $inject } from "../container/decorators.js";
 import { TYPES } from "../types/index.js";
 import type { ITool, ToolExecutionContext } from "./base-tool.js";
 import type { IMCPClientManager, ILogger } from "../types/interfaces.js";
-import { ResourceAggregationService } from "../mcp/resource-aggregation-service.js";
-import { PromptAggregationService } from "../mcp/prompt-aggregation-service.js";
+import {
+  ResourceAggregationService,
+  PromptAggregationService,
+} from "@my-cool-proxy/mcp-aggregation";
 
 /**
  * Tool that provides summary statistics about the gateway.

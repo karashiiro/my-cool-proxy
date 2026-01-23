@@ -9,5 +9,11 @@
     "removeComments": true
   },
   "include": ["src"],
-  "exclude": ["**/*.test.ts", "**/*.spec.ts", "tests", "node_modules"]
+  "exclude": ["**/*.test.ts", "**/*.spec.ts", "tests", "node_modules"],
+  "references": [
+    { "path": "../../packages/mcp-utilities/tsconfig.build.json" },
+    { "path": "../../packages/mcp-client/tsconfig.build.json" },
+    { "path": "../../packages/lua-runtime/tsconfig.build.json" },
+    { "path": "../../packages/mcp-aggregation/tsconfig.build.json" }
+  ]
 }
