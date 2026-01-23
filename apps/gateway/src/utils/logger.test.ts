@@ -32,7 +32,10 @@ function runLoggerInChildProcess(): Promise<ProcessResult> {
     // Run tsx to execute a TypeScript file that uses the logger
     const testScriptPath = pathResolve(__dirname, "logger.test-helper.ts");
 
+    // Set cwd to apps/gateway so pnpm can find tsx in its devDependencies
+    const gatewayRoot = pathResolve(__dirname, "../..");
     const child = spawn("pnpm", ["exec", "tsx", testScriptPath], {
+      cwd: gatewayRoot,
       stdio: ["ignore", "pipe", "pipe"],
       shell: true,
     });
