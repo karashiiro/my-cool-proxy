@@ -144,6 +144,7 @@ config*.json
 
 # Claude Code local settings
 .claude/
+*-cwd
 
 package-lock.json
 yarn.lock
