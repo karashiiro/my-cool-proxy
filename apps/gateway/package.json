@@ -12,9 +12,9 @@
   ],
   "type": "module",
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsgo -p tsconfig.build.json",
     "dev": "tsx src/index.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsgo --noEmit"
   },
   "keywords": [],
   "author": "karashiiro",
