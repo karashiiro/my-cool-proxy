@@ -352,7 +352,7 @@ Restart Claude Desktop (or your MCP client) to pick up the new config. The gatew
 
 ## Documentation
 
-See [CONFIG.md](./CONFIG.md) for full configuration reference.
+See [CONFIG.md](apps/gateway/CONFIG.md) for full configuration reference.
 
 ## Testing
 
