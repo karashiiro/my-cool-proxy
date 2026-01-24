@@ -192,14 +192,6 @@ Run the gateway as an HTTP server that clients connect to remotely:
 }
 ```
 
-**Run:**
-
-```bash
-pnpm dev
-# or for production:
-pnpm build && node dist/index.js
-```
-
 **Connect from MCP client:**
 
 ```json
