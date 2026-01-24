@@ -68,18 +68,21 @@ Before you begin, make sure you have the following installed:
 
 ## Development Workflow
 
+> **Note:** We use the `dev` branch for active development. The `main` branch is reserved for released code, so documentation and examples there always reflect the current release. Please base your work on `dev` and open PRs against it.
+
 ### Before Making Changes
 
-1. **Create a feature branch:**
+1. **Create a feature branch from `dev`:**
 
    ```bash
+   git checkout dev
    git checkout -b feat/your-feature-name
    ```
 
 2. **Stay up to date:**
    ```bash
    git fetch upstream
-   git pull --rebase upstream main
+   git pull --rebase upstream dev
    ```
 
 ### While Developing
@@ -189,7 +192,7 @@ pnpm test:watch
    git push origin feat/your-feature-name
    ```
 
-2. **Open a pull request on GitHub:**
+2. **Open a pull request on GitHub targeting the `dev` branch:**
    - Provide a clear title and description
    - Reference any related issues (e.g., "Fixes #123")
    - Describe what changed and why
