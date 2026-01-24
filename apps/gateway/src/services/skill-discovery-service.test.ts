@@ -437,4 +437,124 @@ Content`,
       );
     });
   });
+
+  describe("getSkillResource", () => {
+    it("should return content of a script file", async () => {
+      const skillDir = resolve(skillsDir, "resource-skill");
+      mkdirSync(skillDir);
+      mkdirSync(resolve(skillDir, "scripts"));
+      writeFileSync(
+        resolve(skillDir, "SKILL.md"),
+        `---
+name: resource-skill
+description: Has resources
+---
+Content`,
+      );
+      writeFileSync(
+        resolve(skillDir, "scripts", "extract.py"),
+        "#!/usr/bin/env python\nprint('Hello')",
+      );
+
+      const content = await service.getSkillResource(
+        "resource-skill",
+        "scripts/extract.py",
+      );
+
+      expect(content).toBe("#!/usr/bin/env python\nprint('Hello')");
+    });
+
+    it("should return content of a reference file", async () => {
+      const skillDir = resolve(skillsDir, "ref-skill");
+      mkdirSync(skillDir);
+      mkdirSync(resolve(skillDir, "references"));
+      writeFileSync(
+        resolve(skillDir, "SKILL.md"),
+        `---
+name: ref-skill
+description: Has references
+---
+Content`,
+      );
+      writeFileSync(
+        resolve(skillDir, "references", "REFERENCE.md"),
+        "# Reference\n\nDetailed docs here.",
+      );
+
+      const content = await service.getSkillResource(
+        "ref-skill",
+        "references/REFERENCE.md",
+      );
+
+      expect(content).toBe("# Reference\n\nDetailed docs here.");
+    });
+
+    it("should return null for non-existent skill", async () => {
+      const content = await service.getSkillResource(
+        "non-existent",
+        "scripts/foo.py",
+      );
+
+      expect(content).toBeNull();
+    });
+
+    it("should return null for non-existent resource file", async () => {
+      const skillDir = resolve(skillsDir, "no-resource-skill");
+      mkdirSync(skillDir);
+      writeFileSync(
+        resolve(skillDir, "SKILL.md"),
+        `---
+name: no-resource-skill
+description: No resources
+---
+Content`,
+      );
+
+      const content = await service.getSkillResource(
+        "no-resource-skill",
+        "scripts/missing.py",
+      );
+
+      expect(content).toBeNull();
+    });
+
+    it("should throw error for path traversal attempt with ../", async () => {
+      const skillDir = resolve(skillsDir, "traversal-skill");
+      mkdirSync(skillDir);
+      writeFileSync(
+        resolve(skillDir, "SKILL.md"),
+        `---
+name: traversal-skill
+description: Test traversal protection
+---
+Content`,
+      );
+
+      await expect(
+        service.getSkillResource("traversal-skill", "../../../etc/passwd"),
+      ).rejects.toThrow("path must be within the skill directory");
+
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining("Path traversal detected"),
+      );
+    });
+
+    it("should throw error for absolute path attempt", async () => {
+      const skillDir = resolve(skillsDir, "absolute-skill");
+      mkdirSync(skillDir);
+      writeFileSync(
+        resolve(skillDir, "SKILL.md"),
+        `---
+name: absolute-skill
+description: Test absolute path protection
+---
+Content`,
+      );
+
+      // Note: resolve() with an absolute path will ignore the base
+      await expect(
+        service.getSkillResource("absolute-skill", "/etc/passwd"),
+      ).rejects.toThrow("path must be within the skill directory");
+    });
+  });
 });

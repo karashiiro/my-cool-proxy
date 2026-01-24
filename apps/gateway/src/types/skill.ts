@@ -23,9 +23,22 @@ export interface ISkillDiscoveryService {
   discoverSkills(): Promise<SkillMetadata[]>;
 
   /**
-   * Get the full content of a skill by name.
+   * Get the full content of a skill's SKILL.md by name.
    * @param skillName - The name of the skill to load
    * @returns Full SKILL.md content, or null if skill not found
    */
   getSkillContent(skillName: string): Promise<string | null>;
+
+  /**
+   * Get the content of a resource file within a skill directory.
+   * Used for accessing scripts/, references/, and assets/ files.
+   * @param skillName - The name of the skill
+   * @param relativePath - Path relative to skill directory (e.g., "scripts/extract.py")
+   * @returns File content, or null if skill or file not found
+   * @throws Error if path traversal is detected
+   */
+  getSkillResource(
+    skillName: string,
+    relativePath: string,
+  ): Promise<string | null>;
 }

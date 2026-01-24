@@ -127,6 +127,45 @@ export class SkillDiscoveryService implements ISkillDiscoveryService {
     }
   }
 
+  async getSkillResource(
+    skillName: string,
+    relativePath: string,
+  ): Promise<string | null> {
+    // Ensure skills are discovered first
+    const skills = await this.discoverSkills();
+
+    // Find skill by name
+    const skill = skills.find((s) => s.name === skillName);
+    if (!skill) {
+      return null;
+    }
+
+    // Resolve the full path and validate it stays within the skill directory
+    const fullPath = resolve(skill.path, relativePath);
+
+    // Security: Ensure the resolved path is within the skill directory
+    // This prevents path traversal attacks like "../../../etc/passwd"
+    // The path must start with skill.path + "/" to be inside the directory
+    if (!fullPath.startsWith(skill.path + "/")) {
+      this.logger.warn(
+        `Path traversal detected for skill '${skillName}': ${relativePath}`,
+      );
+      throw new Error(
+        `Invalid path: '${relativePath}' - path must be within the skill directory`,
+      );
+    }
+
+    // Read the resource file
+    try {
+      return readFileSync(fullPath, "utf-8");
+    } catch {
+      this.logger.debug(
+        `Resource not found: ${fullPath} (skill: ${skillName}, path: ${relativePath})`,
+      );
+      return null;
+    }
+  }
+
   /**
    * Parse YAML frontmatter from a SKILL.md file.
    * @param filePath - Path to the SKILL.md file

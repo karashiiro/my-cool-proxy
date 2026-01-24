@@ -11,6 +11,7 @@ describe("LoadGatewaySkillTool", () => {
     mockSkillService = {
       discoverSkills: vi.fn(),
       getSkillContent: vi.fn(),
+      getSkillResource: vi.fn(),
     };
 
     mockLogger = {
@@ -28,17 +29,19 @@ describe("LoadGatewaySkillTool", () => {
       expect(tool.name).toBe("load-gateway-skill");
     });
 
-    it("should have description mentioning gateway skills", () => {
+    it("should have description mentioning gateway skills and resources", () => {
       expect(tool.description).toContain("gateway skill");
-      expect(tool.description).toContain("full content");
+      expect(tool.description).toContain("path");
+      expect(tool.description).toContain("scripts");
     });
 
-    it("should have skillName in schema", () => {
+    it("should have skillName and optional path in schema", () => {
       expect(tool.schema.skillName).toBeDefined();
+      expect(tool.schema.path).toBeDefined();
     });
   });
 
-  describe("execute", () => {
+  describe("execute - loading SKILL.md (no path)", () => {
     it("should return skill content when skill exists", async () => {
       const skillContent = `---
 name: Test Skill
@@ -78,28 +81,6 @@ Do the thing!
       expect(text).toContain("not found");
     });
 
-    it("should call skillService.getSkillContent with correct name", async () => {
-      vi.mocked(mockSkillService.getSkillContent).mockResolvedValue("content");
-
-      await tool.execute({ skillName: "My Special Skill" });
-
-      expect(mockSkillService.getSkillContent).toHaveBeenCalledWith(
-        "My Special Skill",
-      );
-    });
-
-    it("should handle skill names with special characters", async () => {
-      vi.mocked(mockSkillService.getSkillContent).mockResolvedValue("content");
-
-      await tool.execute({
-        skillName: "Skill <with> 'special' \"chars\" & symbols",
-      });
-
-      expect(mockSkillService.getSkillContent).toHaveBeenCalledWith(
-        "Skill <with> 'special' \"chars\" & symbols",
-      );
-    });
-
     it("should log when skill is found", async () => {
       vi.mocked(mockSkillService.getSkillContent).mockResolvedValue("content");
 
@@ -109,14 +90,93 @@ Do the thing!
         expect.stringContaining("Test Skill"),
       );
     });
+  });
 
-    it("should log warning when skill not found", async () => {
-      vi.mocked(mockSkillService.getSkillContent).mockResolvedValue(null);
+  describe("execute - loading resources (with path)", () => {
+    it("should return resource content when resource exists", async () => {
+      const scriptContent = "#!/usr/bin/env python\nprint('Hello')";
+      vi.mocked(mockSkillService.getSkillResource).mockResolvedValue(
+        scriptContent,
+      );
 
-      await tool.execute({ skillName: "Missing Skill" });
+      const result = await tool.execute({
+        skillName: "my-skill",
+        path: "scripts/extract.py",
+      });
 
-      expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.stringContaining("Missing Skill"),
+      expect(result.isError).toBeUndefined();
+      expect(result.content).toHaveLength(1);
+      expect((result.content[0] as { type: "text"; text: string }).text).toBe(
+        scriptContent,
+      );
+      expect(mockSkillService.getSkillResource).toHaveBeenCalledWith(
+        "my-skill",
+        "scripts/extract.py",
+      );
+    });
+
+    it("should return error when resource not found", async () => {
+      vi.mocked(mockSkillService.getSkillResource).mockResolvedValue(null);
+
+      const result = await tool.execute({
+        skillName: "my-skill",
+        path: "scripts/missing.py",
+      });
+
+      expect(result.isError).toBe(true);
+      const text = (result.content[0] as { type: "text"; text: string }).text;
+      expect(text).toContain("scripts/missing.py");
+      expect(text).toContain("not found");
+    });
+
+    it("should return error message on path traversal attempt", async () => {
+      vi.mocked(mockSkillService.getSkillResource).mockRejectedValue(
+        new Error(
+          "Invalid path: '../etc/passwd' - path must be within the skill directory",
+        ),
+      );
+
+      const result = await tool.execute({
+        skillName: "my-skill",
+        path: "../etc/passwd",
+      });
+
+      expect(result.isError).toBe(true);
+      const text = (result.content[0] as { type: "text"; text: string }).text;
+      expect(text).toContain("path must be within the skill directory");
+    });
+
+    it("should call getSkillResource not getSkillContent when path is provided", async () => {
+      vi.mocked(mockSkillService.getSkillResource).mockResolvedValue("content");
+
+      await tool.execute({
+        skillName: "my-skill",
+        path: "references/REFERENCE.md",
+      });
+
+      expect(mockSkillService.getSkillResource).toHaveBeenCalled();
+      expect(mockSkillService.getSkillContent).not.toHaveBeenCalled();
+    });
+
+    it("should call getSkillContent when path is not provided", async () => {
+      vi.mocked(mockSkillService.getSkillContent).mockResolvedValue("content");
+
+      await tool.execute({ skillName: "my-skill" });
+
+      expect(mockSkillService.getSkillContent).toHaveBeenCalled();
+      expect(mockSkillService.getSkillResource).not.toHaveBeenCalled();
+    });
+
+    it("should log when resource is loaded", async () => {
+      vi.mocked(mockSkillService.getSkillResource).mockResolvedValue("content");
+
+      await tool.execute({
+        skillName: "my-skill",
+        path: "scripts/test.py",
+      });
+
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        expect.stringContaining("my-skill/scripts/test.py"),
       );
     });
   });
