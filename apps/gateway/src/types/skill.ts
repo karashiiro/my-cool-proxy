@@ -49,9 +49,9 @@ export interface ISkillDiscoveryService {
   clearCache(): void;
 
   /**
-   * Ensure default skills exist.
-   * Creates built-in skills (like the skill creation guide) if they don't already exist.
-   * Should be called once at startup before discovering skills.
+   * Ensure the skills directory exists.
+   * Creates the directory if it doesn't exist.
+   * Should be called once at startup for convenience.
    */
-  ensureDefaultSkills(): Promise<void>;
+  ensureSkillsDirectory(): void;
 }

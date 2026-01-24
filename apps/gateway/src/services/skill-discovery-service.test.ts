@@ -3,7 +3,7 @@ import { mkdirSync, writeFileSync, rmSync, existsSync } from "fs";
 import { resolve } from "path";
 import { tmpdir } from "os";
 import { SkillDiscoveryService } from "./skill-discovery-service.js";
-import type { ILogger } from "../types/interfaces.js";
+import type { ILogger, ServerConfig } from "../types/interfaces.js";
 
 // Mock the skills-paths module to use our temp directory
 vi.mock("../utils/skills-paths.js", () => ({
@@ -19,6 +19,7 @@ describe("SkillDiscoveryService", () => {
   let tempDir: string;
   let skillsDir: string;
   let mockLogger: ILogger;
+  let mockConfig: ServerConfig;
 
   beforeEach(() => {
     // Create unique temp directory for each test
@@ -40,8 +41,17 @@ describe("SkillDiscoveryService", () => {
       debug: vi.fn(),
     };
 
+    // Create mock config with skills disabled by default
+    mockConfig = {
+      port: 3000,
+      host: "localhost",
+      transport: "http",
+      mcpClients: {},
+      skills: { enabled: true, mutable: false },
+    };
+
     // Create fresh service for each test
-    service = new SkillDiscoveryService(mockLogger);
+    service = new SkillDiscoveryService(mockLogger, mockConfig);
   });
 
   afterEach(() => {
@@ -58,7 +68,7 @@ describe("SkillDiscoveryService", () => {
       vi.mocked(getSkillsDir).mockReturnValue(resolve(tempDir, "nonexistent"));
 
       // Create fresh service to pick up new mock value
-      service = new SkillDiscoveryService(mockLogger);
+      service = new SkillDiscoveryService(mockLogger, mockConfig);
 
       const skills = await service.discoverSkills();
 
@@ -72,7 +82,7 @@ describe("SkillDiscoveryService", () => {
       const skills = await service.discoverSkills();
 
       expect(skills).toEqual([]);
-      expect(mockLogger.info).toHaveBeenCalledWith("Discovered 0 skill(s)");
+      expect(mockLogger.info).toHaveBeenCalledWith("Discovered 0 skill(s) from disk");
     });
 
     it("should correctly parse skill with valid frontmatter", async () => {
@@ -152,7 +162,7 @@ Content`,
         "skill-b",
         "skill-c",
       ]);
-      expect(mockLogger.info).toHaveBeenCalledWith("Discovered 3 skill(s)");
+      expect(mockLogger.info).toHaveBeenCalledWith("Discovered 3 skill(s) from disk");
     });
 
     it("should use directory name as fallback when name field is missing", async () => {

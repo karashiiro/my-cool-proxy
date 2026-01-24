@@ -38,7 +38,7 @@ describe("WriteGatewaySkillTool", () => {
       getSkillContent: vi.fn(),
       getSkillResource: vi.fn(),
       clearCache: vi.fn(),
-      ensureDefaultSkills: vi.fn(),
+      ensureSkillsDirectory: vi.fn(),
     };
 
     mockLogger = {

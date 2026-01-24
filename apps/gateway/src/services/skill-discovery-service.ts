@@ -1,15 +1,8 @@
 import { injectable } from "inversify";
-import {
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  statSync,
-  writeFileSync,
-} from "fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync } from "fs";
 import { resolve, sep } from "path";
 import { parse as parseYaml } from "yaml";
-import type { ILogger } from "../types/interfaces.js";
+import type { ILogger, ServerConfig } from "../types/interfaces.js";
 import type { ISkillDiscoveryService, SkillMetadata } from "../types/skill.js";
 import { getSkillsDir, SKILL_FILENAME } from "../utils/skills-paths.js";
 import { $inject } from "../container/decorators.js";
@@ -22,10 +15,25 @@ import { TYPES } from "../types/index.js";
 const FRONTMATTER_REGEX = /^---\s*\n([\s\S]*?)\n---/;
 
 /**
- * Default skill content that explains how to create skills.
- * This is created automatically on first startup if it doesn't exist.
+ * Built-in skill name for the skill creation guide.
  */
-const DEFAULT_CREATING_SKILLS_CONTENT = `---
+const BUILTIN_CREATING_SKILLS_NAME = "creating-skills";
+
+/**
+ * Built-in skill metadata for the skill creation guide.
+ * This skill is virtual (not on disk) and only shown when skills.mutable is true.
+ */
+const BUILTIN_CREATING_SKILLS_METADATA: SkillMetadata = {
+  name: BUILTIN_CREATING_SKILLS_NAME,
+  description: "Learn how to create and manage gateway skills",
+  path: "", // Virtual skill - no path on disk
+};
+
+/**
+ * Built-in skill content that explains how to create skills.
+ * This is returned dynamically when skills.mutable is true.
+ */
+const BUILTIN_CREATING_SKILLS_CONTENT = `---
 name: creating-skills
 description: Learn how to create and manage gateway skills
 ---
@@ -161,7 +169,10 @@ interface SkillFrontmatter {
 export class SkillDiscoveryService implements ISkillDiscoveryService {
   private skillsCache: SkillMetadata[] | null = null;
 
-  constructor(@$inject(TYPES.Logger) private logger: ILogger) {}
+  constructor(
+    @$inject(TYPES.Logger) private logger: ILogger,
+    @$inject(TYPES.ServerConfig) private config: ServerConfig,
+  ) {}
 
   async discoverSkills(): Promise<SkillMetadata[]> {
     // Return cached results if available
@@ -171,6 +182,12 @@ export class SkillDiscoveryService implements ISkillDiscoveryService {
 
     const skillsDir = getSkillsDir();
     const skills: SkillMetadata[] = [];
+
+    // Include built-in creating-skills guide when skills are mutable
+    if (this.config.skills?.mutable === true) {
+      skills.push(BUILTIN_CREATING_SKILLS_METADATA);
+      this.logger.debug("Added built-in 'creating-skills' skill");
+    }
 
     // Check if skills directory exists
     if (!existsSync(skillsDir)) {
@@ -234,18 +251,29 @@ export class SkillDiscoveryService implements ISkillDiscoveryService {
       }
     }
 
-    this.logger.info(`Discovered ${skills.length} skill(s)`);
+    const diskSkillCount = this.config.skills?.mutable
+      ? skills.length - 1
+      : skills.length;
+    this.logger.info(`Discovered ${diskSkillCount} skill(s) from disk`);
     this.skillsCache = skills;
     return skills;
   }
 
   async getSkillContent(skillName: string): Promise<string | null> {
+    // Check for built-in creating-skills skill
+    if (
+      skillName === BUILTIN_CREATING_SKILLS_NAME &&
+      this.config.skills?.mutable === true
+    ) {
+      return BUILTIN_CREATING_SKILLS_CONTENT;
+    }
+
     // Ensure skills are discovered first
     const skills = await this.discoverSkills();
 
     // Find skill by name
     const skill = skills.find((s) => s.name === skillName);
-    if (!skill) {
+    if (!skill || !skill.path) {
       return null;
     }
 
@@ -266,12 +294,17 @@ export class SkillDiscoveryService implements ISkillDiscoveryService {
     skillName: string,
     relativePath: string,
   ): Promise<string | null> {
+    // Built-in skills don't have resources
+    if (skillName === BUILTIN_CREATING_SKILLS_NAME) {
+      return null;
+    }
+
     // Ensure skills are discovered first
     const skills = await this.discoverSkills();
 
     // Find skill by name
     const skill = skills.find((s) => s.name === skillName);
-    if (!skill) {
+    if (!skill || !skill.path) {
       return null;
     }
 
@@ -306,25 +339,20 @@ export class SkillDiscoveryService implements ISkillDiscoveryService {
     this.logger.debug("Skills cache cleared");
   }
 
-  async ensureDefaultSkills(): Promise<void> {
+  ensureSkillsDirectory(): void {
     const skillsDir = getSkillsDir();
-    const defaultSkillDir = resolve(skillsDir, "creating-skills");
-    const defaultSkillPath = resolve(defaultSkillDir, SKILL_FILENAME);
 
-    // Skip if skill already exists (don't overwrite user modifications)
-    if (existsSync(defaultSkillPath)) {
-      this.logger.debug("Default 'creating-skills' skill already exists");
+    if (existsSync(skillsDir)) {
+      this.logger.debug(`Skills directory already exists: ${skillsDir}`);
       return;
     }
 
-    // Create the skill
     try {
-      mkdirSync(defaultSkillDir, { recursive: true });
-      writeFileSync(defaultSkillPath, DEFAULT_CREATING_SKILLS_CONTENT, "utf-8");
-      this.logger.info("Created default 'creating-skills' skill");
+      mkdirSync(skillsDir, { recursive: true });
+      this.logger.info(`Created skills directory: ${skillsDir}`);
     } catch (error) {
       this.logger.warn(
-        `Failed to create default skill: ${error instanceof Error ? error.message : String(error)}`,
+        `Failed to create skills directory: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
   }

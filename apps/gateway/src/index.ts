@@ -237,10 +237,10 @@ async function startHttpMode(
     `Preloaded info from ${preloadedServers.length} server(s) for gateway instructions`,
   );
 
-  // If skills are enabled, ensure defaults exist and discover skills for instructions
+  // If skills are enabled, ensure directory exists and discover skills for instructions
   const skillsEnabled = config.skills?.enabled === true;
   if (skillsEnabled) {
-    await skillDiscoveryService.ensureDefaultSkills();
+    skillDiscoveryService.ensureSkillsDirectory();
     const skills = await skillDiscoveryService.discoverSkills();
     if (skills.length > 0) {
       const skillInstructions =
@@ -388,10 +388,10 @@ async function startStdioMode(
     `Preloaded info from ${preloadedServers.length} server(s) for gateway instructions`,
   );
 
-  // If skills are enabled, ensure defaults exist and discover skills for instructions
+  // If skills are enabled, ensure directory exists and discover skills for instructions
   const skillsEnabled = config.skills?.enabled === true;
   if (skillsEnabled) {
-    await skillDiscoveryService.ensureDefaultSkills();
+    skillDiscoveryService.ensureSkillsDirectory();
     const skills = await skillDiscoveryService.discoverSkills();
     if (skills.length > 0) {
       const skillInstructions =
