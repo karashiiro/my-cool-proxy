@@ -94,11 +94,35 @@ export interface MCPClientConfigStdio {
 
 export type MCPClientConfig = MCPClientConfigHTTP | MCPClientConfigStdio;
 
+/**
+ * Configuration for the skills feature.
+ */
+export interface SkillsConfig {
+  /**
+   * Enable skill discovery and skill-related tools.
+   * When enabled, the gateway exposes load-gateway-skill and invoke-gateway-skill-script tools.
+   * Default: false
+   */
+  enabled?: boolean;
+
+  /**
+   * Allow creating and modifying skills via write-gateway-skill tool.
+   * Only takes effect if `enabled` is true.
+   * Default: false
+   */
+  mutable?: boolean;
+}
+
 export interface ServerConfig {
   port?: number;
   host?: string;
   transport?: "http" | "stdio";
   mcpClients: Record<string, MCPClientConfig>;
+  /**
+   * Skills feature configuration.
+   * Skills are reusable instruction sets that extend the gateway's capabilities.
+   */
+  skills?: SkillsConfig;
 }
 
 export interface ILogger {

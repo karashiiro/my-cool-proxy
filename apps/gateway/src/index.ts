@@ -237,13 +237,16 @@ async function startHttpMode(
     `Preloaded info from ${preloadedServers.length} server(s) for gateway instructions`,
   );
 
-  // Ensure default skills exist, then discover and append skill instructions
-  await skillDiscoveryService.ensureDefaultSkills();
-  const skills = await skillDiscoveryService.discoverSkills();
-  if (skills.length > 0) {
-    const skillInstructions =
-      serverInfoPreloader.buildSkillInstructions(skills);
-    aggregatedInstructions += skillInstructions;
+  // If skills are enabled, ensure defaults exist and discover skills for instructions
+  const skillsEnabled = config.skills?.enabled === true;
+  if (skillsEnabled) {
+    await skillDiscoveryService.ensureDefaultSkills();
+    const skills = await skillDiscoveryService.discoverSkills();
+    if (skills.length > 0) {
+      const skillInstructions =
+        serverInfoPreloader.buildSkillInstructions(skills);
+      aggregatedInstructions += skillInstructions;
+    }
   }
 
   // Start HTTP server with per-session factory
@@ -385,13 +388,16 @@ async function startStdioMode(
     `Preloaded info from ${preloadedServers.length} server(s) for gateway instructions`,
   );
 
-  // Ensure default skills exist, then discover and append skill instructions
-  await skillDiscoveryService.ensureDefaultSkills();
-  const skills = await skillDiscoveryService.discoverSkills();
-  if (skills.length > 0) {
-    const skillInstructions =
-      serverInfoPreloader.buildSkillInstructions(skills);
-    aggregatedInstructions += skillInstructions;
+  // If skills are enabled, ensure defaults exist and discover skills for instructions
+  const skillsEnabled = config.skills?.enabled === true;
+  if (skillsEnabled) {
+    await skillDiscoveryService.ensureDefaultSkills();
+    const skills = await skillDiscoveryService.discoverSkills();
+    if (skills.length > 0) {
+      const skillInstructions =
+        serverInfoPreloader.buildSkillInstructions(skills);
+      aggregatedInstructions += skillInstructions;
+    }
   }
 
   // Start stdio server - upstream clients are initialized when downstream connects

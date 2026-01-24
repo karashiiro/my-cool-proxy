@@ -119,16 +119,26 @@ export function createContainer(
     })
     .inSingletonScope();
 
-  // Bind all tools
+  // Bind core tools (always available)
   container.bind<ITool>(TYPES.Tool).to(ExecuteLuaTool);
   container.bind<ITool>(TYPES.Tool).to(ListServersTool);
   container.bind<ITool>(TYPES.Tool).to(ListServerToolsTool);
   container.bind<ITool>(TYPES.Tool).to(ToolDetailsTool);
   container.bind<ITool>(TYPES.Tool).to(InspectToolResponseTool);
   container.bind<ITool>(TYPES.Tool).to(SummaryStatsTool);
-  container.bind<ITool>(TYPES.Tool).to(LoadGatewaySkillTool);
-  container.bind<ITool>(TYPES.Tool).to(InvokeGatewaySkillScriptTool);
-  container.bind<ITool>(TYPES.Tool).to(WriteGatewaySkillTool);
+
+  // Bind skill tools conditionally based on config
+  const skillsEnabled = config.skills?.enabled === true;
+  const skillsMutable = config.skills?.mutable === true;
+
+  if (skillsEnabled) {
+    container.bind<ITool>(TYPES.Tool).to(LoadGatewaySkillTool);
+    container.bind<ITool>(TYPES.Tool).to(InvokeGatewaySkillScriptTool);
+
+    if (skillsMutable) {
+      container.bind<ITool>(TYPES.Tool).to(WriteGatewaySkillTool);
+    }
+  }
 
   // Bind tool registry and populate it with all registered tools
   container
