@@ -473,3 +473,103 @@ In this example:
 - `public-api` only exposes safe read-only tools
 - `admin-api` exposes additional administrative tools
 - `unrestricted-local` exposes all tools (no filter)
+
+## Skills
+
+Skills are reusable instruction sets that extend the gateway's capabilities. They can include scripts, reference materials, and specialized guidance for specific tasks.
+
+**Skills are disabled by default** and must be explicitly enabled in your configuration.
+
+### Configuration
+
+```json
+{
+  "skills": {
+    "enabled": true,
+    "mutable": false
+  }
+}
+```
+
+#### Fields
+
+- **enabled** (boolean, optional): Enable skill discovery and skill-related tools. Default: `false`
+  - When `true`, exposes `load-gateway-skill` and `invoke-gateway-skill-script` tools
+  - Creates a default "creating-skills" skill on first startup that explains how to use the skill system
+
+- **mutable** (boolean, optional): Allow creating and modifying skills. Default: `false`
+  - Only takes effect if `enabled` is `true`
+  - When `true`, exposes the `write-gateway-skill` tool
+  - When `false`, skills are read-only (can load and invoke, but not create/modify)
+
+### Available Tools
+
+When skills are enabled, these tools become available:
+
+| Tool                          | Requires                            | Description                                         |
+| ----------------------------- | ----------------------------------- | --------------------------------------------------- |
+| `load-gateway-skill`          | `enabled: true`                     | Load skill content and resource files               |
+| `invoke-gateway-skill-script` | `enabled: true`                     | Execute scripts from a skill's `scripts/` directory |
+| `write-gateway-skill`         | `enabled: true` AND `mutable: true` | Create or modify skills and their files             |
+
+### Skill Directory Structure
+
+Skills are stored in the platform-specific config directory:
+
+- **Windows**: `%APPDATA%\my-cool-proxy\skills\`
+- **macOS**: `~/Library/Application Support/my-cool-proxy/skills/`
+- **Linux**: `~/.config/my-cool-proxy/skills/`
+
+Each skill lives in its own subdirectory:
+
+```
+skills/
+  my-skill/
+    SKILL.md              # Required - main content with YAML frontmatter
+    scripts/              # Optional - executable scripts
+      extract.py
+    references/           # Optional - reference documentation
+      API.md
+    assets/               # Optional - data files
+      template.json
+```
+
+### Example Configurations
+
+**Read-only skills:**
+
+```json
+{
+  "skills": {
+    "enabled": true,
+    "mutable": false
+  }
+}
+```
+
+Agents can load and use existing skills, but cannot create new ones or modify existing ones.
+
+**Full skill management:**
+
+```json
+{
+  "skills": {
+    "enabled": true,
+    "mutable": true
+  }
+}
+```
+
+Agents can create, modify, and use skills.
+
+**Skills disabled (default):**
+
+```json
+{
+  "skills": {
+    "enabled": false
+  }
+}
+```
+
+Or simply omit the `skills` field entirely - skill-related tools will not be exposed.

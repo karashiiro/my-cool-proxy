@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "build": "pnpm -r build",
-    "dev": "pnpm --filter @karashiiro/my-cool-proxy dev",
+    "dev": "pnpm build && pnpm --filter @karashiiro/my-cool-proxy dev",
     "test": "vitest run",
     "test:unit": "vitest run --exclude '**/e2e/**'",
     "test:e2e": "vitest run apps/gateway/src/e2e",

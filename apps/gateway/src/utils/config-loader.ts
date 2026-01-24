@@ -109,6 +109,31 @@ export function loadConfig(): ServerConfig {
       }
     }
 
+    // Validate skills config if provided
+    if (config.skills !== undefined) {
+      if (typeof config.skills !== "object" || config.skills === null) {
+        throw new Error("Config 'skills' must be an object if specified");
+      }
+
+      if (
+        config.skills.enabled !== undefined &&
+        typeof config.skills.enabled !== "boolean"
+      ) {
+        throw new Error(
+          "Config 'skills.enabled' must be a boolean if specified",
+        );
+      }
+
+      if (
+        config.skills.mutable !== undefined &&
+        typeof config.skills.mutable !== "boolean"
+      ) {
+        throw new Error(
+          "Config 'skills.mutable' must be a boolean if specified",
+        );
+      }
+    }
+
     // Validate each MCP client config
     for (const [name, clientConfig] of Object.entries(config.mcpClients)) {
       if (typeof clientConfig !== "object" || clientConfig === null) {

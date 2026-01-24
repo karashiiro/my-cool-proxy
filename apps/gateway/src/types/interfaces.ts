@@ -1,4 +1,5 @@
 import type { MCPClientSession } from "@my-cool-proxy/mcp-client";
+import type { SkillMetadata } from "./skill.js";
 
 export interface ILuaRuntime {
   executeScript(
@@ -93,11 +94,35 @@ export interface MCPClientConfigStdio {
 
 export type MCPClientConfig = MCPClientConfigHTTP | MCPClientConfigStdio;
 
+/**
+ * Configuration for the skills feature.
+ */
+export interface SkillsConfig {
+  /**
+   * Enable skill discovery and skill-related tools.
+   * When enabled, the gateway exposes load-gateway-skill and invoke-gateway-skill-script tools.
+   * Default: false
+   */
+  enabled?: boolean;
+
+  /**
+   * Allow creating and modifying skills via write-gateway-skill tool.
+   * Only takes effect if `enabled` is true.
+   * Default: false
+   */
+  mutable?: boolean;
+}
+
 export interface ServerConfig {
   port?: number;
   host?: string;
   transport?: "http" | "stdio";
   mcpClients: Record<string, MCPClientConfig>;
+  /**
+   * Skills feature configuration.
+   * Skills are reusable instruction sets that extend the gateway's capabilities.
+   */
+  skills?: SkillsConfig;
 }
 
 export interface ILogger {
@@ -217,4 +242,15 @@ export interface IServerInfoPreloader {
    * Returns a formatted string suitable for the gateway's instructions field.
    */
   buildAggregatedInstructions(servers: PreloadedServerInfo[]): string;
+
+  /**
+   * Build skill instructions section from discovered skills.
+   * Returns a formatted string with skill metadata in XML format.
+   * Returns empty string if no skills are available.
+   */
+  buildSkillInstructions(skills: SkillMetadata[]): string;
 }
+
+// Re-export skill types for convenience
+export type { ISkillDiscoveryService } from "./skill.js";
+export type { SkillMetadata };

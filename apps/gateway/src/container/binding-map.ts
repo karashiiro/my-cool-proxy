@@ -6,6 +6,7 @@ import type {
   IShutdownHandler,
   ICapabilityStore,
   IServerInfoPreloader,
+  ISkillDiscoveryService,
 } from "../types/interfaces.js";
 import type { MCPGatewayServer } from "../mcp/gateway-server.js";
 import type {
@@ -36,4 +37,5 @@ export interface ContainerBindingMap {
   ToolRegistry: IToolRegistry;
   CapabilityStore: ICapabilityStore;
   ServerInfoPreloader: IServerInfoPreloader;
+  SkillDiscoveryService: ISkillDiscoveryService;
 }
