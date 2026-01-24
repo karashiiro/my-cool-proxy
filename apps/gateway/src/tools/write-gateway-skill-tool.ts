@@ -188,16 +188,18 @@ export class WriteGatewaySkillTool implements ITool {
       // Clear the skills cache so fresh discovery happens on next access
       this.skillService.clearCache();
 
-      // Build the response with skill metadata
+      // Build the response with skill metadata (excluding internal path)
       const metadata = await this.getSkillMetadata(
         skillName,
         skillDir,
         content,
       );
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { path: _path, ...skillInfo } = metadata;
 
       const response = {
         success: true,
-        skill: metadata,
+        skill: skillInfo,
         writtenFiles,
         note:
           "Skill created successfully. It can be loaded immediately using load-gateway-skill, " +
