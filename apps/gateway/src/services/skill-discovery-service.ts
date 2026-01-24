@@ -39,71 +39,144 @@ name: creating-skills
 description: Author new gateway skills. Use when asked to create, write, or save a skill.
 ---
 
-# Authoring Skills
+# Creating Gateway Skills
 
-Use \`write-gateway-skill\` to create skills. This guide covers the format requirements.
+Use \`write-gateway-skill\` to create skills. Skills extend agent capabilities with specialized knowledge, workflows, and tools.
 
-## SKILL.md Format
+## Core Principles
 
-Every skill needs a \`SKILL.md\` with YAML frontmatter:
+### Concise is Key
+
+The context window is a public good. Skills share it with the system prompt, conversation history, other skills' metadata, and the actual request.
+
+**Default assumption: the agent is already smart.** Only add context it doesn't already have. Challenge each piece: "Does this paragraph justify its token cost?" Prefer concise examples over verbose explanations.
+
+### Degrees of Freedom
+
+Match specificity to task fragility:
+
+| Freedom | When to use | Format |
+|---------|-------------|--------|
+| **High** | Multiple approaches valid, context-dependent | Text instructions, heuristics |
+| **Medium** | Preferred pattern exists, some variation OK | Pseudocode, parameterized scripts |
+| **Low** | Operations are fragile, consistency critical | Specific scripts, few parameters |
+
+Think of it as a path: narrow bridge with cliffs needs guardrails (low freedom), open field allows many routes (high freedom).
+
+## Skill Structure
+
+\`\`\`
+skill-name/
+├── SKILL.md              # Required: frontmatter + instructions
+├── scripts/              # Optional: executable code
+├── references/           # Optional: docs loaded on-demand
+└── assets/               # Optional: templates, static files
+\`\`\`
+
+### SKILL.md Format
 
 \`\`\`yaml
 ---
 name: my-skill-name
-description: What this does and WHEN to use it. Include keywords agents will search for.
+description: What this does and WHEN to use it. Include trigger keywords.
 ---
 
-Your instructions here. Be specific and actionable.
+# Instructions here
 \`\`\`
 
-### Frontmatter Fields
+**Frontmatter fields:**
+- \`name\` (required): Lowercase + hyphens, matches skillName
+- \`description\` (required): What AND when - this is how agents discover your skill
 
-| Field | Required | Rules |
-|-------|----------|-------|
-| \`name\` | Yes | 1-64 chars, lowercase + hyphens only, no leading/trailing/consecutive hyphens, must match skillName |
-| \`description\` | Yes | 1-1024 chars, describe what AND when - this is how agents discover your skill |
+Keep SKILL.md under 500 lines. Use imperative form ("Run the script" not "You should run").
 
-Optional: \`license\`, \`compatibility\` (environment requirements), \`metadata\` (arbitrary key-value pairs).
+### Bundled Resources
 
-### Body Content
+**scripts/** - Executable code run via \`invoke-gateway-skill-script\`
+- Use when: same code is repeatedly rewritten, deterministic reliability needed
+- Example: \`scripts/rotate_pdf.py\` for PDF tasks
 
-Write actionable instructions. Good content includes:
-- Step-by-step procedures
-- Examples with expected inputs/outputs
-- Edge cases and error handling
+**references/** - Documentation loaded on-demand via \`load-gateway-skill\` with path parameter
+- Use when: detailed docs the agent should reference while working
+- Examples: API specs, database schemas, domain knowledge
+- For large files (>10k words): include grep patterns in SKILL.md
 
-Keep SKILL.md under 500 lines. Move detailed references to separate files.
-
-## Optional Directories
-
-- \`scripts/\` - Executable code (run via \`invoke-gateway-skill-script\`)
-- \`references/\` - Additional docs loaded on-demand (e.g., \`REFERENCE.md\`, domain-specific guides)
-- \`assets/\` - Templates, schemas, static data
+**assets/** - Files used in output, not loaded into context
+- Use when: templates, images, boilerplate to copy/modify
+- Examples: \`assets/logo.png\`, \`assets/template.html\`
 
 ## Progressive Disclosure
 
-Skills load in stages to conserve context:
-1. **Discovery**: Only \`name\` + \`description\` (~100 tokens) - loaded for all skills at startup
-2. **Activation**: Full \`SKILL.md\` body (<5000 tokens recommended) - loaded when skill is selected
-3. **Resources**: \`scripts/\`, \`references/\`, \`assets/\` - loaded only when explicitly requested
+Skills load in three stages to manage context:
 
-Structure content accordingly: put essential instructions in SKILL.md, detailed reference material in separate files.
+1. **Metadata** (~100 tokens) - Always loaded: \`name\` + \`description\`
+2. **SKILL.md body** (<5k tokens) - When skill triggers
+3. **Resources** (unlimited) - Only when explicitly requested
+
+### Disclosure Patterns
+
+**Pattern 1: High-level with references**
+\`\`\`markdown
+## Quick start
+[Core example here]
+
+## Advanced
+- **Forms**: See references/FORMS.md
+- **API reference**: See references/API.md
+\`\`\`
+
+**Pattern 2: Domain organization**
+\`\`\`
+analytics-skill/
+├── SKILL.md (overview + navigation)
+└── references/
+    ├── finance.md
+    ├── sales.md
+    └── product.md
+\`\`\`
+Agent only loads the relevant domain file.
+
+**Pattern 3: Framework variants**
+\`\`\`
+deploy-skill/
+├── SKILL.md (workflow + selection guide)
+└── references/
+    ├── aws.md
+    ├── gcp.md
+    └── azure.md
+\`\`\`
+
+## What NOT to Include
+
+Do NOT create extraneous files:
+- README.md, INSTALLATION_GUIDE.md, CHANGELOG.md, etc.
+- User-facing documentation
+- Setup/testing procedures
+
+Skills are for agents, not humans. Include only what helps an agent do the job.
+
+## Creation Process
+
+1. **Gather examples**: Understand concrete use cases. Ask: "What would trigger this skill?"
+2. **Plan resources**: For each example, identify reusable scripts/references/assets
+3. **Write content**: Start with resources, then write SKILL.md referencing them
+4. **Test**: Verify scripts work, examples are accurate
 
 ## Example
 
 \`\`\`yaml
 ---
 name: code-review
-description: Review code for bugs, security issues, and style. Use when asked to review, audit, or check code quality.
+description: Review code for bugs, security, and style. Use when asked to review, audit, or check code quality.
 ---
 
-# Code Review Process
+# Code Review
 
-1. Identify the files to review
-2. Check for: security vulnerabilities, error handling, edge cases, style consistency
-3. Provide specific, actionable feedback with line references
+1. Identify files to review
+2. Check: security vulnerabilities, error handling, edge cases, style
+3. Provide actionable feedback with line references
 
-See [the full review checklist](references/CHECKLIST.md) for details.
+For detailed checklist: See references/CHECKLIST.md
 \`\`\`
 `;
 
