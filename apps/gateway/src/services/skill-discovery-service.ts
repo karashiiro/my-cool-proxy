@@ -25,7 +25,8 @@ const BUILTIN_CREATING_SKILLS_NAME = "creating-skills";
  */
 const BUILTIN_CREATING_SKILLS_METADATA: SkillMetadata = {
   name: BUILTIN_CREATING_SKILLS_NAME,
-  description: "Learn how to create and manage gateway skills",
+  description:
+    "Author new gateway skills. Use when asked to create, write, or save a skill.",
   path: "", // Virtual skill - no path on disk
 };
 
@@ -35,126 +36,75 @@ const BUILTIN_CREATING_SKILLS_METADATA: SkillMetadata = {
  */
 const BUILTIN_CREATING_SKILLS_CONTENT = `---
 name: creating-skills
-description: Learn how to create and manage gateway skills
+description: Author new gateway skills. Use when asked to create, write, or save a skill.
 ---
 
-# Creating Gateway Skills
+# Authoring Skills
 
-Gateway skills are reusable instruction sets that extend the gateway's capabilities. They provide specialized guidance for specific tasks and can include scripts and reference materials.
+Use \`write-gateway-skill\` to create skills. This guide covers the format requirements.
 
-## Skill Structure
+## SKILL.md Format
 
-Each skill lives in its own directory under the skills folder:
-
-\`\`\`
-skills/
-  my-skill/
-    SKILL.md              # Required - main content with YAML frontmatter
-    scripts/              # Optional - executable scripts
-      extract.py
-      process.sh
-    references/           # Optional - reference documentation
-      API.md
-    assets/               # Optional - data files
-      template.json
-\`\`\`
-
-## Creating a Skill
-
-Use the \`write-gateway-skill\` tool to create or update skills:
-
-\`\`\`lua
--- Create a simple skill
-result(gateway.write_gateway_skill({
-  skillName = "my-new-skill",
-  content = [[---
-name: My New Skill
-description: What this skill does
----
-
-# Instructions
-
-Your skill instructions here...
-]]
-}):await())
-\`\`\`
-
-### Adding Resource Files
-
-You can include scripts, references, or assets:
-
-\`\`\`lua
-result(gateway.write_gateway_skill({
-  skillName = "data-processor",
-  content = [[---
-name: Data Processor
-description: Process and transform data files
----
-
-# Usage
-
-Run the extract script to process data files.
-]],
-  files = {
-    { path = "scripts/extract.py", content = "#!/usr/bin/env python3\\nprint('Processing...')" },
-    { path = "references/FORMAT.md", content = "# Data Format\\n\\nExpected input format..." }
-  }
-}):await())
-\`\`\`
-
-## Loading Skills
-
-Use \`load-gateway-skill\` to retrieve skill content:
-
-\`\`\`lua
--- Load main skill content
-local content = gateway.load_gateway_skill({ skillName = "my-skill" }):await()
-
--- Load a specific resource file
-local script = gateway.load_gateway_skill({
-  skillName = "my-skill",
-  path = "scripts/extract.py"
-}):await()
-\`\`\`
-
-## Running Scripts
-
-Use \`invoke-gateway-skill-script\` to execute scripts from a skill:
-
-\`\`\`lua
-local result = gateway.invoke_gateway_skill_script({
-  skillName = "data-processor",
-  script = "extract.py",
-  args = { "input.json", "--format", "csv" }
-}):await()
-\`\`\`
-
-Scripts run with:
-- Working directory set to the skill directory
-- \`SKILL_DIR\` environment variable pointing to the skill directory
-- Access to \`references/\` and \`assets/\` via relative paths
-
-## YAML Frontmatter
-
-Every SKILL.md must start with YAML frontmatter:
+Every skill needs a \`SKILL.md\` with YAML frontmatter:
 
 \`\`\`yaml
 ---
-name: Human-Readable Name
-description: Brief description of what the skill does
+name: my-skill-name
+description: What this does and WHEN to use it. Include keywords agents will search for.
 ---
+
+Your instructions here. Be specific and actionable.
 \`\`\`
 
-- \`name\`: Displayed in skill listings (falls back to directory name if omitted)
-- \`description\`: Shown in gateway instructions to help agents discover relevant skills
+### Frontmatter Fields
 
-## Best Practices
+| Field | Required | Rules |
+|-------|----------|-------|
+| \`name\` | Yes | 1-64 chars, lowercase + hyphens only, no leading/trailing/consecutive hyphens, must match skillName |
+| \`description\` | Yes | 1-1024 chars, describe what AND when - this is how agents discover your skill |
 
-1. **Clear naming**: Use kebab-case for skill directories (e.g., \`data-processor\`)
-2. **Good descriptions**: Write descriptions that help agents find your skill
-3. **Modular scripts**: Keep scripts focused and reusable
-4. **Document formats**: Include reference docs for any custom formats or APIs
-5. **Version control**: Skills persist locally - consider backing up important skills
+Optional: \`license\`, \`compatibility\` (environment requirements), \`metadata\` (arbitrary key-value pairs).
+
+### Body Content
+
+Write actionable instructions. Good content includes:
+- Step-by-step procedures
+- Examples with expected inputs/outputs
+- Edge cases and error handling
+
+Keep SKILL.md under 500 lines. Move detailed references to separate files.
+
+## Optional Directories
+
+- \`scripts/\` - Executable code (run via \`invoke-gateway-skill-script\`)
+- \`references/\` - Additional docs loaded on-demand (e.g., \`REFERENCE.md\`, domain-specific guides)
+- \`assets/\` - Templates, schemas, static data
+
+## Progressive Disclosure
+
+Skills load in stages to conserve context:
+1. **Discovery**: Only \`name\` + \`description\` (~100 tokens) - loaded for all skills at startup
+2. **Activation**: Full \`SKILL.md\` body (<5000 tokens recommended) - loaded when skill is selected
+3. **Resources**: \`scripts/\`, \`references/\`, \`assets/\` - loaded only when explicitly requested
+
+Structure content accordingly: put essential instructions in SKILL.md, detailed reference material in separate files.
+
+## Example
+
+\`\`\`yaml
+---
+name: code-review
+description: Review code for bugs, security issues, and style. Use when asked to review, audit, or check code quality.
+---
+
+# Code Review Process
+
+1. Identify the files to review
+2. Check for: security vulnerabilities, error handling, edge cases, style consistency
+3. Provide specific, actionable feedback with line references
+
+See [the full review checklist](references/CHECKLIST.md) for details.
+\`\`\`
 `;
 
 /**

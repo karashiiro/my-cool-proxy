@@ -82,7 +82,9 @@ describe("SkillDiscoveryService", () => {
       const skills = await service.discoverSkills();
 
       expect(skills).toEqual([]);
-      expect(mockLogger.info).toHaveBeenCalledWith("Discovered 0 skill(s) from disk");
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        "Discovered 0 skill(s) from disk",
+      );
     });
 
     it("should correctly parse skill with valid frontmatter", async () => {
@@ -162,7 +164,9 @@ Content`,
         "skill-b",
         "skill-c",
       ]);
-      expect(mockLogger.info).toHaveBeenCalledWith("Discovered 3 skill(s) from disk");
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        "Discovered 3 skill(s) from disk",
+      );
     });
 
     it("should use directory name as fallback when name field is missing", async () => {
