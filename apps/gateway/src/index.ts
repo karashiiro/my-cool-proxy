@@ -237,7 +237,8 @@ async function startHttpMode(
     `Preloaded info from ${preloadedServers.length} server(s) for gateway instructions`,
   );
 
-  // Discover and append skill instructions
+  // Ensure default skills exist, then discover and append skill instructions
+  await skillDiscoveryService.ensureDefaultSkills();
   const skills = await skillDiscoveryService.discoverSkills();
   if (skills.length > 0) {
     const skillInstructions =
@@ -384,7 +385,8 @@ async function startStdioMode(
     `Preloaded info from ${preloadedServers.length} server(s) for gateway instructions`,
   );
 
-  // Discover and append skill instructions
+  // Ensure default skills exist, then discover and append skill instructions
+  await skillDiscoveryService.ensureDefaultSkills();
   const skills = await skillDiscoveryService.discoverSkills();
   if (skills.length > 0) {
     const skillInstructions =
