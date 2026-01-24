@@ -1,19 +1,13 @@
 import { injectable } from "inversify";
 import * as z from "zod";
 import { spawn } from "child_process";
-import { resolve } from "path";
+import { resolve, sep } from "path";
 import { existsSync, statSync } from "fs";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { $inject } from "../container/decorators.js";
 import { TYPES } from "../types/index.js";
 import type { ITool } from "./base-tool.js";
 import type { ILogger, ISkillDiscoveryService } from "../types/interfaces.js";
-
-/** Default timeout for script execution (30 seconds) */
-const DEFAULT_TIMEOUT_MS = 30000;
-
-/** Maximum timeout allowed (5 minutes) */
-const MAX_TIMEOUT_MS = 300000;
 
 /**
  * Tool that executes scripts from a gateway skill's scripts/ directory.
@@ -42,12 +36,6 @@ export class InvokeGatewaySkillScriptTool implements ITool {
       .array(z.string())
       .optional()
       .describe("Optional arguments to pass to the script"),
-    timeout: z
-      .number()
-      .optional()
-      .describe(
-        `Optional timeout in milliseconds (default: ${DEFAULT_TIMEOUT_MS}, max: ${MAX_TIMEOUT_MS})`,
-      ),
   };
 
   constructor(
@@ -61,16 +49,11 @@ export class InvokeGatewaySkillScriptTool implements ITool {
       skillName,
       script,
       args: scriptArgs = [],
-      timeout = DEFAULT_TIMEOUT_MS,
     } = args as {
       skillName: string;
       script: string;
       args?: string[];
-      timeout?: number;
     };
-
-    // Validate timeout
-    const effectiveTimeout = Math.min(Math.max(timeout, 0), MAX_TIMEOUT_MS);
 
     // Find the skill
     const skills = await this.skillService.discoverSkills();
@@ -112,7 +95,7 @@ export class InvokeGatewaySkillScriptTool implements ITool {
 
     // 3. Verify the resolved path is still within scripts/
     // The script must be directly inside scripts/, not equal to it or outside it
-    if (!scriptPath.startsWith(scriptsDir + "/")) {
+    if (!scriptPath.startsWith(scriptsDir + sep)) {
       this.logger.warn(`Path traversal attempt in script name: ${script}`);
       return {
         content: [
@@ -176,7 +159,6 @@ export class InvokeGatewaySkillScriptTool implements ITool {
         scriptPath,
         scriptArgs,
         skill.path,
-        effectiveTimeout,
       );
 
       return {
@@ -208,13 +190,11 @@ export class InvokeGatewaySkillScriptTool implements ITool {
     scriptPath: string,
     args: string[],
     cwd: string,
-    timeout: number,
   ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
     return new Promise((resolve, reject) => {
       const proc = spawn(scriptPath, args, {
         cwd,
         shell: true,
-        timeout,
         env: {
           ...process.env,
           SKILL_DIR: cwd,
@@ -236,16 +216,12 @@ export class InvokeGatewaySkillScriptTool implements ITool {
         reject(error);
       });
 
-      proc.on("close", (code, signal) => {
-        if (signal === "SIGTERM") {
-          reject(new Error(`Script timed out after ${timeout}ms`));
-        } else {
-          resolve({
-            stdout,
-            stderr,
-            exitCode: code ?? 1,
-          });
-        }
+      proc.on("close", (code) => {
+        resolve({
+          stdout,
+          stderr,
+          exitCode: code ?? 1,
+        });
       });
     });
   }

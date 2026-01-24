@@ -1,6 +1,6 @@
 import { injectable } from "inversify";
 import { existsSync, readdirSync, readFileSync, statSync } from "fs";
-import { resolve } from "path";
+import { resolve, sep } from "path";
 import { parse as parseYaml } from "yaml";
 import type { ILogger } from "../types/interfaces.js";
 import type { ISkillDiscoveryService, SkillMetadata } from "../types/skill.js";
@@ -145,8 +145,8 @@ export class SkillDiscoveryService implements ISkillDiscoveryService {
 
     // Security: Ensure the resolved path is within the skill directory
     // This prevents path traversal attacks like "../../../etc/passwd"
-    // The path must start with skill.path + "/" to be inside the directory
-    if (!fullPath.startsWith(skill.path + "/")) {
+    // The path must start with skill.path + separator to be inside the directory
+    if (!fullPath.startsWith(skill.path + sep)) {
       this.logger.warn(
         `Path traversal detected for skill '${skillName}': ${relativePath}`,
       );
@@ -164,6 +164,11 @@ export class SkillDiscoveryService implements ISkillDiscoveryService {
       );
       return null;
     }
+  }
+
+  clearCache(): void {
+    this.skillsCache = null;
+    this.logger.debug("Skills cache cleared");
   }
 
   /**

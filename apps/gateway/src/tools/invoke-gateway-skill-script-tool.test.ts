@@ -6,6 +6,36 @@ import { InvokeGatewaySkillScriptTool } from "./invoke-gateway-skill-script-tool
 import type { ILogger, ISkillDiscoveryService } from "../types/interfaces.js";
 import type { SkillMetadata } from "../types/skill.js";
 
+const isWindows = process.platform === "win32";
+
+/**
+ * Helper to write cross-platform test scripts.
+ * Uses Node.js scripts that work on both Windows and Unix.
+ * Returns the script filename to use.
+ */
+function writeNodeScript(
+  dir: string,
+  baseName: string,
+  nodeCode: string,
+): string {
+  if (isWindows) {
+    // On Windows, use a .cmd file that invokes node
+    const scriptPath = resolve(dir, `${baseName}.cmd`);
+    // Use %~dp0 to get the script directory and run node with the JS code
+    // We write a companion .js file and call it from the .cmd
+    const jsPath = resolve(dir, `${baseName}.js`);
+    writeFileSync(jsPath, nodeCode);
+    writeFileSync(scriptPath, `@node "%~dp0${baseName}.js" %*\r\n`);
+    return `${baseName}.cmd`;
+  } else {
+    // On Unix, use a .mjs file with shebang
+    const scriptPath = resolve(dir, `${baseName}.mjs`);
+    writeFileSync(scriptPath, `#!/usr/bin/env node\n${nodeCode}`);
+    chmodSync(scriptPath, "755");
+    return `${baseName}.mjs`;
+  }
+}
+
 describe("InvokeGatewaySkillScriptTool", () => {
   let tool: InvokeGatewaySkillScriptTool;
   let mockSkillService: ISkillDiscoveryService;
@@ -28,6 +58,7 @@ describe("InvokeGatewaySkillScriptTool", () => {
       discoverSkills: vi.fn(),
       getSkillContent: vi.fn(),
       getSkillResource: vi.fn(),
+      clearCache: vi.fn(),
     };
 
     mockLogger = {
@@ -64,7 +95,6 @@ describe("InvokeGatewaySkillScriptTool", () => {
       expect(tool.schema.skillName).toBeDefined();
       expect(tool.schema.script).toBeDefined();
       expect(tool.schema.args).toBeDefined();
-      expect(tool.schema.timeout).toBeDefined();
     });
   });
 
@@ -156,14 +186,16 @@ describe("InvokeGatewaySkillScriptTool", () => {
       vi.mocked(mockSkillService.discoverSkills).mockResolvedValue([testSkill]);
     });
 
-    it("should execute a simple shell script and return stdout", async () => {
-      const scriptPath = resolve(scriptsDir, "hello.sh");
-      writeFileSync(scriptPath, '#!/bin/bash\necho "Hello, World!"');
-      chmodSync(scriptPath, "755");
+    it("should execute a simple script and return stdout", async () => {
+      const scriptName = writeNodeScript(
+        scriptsDir,
+        "hello",
+        `console.log("Hello, World!");`,
+      );
 
       const result = await tool.execute({
         skillName: "test-skill",
-        script: "hello.sh",
+        script: scriptName,
       });
 
       expect(result.isError).toBe(false);
@@ -173,13 +205,15 @@ describe("InvokeGatewaySkillScriptTool", () => {
     });
 
     it("should pass arguments to script", async () => {
-      const scriptPath = resolve(scriptsDir, "echo-args.sh");
-      writeFileSync(scriptPath, '#!/bin/bash\necho "Args: $@"');
-      chmodSync(scriptPath, "755");
+      const scriptName = writeNodeScript(
+        scriptsDir,
+        "echo-args",
+        `console.log("Args: " + process.argv.slice(2).join(" "));`,
+      );
 
       const result = await tool.execute({
         skillName: "test-skill",
-        script: "echo-args.sh",
+        script: scriptName,
         args: ["foo", "bar", "baz"],
       });
 
@@ -189,13 +223,15 @@ describe("InvokeGatewaySkillScriptTool", () => {
     });
 
     it("should capture stderr", async () => {
-      const scriptPath = resolve(scriptsDir, "stderr.sh");
-      writeFileSync(scriptPath, '#!/bin/bash\necho "error message" >&2');
-      chmodSync(scriptPath, "755");
+      const scriptName = writeNodeScript(
+        scriptsDir,
+        "stderr",
+        `console.error("error message");`,
+      );
 
       const result = await tool.execute({
         skillName: "test-skill",
-        script: "stderr.sh",
+        script: scriptName,
       });
 
       expect(result.isError).toBe(false);
@@ -205,13 +241,15 @@ describe("InvokeGatewaySkillScriptTool", () => {
     });
 
     it("should report non-zero exit codes as errors", async () => {
-      const scriptPath = resolve(scriptsDir, "failing.sh");
-      writeFileSync(scriptPath, "#!/bin/bash\nexit 42");
-      chmodSync(scriptPath, "755");
+      const scriptName = writeNodeScript(
+        scriptsDir,
+        "failing",
+        `process.exit(42);`,
+      );
 
       const result = await tool.execute({
         skillName: "test-skill",
-        script: "failing.sh",
+        script: scriptName,
       });
 
       expect(result.isError).toBe(true);
@@ -220,13 +258,15 @@ describe("InvokeGatewaySkillScriptTool", () => {
     });
 
     it("should set SKILL_DIR environment variable", async () => {
-      const scriptPath = resolve(scriptsDir, "env-check.sh");
-      writeFileSync(scriptPath, '#!/bin/bash\necho "SKILL_DIR=$SKILL_DIR"');
-      chmodSync(scriptPath, "755");
+      const scriptName = writeNodeScript(
+        scriptsDir,
+        "env-check",
+        `console.log("SKILL_DIR=" + process.env.SKILL_DIR);`,
+      );
 
       const result = await tool.execute({
         skillName: "test-skill",
-        script: "env-check.sh",
+        script: scriptName,
       });
 
       expect(result.isError).toBe(false);
@@ -235,106 +275,20 @@ describe("InvokeGatewaySkillScriptTool", () => {
     });
 
     it("should use skill directory as working directory", async () => {
-      const scriptPath = resolve(scriptsDir, "pwd-check.sh");
-      writeFileSync(scriptPath, "#!/bin/bash\npwd");
-      chmodSync(scriptPath, "755");
+      const scriptName = writeNodeScript(
+        scriptsDir,
+        "pwd-check",
+        `console.log(process.cwd());`,
+      );
 
       const result = await tool.execute({
         skillName: "test-skill",
-        script: "pwd-check.sh",
+        script: scriptName,
       });
 
       expect(result.isError).toBe(false);
       const text = (result.content[0] as { type: "text"; text: string }).text;
       expect(text).toContain(skillDir);
-    });
-  });
-
-  describe("execute - python scripts", () => {
-    const testSkill: SkillMetadata = {
-      name: "test-skill",
-      description: "Test skill",
-      path: "",
-    };
-
-    beforeEach(() => {
-      testSkill.path = skillDir;
-      vi.mocked(mockSkillService.discoverSkills).mockResolvedValue([testSkill]);
-    });
-
-    it("should execute python scripts with shebang", async () => {
-      const scriptPath = resolve(scriptsDir, "hello.py");
-      writeFileSync(
-        scriptPath,
-        '#!/usr/bin/env python3\nprint("Hello from Python!")',
-      );
-      chmodSync(scriptPath, "755");
-
-      const result = await tool.execute({
-        skillName: "test-skill",
-        script: "hello.py",
-      });
-
-      // This test may fail if python3 isn't installed, but that's OK
-      // We're testing the mechanism, not the presence of python
-      const text = (result.content[0] as { type: "text"; text: string }).text;
-      if (result.isError) {
-        // If it failed, make sure it's because of python not being available
-        // not because of our code
-        expect(
-          text.includes("Hello from Python!") ||
-            text.includes("python") ||
-            text.includes("not found") ||
-            text.includes("No such file"),
-        ).toBe(true);
-      } else {
-        expect(text).toContain("Hello from Python!");
-      }
-    });
-  });
-
-  describe("execute - timeout handling", () => {
-    const testSkill: SkillMetadata = {
-      name: "test-skill",
-      description: "Test skill",
-      path: "",
-    };
-
-    beforeEach(() => {
-      testSkill.path = skillDir;
-      vi.mocked(mockSkillService.discoverSkills).mockResolvedValue([testSkill]);
-    });
-
-    it("should timeout long-running scripts", async () => {
-      const scriptPath = resolve(scriptsDir, "sleeper.sh");
-      writeFileSync(scriptPath, "#!/bin/bash\nsleep 60\necho done");
-      chmodSync(scriptPath, "755");
-
-      const result = await tool.execute({
-        skillName: "test-skill",
-        script: "sleeper.sh",
-        timeout: 100, // 100ms timeout - should fail fast
-      });
-
-      expect(result.isError).toBe(true);
-      const text = (result.content[0] as { type: "text"; text: string }).text;
-      expect(text).toContain("timed out");
-    }, 10000); // Give the test itself 10 seconds
-
-    it("should clamp timeout to maximum allowed value", async () => {
-      // This test just verifies the script runs without error
-      // The timeout clamping logic is internal
-      const scriptPath = resolve(scriptsDir, "quick.sh");
-      writeFileSync(scriptPath, '#!/bin/bash\necho "quick"');
-      chmodSync(scriptPath, "755");
-
-      const result = await tool.execute({
-        skillName: "test-skill",
-        script: "quick.sh",
-        timeout: 999999999, // Way over max, should be clamped
-      });
-
-      expect(result.isError).toBe(false);
     });
   });
 
@@ -351,18 +305,20 @@ describe("InvokeGatewaySkillScriptTool", () => {
     });
 
     it("should log info when executing script", async () => {
-      const scriptPath = resolve(scriptsDir, "log-test.sh");
-      writeFileSync(scriptPath, '#!/bin/bash\necho "test"');
-      chmodSync(scriptPath, "755");
+      const scriptName = writeNodeScript(
+        scriptsDir,
+        "log-test",
+        `console.log("test");`,
+      );
 
       await tool.execute({
         skillName: "test-skill",
-        script: "log-test.sh",
+        script: scriptName,
         args: ["arg1"],
       });
 
       expect(mockLogger.info).toHaveBeenCalledWith(
-        expect.stringContaining("test-skill/scripts/log-test.sh"),
+        expect.stringContaining(`test-skill/scripts/${scriptName}`),
       );
     });
 
@@ -393,13 +349,15 @@ describe("InvokeGatewaySkillScriptTool", () => {
     });
 
     it("should format output with markdown code blocks", async () => {
-      const scriptPath = resolve(scriptsDir, "format.sh");
-      writeFileSync(scriptPath, '#!/bin/bash\necho "output line"');
-      chmodSync(scriptPath, "755");
+      const scriptName = writeNodeScript(
+        scriptsDir,
+        "format",
+        `console.log("output line");`,
+      );
 
       const result = await tool.execute({
         skillName: "test-skill",
-        script: "format.sh",
+        script: scriptName,
       });
 
       const text = (result.content[0] as { type: "text"; text: string }).text;
@@ -408,13 +366,15 @@ describe("InvokeGatewaySkillScriptTool", () => {
     });
 
     it("should show only exit code when there is no output", async () => {
-      const scriptPath = resolve(scriptsDir, "silent.sh");
-      writeFileSync(scriptPath, "#!/bin/bash\nexit 0");
-      chmodSync(scriptPath, "755");
+      const scriptName = writeNodeScript(
+        scriptsDir,
+        "silent",
+        `process.exit(0);`,
+      );
 
       const result = await tool.execute({
         skillName: "test-skill",
-        script: "silent.sh",
+        script: scriptName,
       });
 
       const text = (result.content[0] as { type: "text"; text: string }).text;

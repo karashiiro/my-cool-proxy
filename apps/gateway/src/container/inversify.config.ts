@@ -38,6 +38,7 @@ import { InspectToolResponseTool } from "../tools/inspect-tool-response-tool.js"
 import { SummaryStatsTool } from "../tools/summary-stats-tool.js";
 import { LoadGatewaySkillTool } from "../tools/load-gateway-skill-tool.js";
 import { InvokeGatewaySkillScriptTool } from "../tools/invoke-gateway-skill-script-tool.js";
+import { WriteGatewaySkillTool } from "../tools/write-gateway-skill-tool.js";
 import type { IToolRegistry } from "../tools/tool-registry.js";
 import { ToolRegistry } from "../tools/tool-registry.js";
 
@@ -127,6 +128,7 @@ export function createContainer(
   container.bind<ITool>(TYPES.Tool).to(SummaryStatsTool);
   container.bind<ITool>(TYPES.Tool).to(LoadGatewaySkillTool);
   container.bind<ITool>(TYPES.Tool).to(InvokeGatewaySkillScriptTool);
+  container.bind<ITool>(TYPES.Tool).to(WriteGatewaySkillTool);
 
   // Bind tool registry and populate it with all registered tools
   container

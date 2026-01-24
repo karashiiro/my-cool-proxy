@@ -41,4 +41,10 @@ export interface ISkillDiscoveryService {
     skillName: string,
     relativePath: string,
   ): Promise<string | null>;
+
+  /**
+   * Clear the internal skills cache.
+   * Call this after creating or modifying skills to ensure fresh discovery.
+   */
+  clearCache(): void;
 }
