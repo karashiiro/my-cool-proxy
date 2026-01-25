@@ -1,5 +1,7 @@
 # my-cool-proxy
 
+[![NPM Version](https://img.shields.io/npm/v/%40karashiiro%2Fmy-cool-proxy)](https://www.npmjs.com/package/@karashiiro/my-cool-proxy)
+
 MCP gateway server that lets you call multiple MCP servers from Lua scripts.
 
 ## Overview
