@@ -121,8 +121,8 @@ mkdir -p ~/.config/my-cool-proxy
 cp config.example.json ~/.config/my-cool-proxy/config.json
 
 # macOS
-mkdir -p ~/Library/Application\ Support/my-cool-proxy
-cp config.example.json ~/Library/Application\ Support/my-cool-proxy/config.json
+mkdir -p ~/Library/Preferences/my-cool-proxy
+cp config.example.json ~/Library/Preferences/my-cool-proxy/config.json
 
 # Windows (PowerShell)
 mkdir "$env:APPDATA\my-cool-proxy"

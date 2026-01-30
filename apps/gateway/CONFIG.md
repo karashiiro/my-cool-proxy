@@ -9,7 +9,7 @@ The gateway looks for `config.json` in the following locations (in priority orde
 1. **Environment variable**: Path specified in `CONFIG_PATH`
 2. **Platform-specific user directory**:
    - **Windows**: `%APPDATA%\my-cool-proxy\config.json`
-   - **macOS**: `~/Library/Application Support/my-cool-proxy/config.json`
+   - **macOS**: `~/Library/Preferences/my-cool-proxy/config.json`
    - **Linux**: `~/.config/my-cool-proxy/config.json` (respects `$XDG_CONFIG_HOME`)
 
 ## Automatic Config Creation
@@ -68,8 +68,8 @@ mkdir -p ~/.config/my-cool-proxy
 cp config.example.json ~/.config/my-cool-proxy/config.json
 
 # macOS
-mkdir -p ~/Library/Application\ Support/my-cool-proxy
-cp config.example.json ~/Library/Application\ Support/my-cool-proxy/config.json
+mkdir -p ~/Library/Preferences/my-cool-proxy
+cp config.example.json ~/Library/Preferences/my-cool-proxy/config.json
 
 # Windows (PowerShell)
 mkdir "$env:APPDATA\my-cool-proxy"
@@ -517,7 +517,7 @@ When skills are enabled, these tools become available:
 Skills are stored in the platform-specific config directory:
 
 - **Windows**: `%APPDATA%\my-cool-proxy\skills\`
-- **macOS**: `~/Library/Application Support/my-cool-proxy/skills/`
+- **macOS**: `~/Library/Preferences/my-cool-proxy/skills/`
 - **Linux**: `~/.config/my-cool-proxy/skills/`
 
 Each skill lives in its own subdirectory:
