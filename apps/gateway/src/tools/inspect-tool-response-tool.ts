@@ -4,6 +4,7 @@ import * as z from "zod";
 import { $inject } from "../container/decorators.js";
 import { TYPES } from "../types/index.js";
 import type { ITool, ToolExecutionContext } from "./base-tool.js";
+import type { ServerConfig } from "../types/interfaces.js";
 import { ToolDiscoveryService } from "@my-cool-proxy/mcp-aggregation";
 
 /**
@@ -47,6 +48,8 @@ export class InspectToolResponseTool implements ITool {
   constructor(
     @$inject(TYPES.ToolDiscoveryService)
     private toolDiscovery: ToolDiscoveryService,
+    @$inject(TYPES.ServerConfig)
+    private config: ServerConfig,
   ) {}
 
   async execute(
@@ -54,11 +57,21 @@ export class InspectToolResponseTool implements ITool {
     context: ToolExecutionContext,
   ): Promise<CallToolResult> {
     const { luaServerName, luaToolName, sampleArgs } = args;
-    return this.toolDiscovery.inspectToolResponse(
+    const result = await this.toolDiscovery.inspectToolResponse(
       luaServerName as string,
       luaToolName as string,
       (sampleArgs as Record<string, unknown>) || {},
       context.sessionId || "default",
     );
+
+    // Add skill check note if skills are enabled
+    if (this.config.skills?.enabled === true) {
+      result.content.push({
+        type: "text",
+        text: "\n\nNote: Gateway skills are enabled. Strongly consider checking for applicable skills (via load-gateway-skill) before continuing with your task.",
+      });
+    }
+
+    return result;
   }
 }
