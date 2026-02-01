@@ -16,6 +16,7 @@ import type {
   ILogger,
   ILuaRuntime,
   IMCPClientManager,
+  ServerConfig,
 } from "../types/interfaces.js";
 import * as z from "zod";
 import { MCPClientSession } from "@my-cool-proxy/mcp-client";
@@ -62,6 +63,7 @@ const createToolRegistry = (
   luaRuntime: ILuaRuntime,
   clientManager: IMCPClientManager,
   logger: ILogger,
+  config: ServerConfig = { port: 3000, host: "localhost", mcpClients: {} },
 ): IToolRegistry => {
   const toolDiscovery = new ToolDiscoveryService(
     clientManager,
@@ -71,11 +73,13 @@ const createToolRegistry = (
   );
 
   const registry = new ToolRegistry();
-  registry.register(new ExecuteLuaTool(luaRuntime, clientManager, logger));
-  registry.register(new ListServersTool(toolDiscovery));
-  registry.register(new ListServerToolsTool(toolDiscovery));
+  registry.register(
+    new ExecuteLuaTool(luaRuntime, clientManager, logger, config),
+  );
+  registry.register(new ListServersTool(toolDiscovery, config));
+  registry.register(new ListServerToolsTool(toolDiscovery, config));
   registry.register(new ToolDetailsTool(toolDiscovery));
-  registry.register(new InspectToolResponseTool(toolDiscovery));
+  registry.register(new InspectToolResponseTool(toolDiscovery, config));
 
   return registry;
 };
