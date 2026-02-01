@@ -48,7 +48,7 @@ export class ListServerToolsTool implements ITool {
     if (this.config.skills?.enabled === true) {
       result.content.push({
         type: "text",
-        text: "\n\nNote: Gateway skills are enabled. Strongly consider checking for applicable skills (via load-gateway-skill) before continuing with your task.",
+        text: "\n\nNote: Gateway skills are enabled. Strongly consider checking for applicable skills before continuing with your task.",
       });
     }
 

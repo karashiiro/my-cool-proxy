@@ -48,7 +48,7 @@ const SKILLS_NOTE = `
 
 SKILLS:
 Gateway skills are enabled. Before executing scripts, strongly consider checking for applicable skills
-(via load-gateway-skill) that may provide optimized workflows or best practices for your task.`;
+that may provide optimized workflows or best practices for your task.`;
 
 @injectable()
 export class ExecuteLuaTool implements ITool {
