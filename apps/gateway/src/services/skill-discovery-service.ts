@@ -26,7 +26,7 @@ const BUILTIN_CREATING_SKILLS_NAME = "creating-skills";
 const BUILTIN_CREATING_SKILLS_METADATA: SkillMetadata = {
   name: BUILTIN_CREATING_SKILLS_NAME,
   description:
-    "Author new gateway skills. Use when asked to create, write, or save a skill.",
+    "Use when asked to create, write, or save a gateway skill. Covers structure, patterns, and best practices.",
   path: "", // Virtual skill - no path on disk
 };
 
@@ -36,12 +36,24 @@ const BUILTIN_CREATING_SKILLS_METADATA: SkillMetadata = {
  */
 const BUILTIN_CREATING_SKILLS_CONTENT = `---
 name: creating-skills
-description: Author new gateway skills. Use when asked to create, write, or save a skill.
+description: Use when asked to create, write, or save a gateway skill. Covers structure, patterns, and best practices.
 ---
 
 # Creating Gateway Skills
 
 Use \`write-gateway-skill\` to create skills. Skills extend agent capabilities with specialized knowledge, workflows, and tools.
+
+## When to Create a Skill
+
+**Create when:**
+- Technique wasn't intuitively obvious
+- Pattern applies across multiple projects
+- Others would benefit from this knowledge
+
+**Don't create for:**
+- One-off solutions
+- Standard practices documented elsewhere
+- Project-specific conventions (use CLAUDE.md instead)
 
 ## Core Principles
 
@@ -62,6 +74,14 @@ Match specificity to task fragility:
 | **Low** | Operations are fragile, consistency critical | Specific scripts, few parameters |
 
 Think of it as a path: narrow bridge with cliffs needs guardrails (low freedom), open field allows many routes (high freedom).
+
+### Skill Types
+
+| Type | Purpose | Example |
+|------|---------|---------|
+| **Technique** | Concrete method with steps | PDF rotation, API pagination |
+| **Pattern** | Mental model for problems | Progressive disclosure, error handling |
+| **Reference** | API docs, syntax, specifications | MCP protocol, database schemas |
 
 ## Skill Structure
 
@@ -155,6 +175,25 @@ Do NOT create extraneous files:
 
 Skills are for agents, not humans. Include only what helps an agent do the job.
 
+## Anti-Patterns
+
+| Pattern | Problem | Fix |
+|---------|---------|-----|
+| Narrative examples | "On 2025-01-15 we found..." - too specific | Use generic, reproducible examples |
+| Multi-language dilution | example.js + example.py = maintenance burden | Pick ONE excellent example |
+| Code in flowcharts | Can't copy-paste, hard to parse | Use code blocks |
+| Generic labels | helper1, step3 - no semantic meaning | Use descriptive names |
+
+## Testing Your Skill
+
+Before deploying, verify the skill works:
+
+1. **Baseline**: Try the task WITHOUT the skill - identify gaps
+2. **With skill**: Load it and retry - verify it helps
+3. **Edge cases**: Test uncommon scenarios
+
+For discipline skills with compliance requirements, consider pressure testing with subagents.
+
 ## Creation Process
 
 1. **Gather examples**: Understand concrete use cases. Ask: "What would trigger this skill?"
@@ -178,6 +217,15 @@ description: Review code for bugs, security, and style. Use when asked to review
 
 For detailed checklist: See references/CHECKLIST.md
 \`\`\`
+
+## Creation Checklist
+
+- [ ] Name is lowercase + hyphens only
+- [ ] Description starts with "Use when..." and includes trigger keywords
+- [ ] SKILL.md under 500 lines
+- [ ] Tested without skill (baseline) and with skill (improved)
+- [ ] No extraneous files (README.md, CHANGELOG.md, etc.)
+- [ ] Scripts tested and working (if any)
 `;
 
 /**
