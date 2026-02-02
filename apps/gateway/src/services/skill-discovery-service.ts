@@ -39,6 +39,8 @@ name: creating-skills
 description: Use when asked to create, write, or save a gateway skill. Covers structure, patterns, and best practices.
 ---
 
+NOTE: This skill is built into the MCP gateway. Do not attempt to modify it with \`write-gateway-skill\`.
+
 # Creating Gateway Skills
 
 Use \`write-gateway-skill\` to create skills. Skills extend agent capabilities with specialized knowledge, workflows, and tools.
