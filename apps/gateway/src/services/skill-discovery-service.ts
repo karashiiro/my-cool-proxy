@@ -4,7 +4,7 @@ import { resolve, sep } from "path";
 import { parse as parseYaml } from "yaml";
 import type { ILogger, ServerConfig } from "../types/interfaces.js";
 import type { ISkillDiscoveryService, SkillMetadata } from "../types/skill.js";
-import { getSkillsDir, SKILL_FILENAME } from "../utils/skills-paths.js";
+import { getSkillsDir, SKILL_FILENAME } from "../utils/skills.js";
 import { $inject } from "../container/decorators.js";
 import { TYPES } from "../types/index.js";
 

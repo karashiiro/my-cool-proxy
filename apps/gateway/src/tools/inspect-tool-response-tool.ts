@@ -6,6 +6,7 @@ import { TYPES } from "../types/index.js";
 import type { ITool, ToolExecutionContext } from "./base-tool.js";
 import type { ServerConfig } from "../types/interfaces.js";
 import { ToolDiscoveryService } from "@my-cool-proxy/mcp-aggregation";
+import { SKILLS_REMINDER_CONTENT_BLOCK } from "../utils/skills.js";
 
 /**
  * Tool that inspects a tool's response structure by making a sample call.
@@ -66,10 +67,7 @@ export class InspectToolResponseTool implements ITool {
 
     // Add skill check note if skills are enabled
     if (this.config.skills?.enabled === true) {
-      result.content.push({
-        type: "text",
-        text: "\n\nNote: Gateway skills are enabled. Strongly consider checking for applicable skills before continuing with your task.",
-      });
+      result.content.push(SKILLS_REMINDER_CONTENT_BLOCK);
     }
 
     return result;

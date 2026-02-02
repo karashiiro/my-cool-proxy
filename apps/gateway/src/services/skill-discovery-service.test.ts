@@ -5,14 +5,14 @@ import { tmpdir } from "os";
 import { SkillDiscoveryService } from "./skill-discovery-service.js";
 import type { ILogger, ServerConfig } from "../types/interfaces.js";
 
-// Mock the skills-paths module to use our temp directory
-vi.mock("../utils/skills-paths.js", () => ({
+// Mock the skills module to use our temp directory
+vi.mock("../utils/skills.js", () => ({
   SKILLS_DIRNAME: "skills",
   SKILL_FILENAME: "SKILL.md",
   getSkillsDir: vi.fn(),
 }));
 
-import { getSkillsDir } from "../utils/skills-paths.js";
+import { getSkillsDir } from "../utils/skills.js";
 
 describe("SkillDiscoveryService", () => {
   let service: SkillDiscoveryService;

@@ -9,7 +9,7 @@ import { TYPES } from "../types/index.js";
 import type { ITool } from "./base-tool.js";
 import type { ILogger } from "../types/interfaces.js";
 import type { ISkillDiscoveryService, SkillMetadata } from "../types/skill.js";
-import { getSkillsDir, SKILL_FILENAME } from "../utils/skills-paths.js";
+import { getSkillsDir, SKILL_FILENAME } from "../utils/skills.js";
 
 /**
  * Regular expression to extract YAML frontmatter from a markdown file.

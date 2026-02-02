@@ -6,15 +6,15 @@ import { WriteGatewaySkillTool } from "./write-gateway-skill-tool.js";
 import type { ILogger } from "../types/interfaces.js";
 import type { ISkillDiscoveryService } from "../types/skill.js";
 
-// Mock the skills-paths module to use a temp directory
-vi.mock("../utils/skills-paths.js", () => {
+// Mock the skills module to use a temp directory
+vi.mock("../utils/skills.js", () => {
   return {
     getSkillsDir: vi.fn(),
     SKILL_FILENAME: "SKILL.md",
   };
 });
 
-import { getSkillsDir } from "../utils/skills-paths.js";
+import { getSkillsDir } from "../utils/skills.js";
 
 describe("WriteGatewaySkillTool", () => {
   let tool: WriteGatewaySkillTool;
