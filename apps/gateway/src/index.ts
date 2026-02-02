@@ -29,6 +29,7 @@ import type {
 } from "@my-cool-proxy/mcp-aggregation";
 import { parseArgs } from "./utils/cli-args.js";
 import { getConfigPaths, getPlatformConfigDir } from "./utils/config-paths.js";
+import { ensureServerLogDir, getServerLogPath } from "./utils/log-paths.js";
 
 interface InitializationResult {
   successful: string[];
@@ -127,6 +128,9 @@ async function initializeClientsForSession(
   clientManager: IMCPClientManager,
   clientCapabilities?: DownstreamCapabilities,
 ): Promise<InitializationResult> {
+  // Ensure server log directory exists for stdio server stderr redirection
+  ensureServerLogDir();
+
   const connectionPromises = Object.entries(config.mcpClients).map(
     async ([name, clientConfig]): Promise<ClientConnectionResult> => {
       if (clientConfig.type === "http") {
@@ -139,6 +143,8 @@ async function initializeClientsForSession(
           clientCapabilities,
         );
       } else if (clientConfig.type === "stdio") {
+        // Generate log path for stdio server stderr
+        const stderrLogPath = getServerLogPath(name, sessionId);
         return clientManager.addStdioClient(
           name,
           clientConfig.command,
@@ -147,6 +153,7 @@ async function initializeClientsForSession(
           clientConfig.env,
           clientConfig.allowedTools,
           clientCapabilities,
+          stderrLogPath,
         );
       } else {
         // Exhaustiveness check - TypeScript will error if a new type is added

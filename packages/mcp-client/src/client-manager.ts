@@ -1,6 +1,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { createWriteStream, type WriteStream } from "fs";
 import type {
   ClientConnectionResult,
   ILogger,
@@ -12,6 +13,7 @@ import { MCPClientSession } from "./client-session.js";
 export class MCPClientManager implements IMCPClientManager {
   private clients = new Map<string, MCPClientSession>();
   private failedServers = new Map<string, string>(); // key -> error message
+  private stderrStreams = new Map<string, WriteStream>(); // key -> stderr file stream
   private onResourceListChanged?: (
     serverName: string,
     sessionId: string,
@@ -139,6 +141,7 @@ export class MCPClientManager implements IMCPClientManager {
     env?: Record<string, string>,
     allowedTools?: string[],
     clientCapabilities?: DownstreamCapabilities,
+    stderrLogPath?: string,
   ): Promise<ClientConnectionResult> {
     const key = `${name}-${sessionId}`;
     if (this.clients.has(key)) {
@@ -146,6 +149,12 @@ export class MCPClientManager implements IMCPClientManager {
         `Client ${name} already exists for session ${sessionId}`,
       );
       return { name, success: true };
+    }
+
+    // Create stderr file stream if log path is provided
+    let stderrFileStream: WriteStream | undefined;
+    if (stderrLogPath) {
+      stderrFileStream = createWriteStream(stderrLogPath, { flags: "w" });
     }
 
     try {
@@ -164,13 +173,24 @@ export class MCPClientManager implements IMCPClientManager {
         },
       );
 
+      // Configure stderr handling based on whether we have a log path
       const transport = new StdioClientTransport({
         command,
         args,
         env,
+        stderr: stderrLogPath ? "pipe" : "inherit",
       });
 
       await sdkClient.connect(transport);
+
+      // Pipe stderr to file if configured
+      if (stderrLogPath && stderrFileStream && transport.stderr) {
+        transport.stderr.pipe(stderrFileStream);
+        this.stderrStreams.set(key, stderrFileStream);
+        this.logger.debug(
+          `MCP client ${name} stderr redirected to ${stderrLogPath}`,
+        );
+      }
 
       // Wrap in MCPClientSession
       const wrappedClient = new MCPClientSession(
@@ -206,6 +226,11 @@ export class MCPClientManager implements IMCPClientManager {
       );
       return { name, success: true };
     } catch (error) {
+      // Clean up stderr stream on connection failure
+      if (stderrFileStream) {
+        stderrFileStream.end();
+      }
+
       const errorMessage =
         error instanceof Error ? error.message : String(error);
       this.logger.error(
@@ -260,9 +285,16 @@ export class MCPClientManager implements IMCPClientManager {
       }
     }
 
-    // Remove from clients map
+    // Remove from clients map and close stderr streams
     for (const key of keysToDelete) {
       this.clients.delete(key);
+
+      // Close and remove stderr stream for this client
+      const stderrStream = this.stderrStreams.get(key);
+      if (stderrStream) {
+        stderrStream.end();
+        this.stderrStreams.delete(key);
+      }
     }
 
     // Clear failed servers for this session
@@ -316,5 +348,11 @@ export class MCPClientManager implements IMCPClientManager {
     }
     this.clients.clear();
     this.failedServers.clear();
+
+    // Close all stderr file streams
+    for (const stream of this.stderrStreams.values()) {
+      stream.end();
+    }
+    this.stderrStreams.clear();
   }
 }
