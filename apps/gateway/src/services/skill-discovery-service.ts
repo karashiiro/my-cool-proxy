@@ -53,7 +53,7 @@ Use \`write-gateway-skill\` to create skills. Skills extend agent capabilities w
 **Don't create for:**
 - One-off solutions
 - Standard practices documented elsewhere
-- Project-specific conventions (use CLAUDE.md instead)
+- Project-specific conventions
 
 ## Core Principles
 
