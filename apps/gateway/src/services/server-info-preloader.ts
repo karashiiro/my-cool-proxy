@@ -163,7 +163,7 @@ export class ServerInfoPreloader implements IServerInfoPreloader {
       .join("\n");
 
     return `
-## Available Gateway Skills
+# Available Gateway Skills
 
 The following skills can be loaded using the \`load-gateway-skill\` tool:
 
