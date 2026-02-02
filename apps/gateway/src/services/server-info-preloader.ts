@@ -172,6 +172,11 @@ ${skillsXml}
 </available_skills>
 
 Use the \`load-gateway-skill\` tool with the skill name to get full instructions.
+
+<CRITICAL>
+STRONGLY consider if there are relevant skills that may assist you in a task
+prior to taking substantial actions.
+</CRITICAL>
 `;
   }
 
