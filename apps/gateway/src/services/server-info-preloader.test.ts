@@ -35,7 +35,7 @@ describe("ServerInfoPreloader", () => {
 
       const result = preloader.buildSkillInstructions(skills);
 
-      expect(result).toContain("## Available Gateway Skills");
+      expect(result).toContain("# Available Gateway Skills");
       expect(result).toContain("<available_skills>");
       expect(result).toContain("</available_skills>");
       expect(result).toContain("<skill>");
