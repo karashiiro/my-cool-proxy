@@ -43,12 +43,6 @@ export interface ISkillDiscoveryService {
   ): Promise<string | null>;
 
   /**
-   * Clear the internal skills cache.
-   * Call this after creating or modifying skills to ensure fresh discovery.
-   */
-  clearCache(): void;
-
-  /**
    * Ensure the skills directory exists.
    * Creates the directory if it doesn't exist.
    * Should be called once at startup for convenience.

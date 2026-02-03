@@ -37,7 +37,6 @@ describe("WriteGatewaySkillTool", () => {
       discoverSkills: vi.fn().mockResolvedValue([]),
       getSkillContent: vi.fn(),
       getSkillResource: vi.fn(),
-      clearCache: vi.fn(),
       ensureSkillsDirectory: vi.fn(),
     };
 
@@ -274,16 +273,6 @@ New content!
       // Verify file was overwritten
       const content = readFileSync(resolve(skillDir, "SKILL.md"), "utf-8");
       expect(content).toBe(newContent);
-    });
-
-    it("should clear the skills cache after creation", async () => {
-      const result = await tool.execute({
-        skillName: "cache-test-skill",
-        content: "---\nname: Cache Test\n---\nContent",
-      });
-
-      expect(result.isError).toBeUndefined();
-      expect(mockSkillService.clearCache).toHaveBeenCalled();
     });
 
     it("should use directory name if frontmatter name is missing", async () => {

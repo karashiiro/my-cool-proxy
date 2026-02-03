@@ -58,7 +58,6 @@ describe("InvokeGatewaySkillScriptTool", () => {
       discoverSkills: vi.fn(),
       getSkillContent: vi.fn(),
       getSkillResource: vi.fn(),
-      clearCache: vi.fn(),
       ensureSkillsDirectory: vi.fn(),
     };
 

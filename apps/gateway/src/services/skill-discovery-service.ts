@@ -178,19 +178,12 @@ interface SkillFrontmatter {
 
 @injectable()
 export class SkillDiscoveryService implements ISkillDiscoveryService {
-  private skillsCache: SkillMetadata[] | null = null;
-
   constructor(
     @$inject(TYPES.Logger) private logger: ILogger,
     @$inject(TYPES.ServerConfig) private config: ServerConfig,
   ) {}
 
   async discoverSkills(): Promise<SkillMetadata[]> {
-    // Return cached results if available
-    if (this.skillsCache !== null) {
-      return this.skillsCache;
-    }
-
     const skillsDir = getSkillsDir();
     const skills: SkillMetadata[] = [];
 
@@ -205,7 +198,6 @@ export class SkillDiscoveryService implements ISkillDiscoveryService {
     // Check if skills directory exists
     if (!existsSync(skillsDir)) {
       this.logger.debug(`Skills directory does not exist: ${skillsDir}`);
-      this.skillsCache = skills;
       return skills;
     }
 
@@ -216,12 +208,10 @@ export class SkillDiscoveryService implements ISkillDiscoveryService {
         this.logger.warn(
           `Skills path exists but is not a directory: ${skillsDir}`,
         );
-        this.skillsCache = skills;
         return skills;
       }
     } catch {
       this.logger.warn(`Failed to stat skills directory: ${skillsDir}`);
-      this.skillsCache = skills;
       return skills;
     }
 
@@ -231,7 +221,6 @@ export class SkillDiscoveryService implements ISkillDiscoveryService {
       entries = readdirSync(skillsDir);
     } catch {
       this.logger.warn(`Failed to read skills directory: ${skillsDir}`);
-      this.skillsCache = skills;
       return skills;
     }
 
@@ -268,7 +257,6 @@ export class SkillDiscoveryService implements ISkillDiscoveryService {
       ? skills.length - 1
       : skills.length;
     this.logger.info(`Discovered ${diskSkillCount} skill(s) from disk`);
-    this.skillsCache = skills;
     return skills;
   }
 
@@ -345,11 +333,6 @@ export class SkillDiscoveryService implements ISkillDiscoveryService {
       );
       return null;
     }
-  }
-
-  clearCache(): void {
-    this.skillsCache = null;
-    this.logger.debug("Skills cache cleared");
   }
 
   ensureSkillsDirectory(): void {

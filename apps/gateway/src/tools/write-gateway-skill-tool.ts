@@ -185,9 +185,6 @@ export class WriteGatewaySkillTool implements ITool {
         }
       }
 
-      // Clear the skills cache so fresh discovery happens on next access
-      this.skillService.clearCache();
-
       // Build the response with skill metadata (excluding internal path)
       const metadata = await this.getSkillMetadata(
         skillName,

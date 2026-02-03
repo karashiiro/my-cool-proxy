@@ -328,46 +328,6 @@ Content`,
         expect.stringContaining("has no description"),
       );
     });
-
-    it("should cache results and not re-scan on subsequent calls", async () => {
-      const skillDir = resolve(skillsDir, "cached-skill");
-      mkdirSync(skillDir);
-      writeFileSync(
-        resolve(skillDir, "SKILL.md"),
-        `---
-name: Cached Skill
-description: Will be cached
----
-Content`,
-      );
-
-      // First call
-      const skills1 = await service.discoverSkills();
-      expect(skills1).toHaveLength(1);
-
-      // Clear the mock to verify no new reads happen
-      vi.mocked(mockLogger.info).mockClear();
-
-      // Add another skill (should not be picked up due to caching)
-      const skillDir2 = resolve(skillsDir, "new-skill");
-      mkdirSync(skillDir2);
-      writeFileSync(
-        resolve(skillDir2, "SKILL.md"),
-        `---
-name: New Skill
-description: Added after cache
----
-Content`,
-      );
-
-      // Second call should return cached results
-      const skills2 = await service.discoverSkills();
-      expect(skills2).toHaveLength(1);
-      expect(skills2[0]!.name).toBe("Cached Skill");
-
-      // Should not log discovery again (cached)
-      expect(mockLogger.info).not.toHaveBeenCalled();
-    });
   });
 
   describe("getSkillContent", () => {
@@ -402,7 +362,7 @@ This is the full content of the skill.
       expect(content).toBeNull();
     });
 
-    it("should discover skills first if not already cached", async () => {
+    it("should discover skills when getting skill content", async () => {
       const skillDir = resolve(skillsDir, "lazy-skill");
       mkdirSync(skillDir);
       writeFileSync(
@@ -424,31 +384,29 @@ description: Discovered on demand
 Content here`);
     });
 
-    it("should handle read errors gracefully", async () => {
+    it("should return null when skill file is deleted before reading", async () => {
       const skillDir = resolve(skillsDir, "error-skill");
       mkdirSync(skillDir);
       writeFileSync(
         resolve(skillDir, "SKILL.md"),
         `---
 name: Error Skill
-description: Will cause read error
+description: Will be deleted
 ---
 Content`,
       );
 
-      // Discover skills first
-      await service.discoverSkills();
+      // Verify skill exists initially
+      const skills = await service.discoverSkills();
+      expect(skills).toHaveLength(1);
 
-      // Delete the SKILL.md to cause a read error
+      // Delete the SKILL.md
       rmSync(resolve(skillDir, "SKILL.md"));
 
+      // Now getSkillContent will re-discover and not find the skill
       const content = await service.getSkillContent("Error Skill");
 
       expect(content).toBeNull();
-      expect(mockLogger.error).toHaveBeenCalledWith(
-        expect.stringContaining("Failed to read skill content"),
-        expect.any(Error),
-      );
     });
   });
 
