@@ -69,14 +69,20 @@ export class MCPClientSession {
     this.client.setNotificationHandler(
       ToolListChangedNotificationSchema,
       async () => {
-        this.logger.info(
-          `Server '${this.serverName}': Tool list changed, invalidating cache`,
-        );
-        this.clearToolCache();
+        try {
+          this.logger.info(
+            `Server '${this.serverName}': Tool list changed, invalidating cache`,
+          );
+          this.clearToolCache();
 
-        // Notify gateway server if callback is provided
-        if (this.onToolListChanged) {
-          this.onToolListChanged(this.serverName);
+          // Notify gateway server if callback is provided
+          if (this.onToolListChanged) {
+            this.onToolListChanged(this.serverName);
+          }
+        } catch (error) {
+          this.logger.error(
+            `Server '${this.serverName}': Error handling tool list change notification: ${error instanceof Error ? error.message : String(error)}`,
+          );
         }
       },
     );
@@ -85,14 +91,20 @@ export class MCPClientSession {
     this.client.setNotificationHandler(
       ResourceListChangedNotificationSchema,
       async () => {
-        this.logger.info(
-          `Server '${this.serverName}': Resource list changed, invalidating cache`,
-        );
-        this.clearResourceCache();
+        try {
+          this.logger.info(
+            `Server '${this.serverName}': Resource list changed, invalidating cache`,
+          );
+          this.clearResourceCache();
 
-        // Notify gateway server if callback is provided
-        if (this.onResourceListChanged) {
-          this.onResourceListChanged(this.serverName);
+          // Notify gateway server if callback is provided
+          if (this.onResourceListChanged) {
+            this.onResourceListChanged(this.serverName);
+          }
+        } catch (error) {
+          this.logger.error(
+            `Server '${this.serverName}': Error handling resource list change notification: ${error instanceof Error ? error.message : String(error)}`,
+          );
         }
       },
     );
@@ -101,14 +113,20 @@ export class MCPClientSession {
     this.client.setNotificationHandler(
       PromptListChangedNotificationSchema,
       async () => {
-        this.logger.info(
-          `Server '${this.serverName}': Prompt list changed, invalidating cache`,
-        );
-        this.clearPromptCache();
+        try {
+          this.logger.info(
+            `Server '${this.serverName}': Prompt list changed, invalidating cache`,
+          );
+          this.clearPromptCache();
 
-        // Notify gateway server if callback is provided
-        if (this.onPromptListChanged) {
-          this.onPromptListChanged(this.serverName);
+          // Notify gateway server if callback is provided
+          if (this.onPromptListChanged) {
+            this.onPromptListChanged(this.serverName);
+          }
+        } catch (error) {
+          this.logger.error(
+            `Server '${this.serverName}': Error handling prompt list change notification: ${error instanceof Error ? error.message : String(error)}`,
+          );
         }
       },
     );
@@ -166,7 +184,7 @@ export class MCPClientSession {
       const actualToolNames = new Set(tools.map((t) => t.name));
       for (const allowedTool of this.allowedTools) {
         if (!actualToolNames.has(allowedTool)) {
-          this.logger.error(
+          this.logger.warn(
             `Server '${this.serverName}': Tool '${allowedTool}' in allowedTools not found. Available: ${Array.from(actualToolNames).join(", ")}`,
           );
         }

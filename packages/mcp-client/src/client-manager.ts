@@ -251,22 +251,24 @@ export class MCPClientManager implements IMCPClientManager {
   }
 
   getClientsBySession(sessionId: string): Map<string, MCPClientSession> {
+    const sessionSuffix = `-${sessionId}`;
     return new Map(
       Array.from(this.clients.entries())
-        .filter(([key]) => key.endsWith(`-${sessionId}`))
+        .filter(([key]) => key.endsWith(sessionSuffix))
         .map(([key, client]) => {
-          const name = key.split(`-${sessionId}`)[0];
+          const name = key.slice(0, -sessionSuffix.length);
           return [name, client] as [string, MCPClientSession];
         }),
     );
   }
 
   getFailedServers(sessionId: string): Map<string, string> {
+    const sessionSuffix = `-${sessionId}`;
     return new Map(
       Array.from(this.failedServers.entries())
-        .filter(([key]) => key.endsWith(`-${sessionId}`))
+        .filter(([key]) => key.endsWith(sessionSuffix))
         .map(([key, error]) => {
-          const name = key.split(`-${sessionId}`)[0];
+          const name = key.slice(0, -sessionSuffix.length);
           return [name, error] as [string, string];
         }),
     );
