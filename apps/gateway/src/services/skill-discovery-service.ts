@@ -17,7 +17,7 @@ const FRONTMATTER_REGEX = /^---\s*\n([\s\S]*?)\n---/;
 /**
  * Built-in skill name for the skill creation guide.
  */
-const BUILTIN_CREATING_SKILLS_NAME = "creating-skills";
+const BUILTIN_CREATING_SKILLS_NAME = "writing-gateway-skills";
 
 /**
  * Built-in skill metadata for the skill creation guide.
@@ -35,47 +35,37 @@ const BUILTIN_CREATING_SKILLS_METADATA: SkillMetadata = {
  * This is returned dynamically when skills.mutable is true.
  */
 const BUILTIN_CREATING_SKILLS_CONTENT = `---
-name: creating-skills
+name: ${BUILTIN_CREATING_SKILLS_NAME}
 description: Use when asked to create, write, or save a gateway skill. Covers structure, patterns, and best practices.
 ---
 
+# Writing Gateway Skills
+
+## Overview
+
+Use the \`write-gateway-skill\` tool to create skills. Skills extend agent capabilities with specialized knowledge, workflows, and tools.
+
 NOTE: This skill is built into the MCP gateway. Do not attempt to modify it with \`write-gateway-skill\`.
-
-# Creating Gateway Skills
-
-Use \`write-gateway-skill\` to create skills. Skills extend agent capabilities with specialized knowledge, workflows, and tools.
-
-## When to Create a Skill
-
-**Create when:**
-- Technique wasn't intuitively obvious
-- Pattern applies across multiple projects
-- Others would benefit from this knowledge
-
-**Don't create for:**
-- One-off solutions
-- Standard practices documented elsewhere
-- Project-specific conventions
 
 ## Core Principles
 
-### Concise is Key
+- **The context window is a public good.** Skills share it with the system prompt, conversation history, other skills' metadata, and the actual request.
+- **The agent is already smart.** Only add context it doesn't already have. Challenge each piece: "Does this paragraph justify its token cost?" Prefer concise examples over verbose explanations.
+- **Match specificity to task fragility.** Highly sensitive operations need exact instructions. Flexible tasks allow broader guidance. Think of it as a path: narrow bridge with cliffs needs guardrails (low freedom), open field allows many routes (high freedom).
 
-The context window is a public good. Skills share it with the system prompt, conversation history, other skills' metadata, and the actual request.
+## When to Create a Skill
 
-**Default assumption: the agent is already smart.** Only add context it doesn't already have. Challenge each piece: "Does this paragraph justify its token cost?" Prefer concise examples over verbose explanations.
+Create a skill when:
 
-### Degrees of Freedom
+- The task required techniques that are non-obvious or specialized.
+- Repeatedly performing similar tasks that benefit from shared knowledge.
+- Teammates will likely want to reuse the same methods or references.
 
-Match specificity to task fragility:
+Don't create a skill when:
 
-| Freedom | When to use | Format |
-|---------|-------------|--------|
-| **High** | Multiple approaches valid, context-dependent | Text instructions, heuristics |
-| **Medium** | Preferred pattern exists, some variation OK | Pseudocode, parameterized scripts |
-| **Low** | Operations are fragile, consistency critical | Specific scripts, few parameters |
-
-Think of it as a path: narrow bridge with cliffs needs guardrails (low freedom), open field allows many routes (high freedom).
+- The technique is unlikely to be needed again.
+- The required knowledge is trivial or well-documented elsewhere in the project.
+- The context window cost outweighs the benefit.
 
 ### Skill Types
 
@@ -85,7 +75,14 @@ Think of it as a path: narrow bridge with cliffs needs guardrails (low freedom),
 | **Pattern** | Mental model for problems | Progressive disclosure, error handling |
 | **Reference** | API docs, syntax, specifications | MCP protocol, database schemas |
 
-## Skill Structure
+## Creation Process
+
+1. **Gather examples**: Understand concrete use cases. Ask: "What would trigger this skill?"
+2. **Plan resources**: For each example, identify reusable scripts/references/assets
+3. **Write content**: Start with resources, then write SKILL.md referencing them in a scannable table
+4. **Test**: Verify scripts work, examples are accurate
+
+### Skill Structure
 
 \`\`\`
 skill-name/
@@ -100,10 +97,25 @@ skill-name/
 \`\`\`yaml
 ---
 name: my-skill-name
-description: What this does and WHEN to use it. Include trigger keywords.
+description: Use when [triggers/symptoms] - [what it does, third person]
 ---
 
-# Instructions here
+# Skill Name
+
+## Overview
+Core principle in 1-2 sentences.
+
+## When to Use
+Symptoms and use cases. When NOT to use.
+
+## Core Pattern
+Before/after comparison or key technique.
+
+## Quick Reference
+Table or bullets for scanning.
+
+## Common Mistakes
+What goes wrong + fixes.
 \`\`\`
 
 **Frontmatter fields:**
@@ -127,48 +139,9 @@ Keep SKILL.md under 500 lines. Use imperative form ("Run the script" not "You sh
 - Use when: templates, images, boilerplate to copy/modify
 - Examples: \`assets/logo.png\`, \`assets/template.html\`
 
-## Progressive Disclosure
+## Common Mistakes
 
-Skills load in three stages to manage context:
-
-1. **Metadata** (~100 tokens) - Always loaded: \`name\` + \`description\`
-2. **SKILL.md body** (<5k tokens) - When skill triggers
-3. **Resources** (unlimited) - Only when explicitly requested
-
-### Disclosure Patterns
-
-**Pattern 1: High-level with references**
-\`\`\`markdown
-## Quick start
-[Core example here]
-
-## Advanced
-- **Forms**: See references/FORMS.md
-- **API reference**: See references/API.md
-\`\`\`
-
-**Pattern 2: Domain organization**
-\`\`\`
-analytics-skill/
-├── SKILL.md (overview + navigation)
-└── references/
-    ├── finance.md
-    ├── sales.md
-    └── product.md
-\`\`\`
-Agent only loads the relevant domain file.
-
-**Pattern 3: Framework variants**
-\`\`\`
-deploy-skill/
-├── SKILL.md (workflow + selection guide)
-└── references/
-    ├── aws.md
-    ├── gcp.md
-    └── azure.md
-\`\`\`
-
-## What NOT to Include
+### What NOT to Include
 
 Do NOT create extraneous files:
 - README.md, INSTALLATION_GUIDE.md, CHANGELOG.md, etc.
@@ -177,7 +150,7 @@ Do NOT create extraneous files:
 
 Skills are for agents, not humans. Include only what helps an agent do the job.
 
-## Anti-Patterns
+### Anti-Patterns
 
 | Pattern | Problem | Fix |
 |---------|---------|-----|
@@ -188,46 +161,11 @@ Skills are for agents, not humans. Include only what helps an agent do the job.
 
 ## Testing Your Skill
 
-Before deploying, verify the skill works:
+Before deploying, verify the skill works in a subagent or test session:
 
 1. **Baseline**: Try the task WITHOUT the skill - identify gaps
 2. **With skill**: Load it and retry - verify it helps
 3. **Edge cases**: Test uncommon scenarios
-
-For discipline skills with compliance requirements, consider pressure testing with subagents.
-
-## Creation Process
-
-1. **Gather examples**: Understand concrete use cases. Ask: "What would trigger this skill?"
-2. **Plan resources**: For each example, identify reusable scripts/references/assets
-3. **Write content**: Start with resources, then write SKILL.md referencing them
-4. **Test**: Verify scripts work, examples are accurate
-
-## Example
-
-\`\`\`yaml
----
-name: code-review
-description: Review code for bugs, security, and style. Use when asked to review, audit, or check code quality.
----
-
-# Code Review
-
-1. Identify files to review
-2. Check: security vulnerabilities, error handling, edge cases, style
-3. Provide actionable feedback with line references
-
-For detailed checklist: See references/CHECKLIST.md
-\`\`\`
-
-## Creation Checklist
-
-- [ ] Name is lowercase + hyphens only
-- [ ] Description starts with "Use when..." and includes trigger keywords
-- [ ] SKILL.md under 500 lines
-- [ ] Tested without skill (baseline) and with skill (improved)
-- [ ] No extraneous files (README.md, CHANGELOG.md, etc.)
-- [ ] Scripts tested and working (if any)
 `;
 
 /**
@@ -256,10 +194,12 @@ export class SkillDiscoveryService implements ISkillDiscoveryService {
     const skillsDir = getSkillsDir();
     const skills: SkillMetadata[] = [];
 
-    // Include built-in creating-skills guide when skills are mutable
+    // Include built-in writing-gateway-skills guide when skills are mutable
     if (this.config.skills?.mutable === true) {
       skills.push(BUILTIN_CREATING_SKILLS_METADATA);
-      this.logger.debug("Added built-in 'creating-skills' skill");
+      this.logger.debug(
+        `Added built-in '${BUILTIN_CREATING_SKILLS_NAME}' skill`,
+      );
     }
 
     // Check if skills directory exists
@@ -333,7 +273,7 @@ export class SkillDiscoveryService implements ISkillDiscoveryService {
   }
 
   async getSkillContent(skillName: string): Promise<string | null> {
-    // Check for built-in creating-skills skill
+    // Check for built-in writing-gateway-skills skill
     if (
       skillName === BUILTIN_CREATING_SKILLS_NAME &&
       this.config.skills?.mutable === true

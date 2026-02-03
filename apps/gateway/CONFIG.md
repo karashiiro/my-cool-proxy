@@ -495,7 +495,7 @@ Skills are reusable instruction sets that extend the gateway's capabilities. The
 
 - **enabled** (boolean, optional): Enable skill discovery and skill-related tools. Default: `false`
   - When `true`, exposes `load-gateway-skill` and `invoke-gateway-skill-script` tools
-  - Creates a default "creating-skills" skill on first startup that explains how to use the skill system
+  - Creates a default "writing-gateway-skills" skill on first startup that explains how to use the skill system
 
 - **mutable** (boolean, optional): Allow creating and modifying skills. Default: `false`
   - Only takes effect if `enabled` is `true`
