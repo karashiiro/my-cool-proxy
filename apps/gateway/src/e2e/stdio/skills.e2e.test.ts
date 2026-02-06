@@ -102,17 +102,17 @@ A second test skill.
 
       // Should have skill resources
       const skillResources = resources.resources.filter((r) =>
-        r.uri.startsWith("skill://"),
+        r.uri.startsWith("gw-skill://"),
       );
 
       expect(skillResources.length).toBe(2);
 
       // Find specific skills
       const testSkill = skillResources.find(
-        (r) => r.uri === "skill://test-skill",
+        (r) => r.uri === "gw-skill://test-skill",
       );
       const anotherSkill = skillResources.find(
-        (r) => r.uri === "skill://another-skill",
+        (r) => r.uri === "gw-skill://another-skill",
       );
 
       expect(testSkill).toBeDefined();
@@ -136,13 +136,13 @@ A second test skill.
   describe("Resource Reading", () => {
     it("should read main SKILL.md content", async () => {
       const result = await gatewayClient.readResource({
-        uri: "skill://test-skill",
+        uri: "gw-skill://test-skill",
       });
 
       expect(result.contents).toHaveLength(1);
       const content = result.contents[0];
 
-      expect(content?.uri).toBe("skill://test-skill");
+      expect(content?.uri).toBe("gw-skill://test-skill");
       expect(content?.mimeType).toBe("text/markdown");
 
       if ("text" in content!) {
@@ -153,13 +153,13 @@ A second test skill.
 
     it("should read nested resource files", async () => {
       const result = await gatewayClient.readResource({
-        uri: "skill://test-skill/scripts/example.py",
+        uri: "gw-skill://test-skill/scripts/example.py",
       });
 
       expect(result.contents).toHaveLength(1);
       const content = result.contents[0];
 
-      expect(content?.uri).toBe("skill://test-skill/scripts/example.py");
+      expect(content?.uri).toBe("gw-skill://test-skill/scripts/example.py");
       expect(content?.mimeType).toBe("text/x-python");
 
       if ("text" in content!) {
@@ -169,13 +169,13 @@ A second test skill.
 
     it("should read reference files", async () => {
       const result = await gatewayClient.readResource({
-        uri: "skill://test-skill/references/API.md",
+        uri: "gw-skill://test-skill/references/API.md",
       });
 
       expect(result.contents).toHaveLength(1);
       const content = result.contents[0];
 
-      expect(content?.uri).toBe("skill://test-skill/references/API.md");
+      expect(content?.uri).toBe("gw-skill://test-skill/references/API.md");
       expect(content?.mimeType).toBe("text/markdown");
 
       if ("text" in content!) {
@@ -186,7 +186,7 @@ A second test skill.
     it("should throw error for non-existent skill", async () => {
       await expect(
         gatewayClient.readResource({
-          uri: "skill://nonexistent-skill",
+          uri: "gw-skill://nonexistent-skill",
         }),
       ).rejects.toThrow();
     });
@@ -194,7 +194,7 @@ A second test skill.
     it("should throw error for non-existent nested resource", async () => {
       await expect(
         gatewayClient.readResource({
-          uri: "skill://test-skill/scripts/missing.py",
+          uri: "gw-skill://test-skill/scripts/missing.py",
         }),
       ).rejects.toThrow();
     });
@@ -217,7 +217,7 @@ A second test skill.
       expect(instructions).toBeDefined();
       expect(instructions).not.toBe("");
       expect(instructions).toContain("MCP gateway");
-      expect(instructions).toContain("skill://");
+      expect(instructions).toContain("gw-skill://");
     });
   });
 
@@ -225,7 +225,7 @@ A second test skill.
     it("should read skill via read-resource tool", async () => {
       const result = await gatewayClient.callTool({
         name: "read-resource",
-        arguments: { uri: "skill://test-skill" },
+        arguments: { uri: "gw-skill://test-skill" },
       });
 
       const content = result.content as TextContent[];
@@ -237,7 +237,7 @@ A second test skill.
     it("should read nested skill resource via read-resource tool", async () => {
       const result = await gatewayClient.callTool({
         name: "read-resource",
-        arguments: { uri: "skill://test-skill/scripts/example.py" },
+        arguments: { uri: "gw-skill://test-skill/scripts/example.py" },
       });
 
       const content = result.content as TextContent[];

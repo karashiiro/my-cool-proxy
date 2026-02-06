@@ -38,18 +38,18 @@ describe("ListResourcesTool", () => {
         resources: [
           {
             name: "README",
-            uri: "mcp://docs-server/file:///README.md",
+            uri: "gw://docs-server/file:///README.md",
             description: "Project readme",
             mimeType: "text/markdown",
           },
           {
             name: "Config",
-            uri: "mcp://docs-server/file:///config.json",
+            uri: "gw://docs-server/file:///config.json",
             mimeType: "application/json",
           },
           {
             name: "User Guide",
-            uri: "mcp://wiki/page://getting-started",
+            uri: "gw://wiki/page://getting-started",
             description: "Getting started guide",
           },
         ],
@@ -66,7 +66,7 @@ describe("ListResourcesTool", () => {
       // docs-server group
       expect(text).toContain("## docs-server (2 resources)");
       expect(text).toContain("**README**");
-      expect(text).toContain("URI: mcp://docs-server/file:///README.md");
+      expect(text).toContain("URI: gw://docs-server/file:///README.md");
       expect(text).toContain("Description: Project readme");
       expect(text).toContain("MIME type: text/markdown");
       expect(text).toContain("**Config**");
@@ -105,7 +105,7 @@ describe("ListResourcesTool", () => {
         resources: [
           {
             name: "Data",
-            uri: "mcp://api/data://users",
+            uri: "gw://api/data://users",
           },
         ],
       });
@@ -114,7 +114,7 @@ describe("ListResourcesTool", () => {
 
       const text = (result.content[0] as { type: "text"; text: string }).text;
       expect(text).toContain("**Data**");
-      expect(text).toContain("URI: mcp://api/data://users");
+      expect(text).toContain("URI: gw://api/data://users");
       expect(text).not.toContain("Description:");
     });
 
@@ -123,7 +123,7 @@ describe("ListResourcesTool", () => {
         resources: [
           {
             name: "Data",
-            uri: "mcp://api/data://users",
+            uri: "gw://api/data://users",
           },
         ],
       });
@@ -139,7 +139,7 @@ describe("ListResourcesTool", () => {
         resources: [
           {
             name: "Solo",
-            uri: "mcp://only-server/res://1",
+            uri: "gw://only-server/res://1",
           },
         ],
       });

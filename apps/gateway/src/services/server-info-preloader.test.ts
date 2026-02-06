@@ -44,7 +44,7 @@ describe("ServerInfoPreloader", () => {
         "<description>A test skill for testing</description>",
       );
       expect(result).toContain("</skill>");
-      expect(result).toContain("skill://");
+      expect(result).toContain("gw-skill://");
       expect(result).toContain("read-resource");
     });
 
@@ -137,7 +137,7 @@ describe("ServerInfoPreloader", () => {
       const result = preloader.buildSkillInstructions(skills);
 
       expect(result).toContain("`read-resource`");
-      expect(result).toContain("`skill://{skill-name}`");
+      expect(result).toContain("`gw-skill://{skill-name}`");
       expect(result).toContain("skill instructions");
     });
   });

@@ -105,7 +105,7 @@ export class ResourceAggregationService {
   ): Promise<ReadResourceResult> {
     const session = sessionId || "default";
 
-    // Check additional providers first (e.g., skill:// URIs)
+    // Check additional providers first (e.g., gw-skill:// URIs)
     for (const provider of this.additionalProviders) {
       if (provider.handlesUri(uri)) {
         const result = await provider.readResource(uri);
@@ -116,11 +116,11 @@ export class ResourceAggregationService {
       }
     }
 
-    // Fall back to MCP server routing for mcp:// URIs
+    // Fall back to MCP server routing for gw:// URIs
     const parsed = parseResourceUri(uri);
     if (!parsed) {
       throw new Error(
-        `Invalid resource URI format: '${uri}'. Expected format: mcp://{server-name}/{uri}`,
+        `Invalid resource URI format: '${uri}'. Expected format: gw://{server-name}/{uri}`,
       );
     }
 

@@ -494,7 +494,7 @@ Skills are reusable instruction sets that extend the gateway's capabilities. The
 #### Fields
 
 - **enabled** (boolean, optional): Enable skill discovery and skill-related features. Default: `false`
-  - When `true`, skills are exposed as MCP resources with the `skill://` URI scheme
+  - When `true`, skills are exposed as MCP resources with the `gw-skill://` URI scheme
   - Also exposes the `invoke-gateway-skill-script` tool for running skill scripts
   - Includes a built-in "writing-gateway-skills" skill that explains how to create skills
 
@@ -505,10 +505,10 @@ Skills are reusable instruction sets that extend the gateway's capabilities. The
 
 ### Accessing Skills
 
-Skills are exposed as MCP resources using the `skill://` URI scheme:
+Skills are exposed as MCP resources using the `gw-skill://` URI scheme:
 
-- **`skill://{skill-name}`** - Read the main SKILL.md content
-- **`skill://{skill-name}/{path}`** - Read nested resources (scripts/, references/, assets/)
+- **`gw-skill://{skill-name}`** - Read the main SKILL.md content
+- **`gw-skill://{skill-name}/{path}`** - Read nested resources (scripts/, references/, assets/)
 
 Use the standard `resources/list` and `resources/read` MCP operations to discover and access skills.
 

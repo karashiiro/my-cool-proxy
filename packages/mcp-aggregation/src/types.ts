@@ -113,7 +113,7 @@ export interface ToolInfo {
  * (like skills) without coupling the aggregation package to specific logic.
  *
  * Providers are checked in order when reading resources, allowing them to
- * handle their own URI schemes (e.g., skill:// for gateway skills).
+ * handle their own URI schemes (e.g., gw-skill:// for gateway skills).
  */
 export interface IResourceProvider {
   /**

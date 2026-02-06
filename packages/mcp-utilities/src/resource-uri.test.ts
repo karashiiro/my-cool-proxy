@@ -22,7 +22,7 @@ describe("resource-uri utils", () => {
     it("should namespace a resource URI with server name", () => {
       const result = namespaceResourceUri("context7", "file:///docs/README.md");
 
-      expect(result).toBe("mcp://context7/file:///docs/README.md");
+      expect(result).toBe("gw://context7/file:///docs/README.md");
     });
 
     it("should handle URIs with special characters", () => {
@@ -32,7 +32,7 @@ describe("resource-uri utils", () => {
       );
 
       expect(result).toBe(
-        "mcp://my-server/file:///path/to/file with spaces.txt",
+        "gw://my-server/file:///path/to/file with spaces.txt",
       );
     });
 
@@ -43,7 +43,7 @@ describe("resource-uri utils", () => {
       );
 
       expect(result).toBe(
-        "mcp://api-server/https://api.example.com/data?id=123&format=json",
+        "gw://api-server/https://api.example.com/data?id=123&format=json",
       );
     });
 
@@ -53,25 +53,25 @@ describe("resource-uri utils", () => {
         "file:///docs/index.html#section",
       );
 
-      expect(result).toBe("mcp://docs-server/file:///docs/index.html#section");
+      expect(result).toBe("gw://docs-server/file:///docs/index.html#section");
     });
 
     it("should handle empty URIs", () => {
       const result = namespaceResourceUri("test-server", "");
 
-      expect(result).toBe("mcp://test-server/");
+      expect(result).toBe("gw://test-server/");
     });
 
     it("should handle server names with special characters", () => {
       const result = namespaceResourceUri("my-cool-server", "file:///test.txt");
 
-      expect(result).toBe("mcp://my-cool-server/file:///test.txt");
+      expect(result).toBe("gw://my-cool-server/file:///test.txt");
     });
   });
 
   describe("parseResourceUri", () => {
     it("should parse a valid namespaced URI", () => {
-      const result = parseResourceUri("mcp://context7/file:///docs/README.md");
+      const result = parseResourceUri("gw://context7/file:///docs/README.md");
 
       expect(result).toEqual({
         serverName: "context7",
@@ -81,7 +81,7 @@ describe("resource-uri utils", () => {
 
     it("should parse URIs with complex paths", () => {
       const result = parseResourceUri(
-        "mcp://api-server/https://api.example.com/v1/data/items?id=123",
+        "gw://api-server/https://api.example.com/v1/data/items?id=123",
       );
 
       expect(result).toEqual({
@@ -91,7 +91,7 @@ describe("resource-uri utils", () => {
     });
 
     it("should handle server names with hyphens", () => {
-      const result = parseResourceUri("mcp://my-server/file:///test.txt");
+      const result = parseResourceUri("gw://my-server/file:///test.txt");
 
       expect(result).toEqual({
         serverName: "my-server",
@@ -100,7 +100,7 @@ describe("resource-uri utils", () => {
     });
 
     it("should handle server names with underscores", () => {
-      const result = parseResourceUri("mcp://my_server/file:///test.txt");
+      const result = parseResourceUri("gw://my_server/file:///test.txt");
 
       expect(result).toEqual({
         serverName: "my_server",
@@ -115,25 +115,25 @@ describe("resource-uri utils", () => {
     });
 
     it("should return null for URIs missing server name", () => {
-      const result = parseResourceUri("mcp:///file:///test.txt");
+      const result = parseResourceUri("gw:///file:///test.txt");
 
       expect(result).toBeNull();
     });
 
     it("should return null for URIs missing original URI", () => {
-      const result = parseResourceUri("mcp://server-name");
+      const result = parseResourceUri("gw://server-name");
 
       expect(result).toBeNull();
     });
 
     it("should return null for URIs with empty server name", () => {
-      const result = parseResourceUri("mcp:///original-uri");
+      const result = parseResourceUri("gw:///original-uri");
 
       expect(result).toBeNull();
     });
 
     it("should return null for URIs with empty original URI", () => {
-      const result = parseResourceUri("mcp://server-name/");
+      const result = parseResourceUri("gw://server-name/");
 
       expect(result).toBeNull();
     });
@@ -151,7 +151,7 @@ describe("resource-uri utils", () => {
     });
 
     it("should handle URIs with multiple slashes after server name", () => {
-      const result = parseResourceUri("mcp://server-name///file:///test.txt");
+      const result = parseResourceUri("gw://server-name///file:///test.txt");
 
       expect(result).toEqual({
         serverName: "server-name",
@@ -160,7 +160,7 @@ describe("resource-uri utils", () => {
     });
 
     it("should preserve URIs that start with a slash", () => {
-      const result = parseResourceUri("mcp://server-name//path/to/file.txt");
+      const result = parseResourceUri("gw://server-name//path/to/file.txt");
 
       expect(result).toEqual({
         serverName: "server-name",
@@ -181,7 +181,7 @@ describe("resource-uri utils", () => {
       const result = namespaceResource("docs-server", resource);
 
       expect(result).toEqual({
-        uri: "mcp://docs-server/file:///docs/README.md",
+        uri: "gw://docs-server/file:///docs/README.md",
         name: "README",
         description: "Main documentation file",
         mimeType: "text/markdown",
@@ -199,7 +199,7 @@ describe("resource-uri utils", () => {
 
       expect(result.name).toBe("Data");
       expect(result.mimeType).toBe("application/json");
-      expect(result.uri).toBe("mcp://api/file:///data.json");
+      expect(result.uri).toBe("gw://api/file:///data.json");
     });
 
     it("should not mutate the original resource object", () => {
@@ -237,7 +237,7 @@ describe("resource-uri utils", () => {
       expect(
         (namespaced.content[1] as { type: string; uri: string; name: string })
           .uri,
-      ).toBe("mcp://data-server/file:///data.json");
+      ).toBe("gw://data-server/file:///data.json");
     });
 
     it("should namespace embedded resource content blocks", () => {
@@ -258,7 +258,7 @@ describe("resource-uri utils", () => {
       expect(namespaced.content[0]).toEqual({
         type: "resource",
         resource: {
-          uri: "mcp://docs/file:///document.txt",
+          uri: "gw://docs/file:///document.txt",
           text: "Content here",
         },
       });
@@ -291,11 +291,11 @@ describe("resource-uri utils", () => {
         text: "Some text",
       });
       expect((namespaced.content[1] as { uri: string }).uri).toBe(
-        "mcp://server/file:///data.json",
+        "gw://server/file:///data.json",
       );
       expect(
         (namespaced.content[2] as { resource: { uri: string } }).resource.uri,
-      ).toBe("mcp://server/file:///doc.txt");
+      ).toBe("gw://server/file:///doc.txt");
       expect(namespaced.content[3]).toEqual({
         type: "text",
         text: "More text",
@@ -314,13 +314,13 @@ describe("resource-uri utils", () => {
       const namespaced = namespaceCallToolResultResources("files", result);
 
       expect((namespaced.content[0] as { uri: string }).uri).toBe(
-        "mcp://files/file:///file1.txt",
+        "gw://files/file:///file1.txt",
       );
       expect((namespaced.content[1] as { uri: string }).uri).toBe(
-        "mcp://files/file:///file2.txt",
+        "gw://files/file:///file2.txt",
       );
       expect((namespaced.content[2] as { uri: string }).uri).toBe(
-        "mcp://files/file:///file3.txt",
+        "gw://files/file:///file3.txt",
       );
     });
 
@@ -515,7 +515,7 @@ describe("resource-uri utils", () => {
             uri: string | undefined;
           }
         ).uri!,
-      ).toBe("mcp://docs/file:///doc.txt");
+      ).toBe("gw://docs/file:///doc.txt");
     });
 
     it("should namespace embedded resource in message content", () => {
@@ -541,7 +541,7 @@ describe("resource-uri utils", () => {
         type: string;
         resource?: { uri: string; text: string };
       };
-      expect(content.resource?.uri).toBe("mcp://api/file:///data.json");
+      expect(content.resource?.uri).toBe("gw://api/file:///data.json");
     });
 
     it("should handle multiple messages", () => {
@@ -577,14 +577,14 @@ describe("resource-uri utils", () => {
 
       expect(
         (namespaced.messages[0]!.content as { uri: string | undefined }).uri!,
-      ).toBe("mcp://files/file:///file1.txt");
+      ).toBe("gw://files/file:///file1.txt");
       expect(namespaced.messages[1]!.content).toEqual({
         type: "text",
         text: "Here's the file",
       });
       expect(
         (namespaced.messages[2]!.content as { uri: string | undefined }).uri!,
-      ).toBe("mcp://files/file:///file2.txt");
+      ).toBe("gw://files/file:///file2.txt");
     });
 
     it("should handle messages with text content (no resources)", () => {
@@ -846,11 +846,11 @@ describe("resource-uri utils", () => {
         text: "Processing resources...",
       });
       expect((namespaced.content[1] as { uri: string }).uri).toBe(
-        "mcp://api/file:///data1.json",
+        "gw://api/file:///data1.json",
       );
       expect(
         (namespaced.content[2] as { resource: { uri: string } }).resource.uri,
-      ).toBe("mcp://api/file:///data2.json");
+      ).toBe("gw://api/file:///data2.json");
       expect(namespaced.content[3]).toEqual({ type: "text", text: "Done!" });
       expect(namespaced.isError).toBe(false);
     });
@@ -894,13 +894,13 @@ describe("resource-uri utils", () => {
       const content1 = namespaced.messages[1].content as {
         uri: string | undefined;
       };
-      expect(content1.uri!).toBe("mcp://files/file:///document.txt");
+      expect(content1.uri!).toBe("gw://files/file:///document.txt");
 
       // @ts-expect-error Content type assertion for defensive test
       const content2 = namespaced.messages[2].content as {
         resource: { uri: string } | undefined;
       };
-      expect(content2.resource?.uri).toBe("mcp://files/file:///data.json");
+      expect(content2.resource?.uri).toBe("gw://files/file:///data.json");
     });
 
     it("should round-trip: namespace then parse", () => {
@@ -922,8 +922,8 @@ describe("resource-uri utils", () => {
   // ===========================================================================
 
   describe("SKILL_URI_SCHEME", () => {
-    it("should be skill://", () => {
-      expect(SKILL_URI_SCHEME).toBe("skill://");
+    it("should be gw-skill://", () => {
+      expect(SKILL_URI_SCHEME).toBe("gw-skill://");
     });
   });
 
@@ -931,7 +931,7 @@ describe("resource-uri utils", () => {
     it("should create a skill URI without path", () => {
       const result = createSkillResourceUri("pdf-rotation");
 
-      expect(result).toBe("skill://pdf-rotation");
+      expect(result).toBe("gw-skill://pdf-rotation");
     });
 
     it("should create a skill URI with path", () => {
@@ -940,7 +940,7 @@ describe("resource-uri utils", () => {
         "scripts/rotate.py",
       );
 
-      expect(result).toBe("skill://pdf-rotation/scripts/rotate.py");
+      expect(result).toBe("gw-skill://pdf-rotation/scripts/rotate.py");
     });
 
     it("should handle nested paths", () => {
@@ -949,19 +949,19 @@ describe("resource-uri utils", () => {
         "references/api/endpoints.md",
       );
 
-      expect(result).toBe("skill://my-skill/references/api/endpoints.md");
+      expect(result).toBe("gw-skill://my-skill/references/api/endpoints.md");
     });
 
     it("should handle empty path as no path", () => {
       const result = createSkillResourceUri("test-skill", "");
 
-      expect(result).toBe("skill://test-skill");
+      expect(result).toBe("gw-skill://test-skill");
     });
 
     it("should handle skill names with hyphens", () => {
       const result = createSkillResourceUri("my-cool-skill");
 
-      expect(result).toBe("skill://my-cool-skill");
+      expect(result).toBe("gw-skill://my-cool-skill");
     });
 
     it("should handle paths with special characters", () => {
@@ -970,20 +970,20 @@ describe("resource-uri utils", () => {
         "assets/file with spaces.txt",
       );
 
-      expect(result).toBe("skill://skill/assets/file with spaces.txt");
+      expect(result).toBe("gw-skill://skill/assets/file with spaces.txt");
     });
   });
 
   describe("parseSkillResourceUri", () => {
     it("should parse a skill URI without path", () => {
-      const result = parseSkillResourceUri("skill://pdf-rotation");
+      const result = parseSkillResourceUri("gw-skill://pdf-rotation");
 
       expect(result).toEqual({ skillName: "pdf-rotation" });
     });
 
     it("should parse a skill URI with path", () => {
       const result = parseSkillResourceUri(
-        "skill://pdf-rotation/scripts/rotate.py",
+        "gw-skill://pdf-rotation/scripts/rotate.py",
       );
 
       expect(result).toEqual({
@@ -994,7 +994,7 @@ describe("resource-uri utils", () => {
 
     it("should parse nested paths correctly", () => {
       const result = parseSkillResourceUri(
-        "skill://my-skill/references/api/endpoints.md",
+        "gw-skill://my-skill/references/api/endpoints.md",
       );
 
       expect(result).toEqual({
@@ -1004,7 +1004,7 @@ describe("resource-uri utils", () => {
     });
 
     it("should return null for non-skill URIs", () => {
-      expect(parseSkillResourceUri("mcp://server/resource")).toBeNull();
+      expect(parseSkillResourceUri("gw://server/resource")).toBeNull();
       expect(parseSkillResourceUri("file:///path/to/file")).toBeNull();
       expect(parseSkillResourceUri("https://example.com")).toBeNull();
     });
@@ -1014,7 +1014,7 @@ describe("resource-uri utils", () => {
     });
 
     it("should return null for just the scheme", () => {
-      expect(parseSkillResourceUri("skill://")).toBeNull();
+      expect(parseSkillResourceUri("gw-skill://")).toBeNull();
     });
 
     it("should return null for malformed URIs", () => {
@@ -1024,13 +1024,13 @@ describe("resource-uri utils", () => {
     });
 
     it("should handle trailing slash as empty path (returns just skillName)", () => {
-      const result = parseSkillResourceUri("skill://my-skill/");
+      const result = parseSkillResourceUri("gw-skill://my-skill/");
 
       expect(result).toEqual({ skillName: "my-skill" });
     });
 
     it("should handle skill names with hyphens and underscores", () => {
-      expect(parseSkillResourceUri("skill://my-cool_skill")).toEqual({
+      expect(parseSkillResourceUri("gw-skill://my-cool_skill")).toEqual({
         skillName: "my-cool_skill",
       });
     });
@@ -1038,12 +1038,14 @@ describe("resource-uri utils", () => {
 
   describe("isSkillResourceUri", () => {
     it("should return true for skill URIs", () => {
-      expect(isSkillResourceUri("skill://pdf-rotation")).toBe(true);
-      expect(isSkillResourceUri("skill://my-skill/scripts/run.py")).toBe(true);
+      expect(isSkillResourceUri("gw-skill://pdf-rotation")).toBe(true);
+      expect(isSkillResourceUri("gw-skill://my-skill/scripts/run.py")).toBe(
+        true,
+      );
     });
 
     it("should return false for MCP server URIs", () => {
-      expect(isSkillResourceUri("mcp://server/resource")).toBe(false);
+      expect(isSkillResourceUri("gw://server/resource")).toBe(false);
     });
 
     it("should return false for file URIs", () => {

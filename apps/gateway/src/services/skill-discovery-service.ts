@@ -130,7 +130,7 @@ Keep SKILL.md under 500 lines. Use imperative form ("Run the script" not "You sh
 - Use when: same code is repeatedly rewritten, deterministic reliability needed
 - Example: \`scripts/rotate_pdf.py\` for PDF tasks
 
-**references/** - Documentation loaded on-demand via \`read-resource\` with \`skill://{name}/{path}\`
+**references/** - Documentation loaded on-demand via \`read-resource\` with \`gw-skill://{name}/{path}\`
 - Use when: detailed docs the agent should reference while working
 - Examples: API specs, database schemas, domain knowledge
 - For large files (>10k words): include grep patterns in SKILL.md

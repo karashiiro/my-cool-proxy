@@ -165,14 +165,14 @@ export class ServerInfoPreloader implements IServerInfoPreloader {
     return `
 # Available Gateway Skills
 
-The following skills are available as MCP resources with the \`skill://\` URI scheme:
+The following skills are available as MCP resources with the \`gw-skill://\` URI scheme:
 
 <available_skills>
 ${skillsXml}
 </available_skills>
 
-Use \`read-resource\` with \`skill://{skill-name}\` to load skill instructions.
-Use \`skill://{skill-name}/{path}\` to load nested resources (scripts/, references/, assets/).
+Use \`read-resource\` with \`gw-skill://{skill-name}\` to load skill instructions.
+Use \`gw-skill://{skill-name}/{path}\` to load nested resources (scripts/, references/, assets/).
 
 <CRITICAL>
 STRONGLY consider if there are relevant skills that may assist you in the current task.

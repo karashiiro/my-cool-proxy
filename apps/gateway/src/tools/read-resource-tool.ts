@@ -10,7 +10,7 @@ import { ResourceAggregationService } from "@my-cool-proxy/mcp-aggregation";
 /**
  * Tool that reads the contents of a specific MCP resource by its namespaced URI.
  *
- * Accepts URIs in the format returned by list-resources (mcp://{server}/{originalUri}),
+ * Accepts URIs in the format returned by list-resources (gw://{server}/{originalUri}),
  * routes the request to the appropriate upstream server, and returns the content.
  */
 @injectable()
@@ -45,7 +45,7 @@ export class ReadResourceTool implements ITool {
         content: [
           {
             type: "text",
-            text: "Missing required parameter: uri. Provide a namespaced resource URI (e.g., mcp://server-name/original-uri).",
+            text: "Missing required parameter: uri. Provide a namespaced resource URI (e.g., gw://server-name/original-uri).",
           },
         ],
         isError: true,

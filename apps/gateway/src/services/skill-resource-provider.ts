@@ -15,9 +15,9 @@ import { TYPES } from "../types/index.js";
 
 /**
  * Resource provider that exposes gateway skills as MCP resources.
- * Skills are accessible via the skill:// URI scheme:
- * - skill://{skill-name} - Main SKILL.md content
- * - skill://{skill-name}/{path} - Nested resources (scripts/, references/, assets/)
+ * Skills are accessible via the gw-skill:// URI scheme:
+ * - gw-skill://{skill-name} - Main SKILL.md content
+ * - gw-skill://{skill-name}/{path} - Nested resources (scripts/, references/, assets/)
  */
 @injectable()
 export class SkillResourceProvider implements IResourceProvider {
@@ -44,7 +44,7 @@ export class SkillResourceProvider implements IResourceProvider {
 
   /**
    * Check if this provider handles the given URI.
-   * Returns true for any skill:// URI.
+   * Returns true for any gw-skill:// URI.
    */
   handlesUri(uri: string): boolean {
     return isSkillResourceUri(uri);

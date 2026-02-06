@@ -44,7 +44,7 @@ describe("SkillResourceProvider", () => {
   });
 
   describe("listResources", () => {
-    it("should return skills as resources with skill:// URIs", async () => {
+    it("should return skills as resources with gw-skill:// URIs", async () => {
       const skills: SkillMetadata[] = [
         {
           name: "pdf-rotation",
@@ -64,13 +64,13 @@ describe("SkillResourceProvider", () => {
 
       expect(result).toHaveLength(2);
       expect(result[0]).toEqual({
-        uri: "skill://pdf-rotation",
+        uri: "gw-skill://pdf-rotation",
         name: "pdf-rotation",
         description: "Rotate PDFs",
         mimeType: "text/markdown",
       });
       expect(result[1]).toEqual({
-        uri: "skill://code-review",
+        uri: "gw-skill://code-review",
         name: "code-review",
         description: "Review code",
         mimeType: "text/markdown",
@@ -85,13 +85,15 @@ describe("SkillResourceProvider", () => {
   });
 
   describe("handlesUri", () => {
-    it("should return true for skill:// URIs", () => {
-      expect(provider.handlesUri("skill://pdf-rotation")).toBe(true);
-      expect(provider.handlesUri("skill://my-skill/scripts/run.py")).toBe(true);
+    it("should return true for gw-skill:// URIs", () => {
+      expect(provider.handlesUri("gw-skill://pdf-rotation")).toBe(true);
+      expect(provider.handlesUri("gw-skill://my-skill/scripts/run.py")).toBe(
+        true,
+      );
     });
 
     it("should return false for non-skill URIs", () => {
-      expect(provider.handlesUri("mcp://server/resource")).toBe(false);
+      expect(provider.handlesUri("gw://server/resource")).toBe(false);
       expect(provider.handlesUri("file:///path/to/file")).toBe(false);
       expect(provider.handlesUri("https://example.com")).toBe(false);
     });
@@ -109,12 +111,12 @@ describe("SkillResourceProvider", () => {
       mockSkillService = createMockSkillService({ skillContent });
       provider = new SkillResourceProvider(mockSkillService, mockLogger);
 
-      const result = await provider.readResource("skill://pdf-rotation");
+      const result = await provider.readResource("gw-skill://pdf-rotation");
 
       expect(result).toEqual({
         contents: [
           {
-            uri: "skill://pdf-rotation",
+            uri: "gw-skill://pdf-rotation",
             mimeType: "text/markdown",
             text: "# PDF Rotation\n\nRotate your PDFs!",
           },
@@ -133,13 +135,13 @@ describe("SkillResourceProvider", () => {
       provider = new SkillResourceProvider(mockSkillService, mockLogger);
 
       const result = await provider.readResource(
-        "skill://pdf-rotation/scripts/rotate.py",
+        "gw-skill://pdf-rotation/scripts/rotate.py",
       );
 
       expect(result).toEqual({
         contents: [
           {
-            uri: "skill://pdf-rotation/scripts/rotate.py",
+            uri: "gw-skill://pdf-rotation/scripts/rotate.py",
             mimeType: "text/x-python",
             text: "import pypdf\n\ndef rotate():",
           },
@@ -153,18 +155,18 @@ describe("SkillResourceProvider", () => {
 
     it("should throw error for non-existent skill", async () => {
       await expect(
-        provider.readResource("skill://nonexistent"),
-      ).rejects.toThrow("Skill resource not found: skill://nonexistent");
+        provider.readResource("gw-skill://nonexistent"),
+      ).rejects.toThrow("Skill resource not found: gw-skill://nonexistent");
     });
 
     it("should throw error for non-existent resource file", async () => {
       await expect(
-        provider.readResource("skill://pdf-rotation/scripts/missing.py"),
+        provider.readResource("gw-skill://pdf-rotation/scripts/missing.py"),
       ).rejects.toThrow("Skill resource not found");
     });
 
     it("should return null for non-skill URIs", async () => {
-      const result = await provider.readResource("mcp://server/resource");
+      const result = await provider.readResource("gw://server/resource");
 
       expect(result).toBeNull();
     });
@@ -183,13 +185,13 @@ describe("SkillResourceProvider", () => {
       provider = new SkillResourceProvider(mockSkillService, mockLogger);
 
       const testCases = [
-        ["skill://skill/scripts/run.js", "application/javascript"],
-        ["skill://skill/scripts/run.ts", "text/typescript"],
-        ["skill://skill/references/api.json", "application/json"],
-        ["skill://skill/references/config.yaml", "text/yaml"],
-        ["skill://skill/assets/setup.sh", "application/x-sh"],
-        ["skill://skill/docs/readme.txt", "text/plain"],
-        ["skill://skill/other/file.xyz", "text/plain"],
+        ["gw-skill://skill/scripts/run.js", "application/javascript"],
+        ["gw-skill://skill/scripts/run.ts", "text/typescript"],
+        ["gw-skill://skill/references/api.json", "application/json"],
+        ["gw-skill://skill/references/config.yaml", "text/yaml"],
+        ["gw-skill://skill/assets/setup.sh", "application/x-sh"],
+        ["gw-skill://skill/docs/readme.txt", "text/plain"],
+        ["gw-skill://skill/other/file.xyz", "text/plain"],
       ];
 
       for (const [uri, expectedMime] of testCases) {

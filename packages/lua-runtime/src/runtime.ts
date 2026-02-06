@@ -140,7 +140,7 @@ The 'result' function is global - don't use 'local result = ...' as this overwri
               //    server each resource came from
               // This ensures clients can directly use resource URIs from tool results
               // without manual namespacing (e.g., file:///data.json becomes
-              // mcp://data-server/file:///data.json)
+              // gw://data-server/file:///data.json)
               const namespacedResult = namespaceCallToolResultResources(
                 originalServerName,
                 result,

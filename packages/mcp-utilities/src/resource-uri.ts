@@ -11,22 +11,22 @@ import type {
 /**
  * URI scheme prefix for skill resources.
  */
-export const SKILL_URI_SCHEME = "skill://";
+export const SKILL_URI_SCHEME = "gw-skill://";
 
 /**
  * Create a skill resource URI.
  *
  * @param skillName - The name of the skill
  * @param path - Optional relative path to a resource within the skill (e.g., "scripts/rotate.py")
- * @returns The skill URI in format: skill://{skillName} or skill://{skillName}/{path}
+ * @returns The skill URI in format: gw-skill://{skillName} or gw-skill://{skillName}/{path}
  *
  * @example
  * createSkillResourceUri("pdf-rotation")
- * // Returns: "skill://pdf-rotation"
+ * // Returns: "gw-skill://pdf-rotation"
  *
  * @example
  * createSkillResourceUri("pdf-rotation", "scripts/rotate.py")
- * // Returns: "skill://pdf-rotation/scripts/rotate.py"
+ * // Returns: "gw-skill://pdf-rotation/scripts/rotate.py"
  */
 export function createSkillResourceUri(
   skillName: string,
@@ -45,15 +45,15 @@ export function createSkillResourceUri(
  * @returns Object with skillName and optional path, or null if format is invalid
  *
  * @example
- * parseSkillResourceUri("skill://pdf-rotation")
+ * parseSkillResourceUri("gw-skill://pdf-rotation")
  * // Returns: { skillName: "pdf-rotation" }
  *
  * @example
- * parseSkillResourceUri("skill://pdf-rotation/scripts/rotate.py")
+ * parseSkillResourceUri("gw-skill://pdf-rotation/scripts/rotate.py")
  * // Returns: { skillName: "pdf-rotation", path: "scripts/rotate.py" }
  *
  * @example
- * parseSkillResourceUri("mcp://server/resource")
+ * parseSkillResourceUri("gw://server/resource")
  * // Returns: null (not a skill URI)
  */
 export function parseSkillResourceUri(
@@ -63,7 +63,7 @@ export function parseSkillResourceUri(
     return null;
   }
 
-  // Remove the "skill://" prefix
+  // Remove the "gw-skill://" prefix
   const withoutScheme = uri.slice(SKILL_URI_SCHEME.length);
 
   if (!withoutScheme) {
@@ -97,14 +97,14 @@ export function parseSkillResourceUri(
  * Check if a URI is a skill resource URI.
  *
  * @param uri - The URI to check
- * @returns true if the URI starts with "skill://"
+ * @returns true if the URI starts with "gw-skill://"
  *
  * @example
- * isSkillResourceUri("skill://pdf-rotation")
+ * isSkillResourceUri("gw-skill://pdf-rotation")
  * // Returns: true
  *
  * @example
- * isSkillResourceUri("mcp://server/resource")
+ * isSkillResourceUri("gw://server/resource")
  * // Returns: false
  */
 export function isSkillResourceUri(uri: string): boolean {
@@ -116,18 +116,23 @@ export function isSkillResourceUri(uri: string): boolean {
 // =============================================================================
 
 /**
+ * URI scheme prefix for namespaced MCP server resources.
+ */
+export const MCP_RESOURCE_URI_SCHEME = "gw://";
+
+/**
  * Namespace a resource URI with a server name prefix.
  *
  * @param serverName - The name of the MCP server
  * @param uri - The original resource URI
- * @returns The namespaced URI in format: mcp://{serverName}/{originalUri}
+ * @returns The namespaced URI in format: gw://{serverName}/{originalUri}
  *
  * @example
  * namespaceResourceUri("context7", "file:///docs/README.md")
- * // Returns: "mcp://context7/file:///docs/README.md"
+ * // Returns: "gw://context7/file:///docs/README.md"
  */
 export function namespaceResourceUri(serverName: string, uri: string): string {
-  return `mcp://${serverName}/${uri}`;
+  return `${MCP_RESOURCE_URI_SCHEME}${serverName}/${uri}`;
 }
 
 /**
@@ -137,21 +142,19 @@ export function namespaceResourceUri(serverName: string, uri: string): string {
  * @returns Object with serverName and originalUri, or null if format is invalid
  *
  * @example
- * parseResourceUri("mcp://context7/file:///docs/README.md")
+ * parseResourceUri("gw://context7/file:///docs/README.md")
  * // Returns: { serverName: "context7", originalUri: "file:///docs/README.md" }
  */
 export function parseResourceUri(
   namespacedUri: string,
 ): { serverName: string; originalUri: string } | null {
-  // Expected format: mcp://{serverName}/{originalUri}
-  const mcpPrefix = "mcp://";
-
-  if (!namespacedUri.startsWith(mcpPrefix)) {
+  // Expected format: gw://{serverName}/{originalUri}
+  if (!namespacedUri.startsWith(MCP_RESOURCE_URI_SCHEME)) {
     return null;
   }
 
-  // Remove the "mcp://" prefix
-  const withoutPrefix = namespacedUri.slice(mcpPrefix.length);
+  // Remove the "gw://" prefix
+  const withoutPrefix = namespacedUri.slice(MCP_RESOURCE_URI_SCHEME.length);
 
   // Find the first "/" to split server name from original URI
   const firstSlashIndex = withoutPrefix.indexOf("/");
@@ -184,7 +187,7 @@ export function parseResourceUri(
  * @example
  * const resource = { uri: "file:///docs/README.md", name: "README" };
  * namespaceResource("context7", resource)
- * // Returns: { uri: "mcp://context7/file:///docs/README.md", name: "README" }
+ * // Returns: { uri: "gw://context7/file:///docs/README.md", name: "README" }
  */
 export function namespaceResource(
   serverName: string,
@@ -214,7 +217,7 @@ export function namespaceResource(
  *   ]
  * };
  * namespaceCallToolResultResources("data-server", result1)
- * // Returns: { ..., content: [text, { type: "resource_link", uri: "mcp://data-server/file:///data.json" }]}
+ * // Returns: { ..., content: [text, { type: "resource_link", uri: "gw://data-server/file:///data.json" }]}
  *
  * @example
  * // Embedded resource block
@@ -224,7 +227,7 @@ export function namespaceResource(
  *   ]
  * };
  * namespaceCallToolResultResources("data-server", result2)
- * // Returns: { ..., content: [{ type: "resource", resource: { uri: "mcp://data-server/file:///data.json", text: "..." }}]}
+ * // Returns: { ..., content: [{ type: "resource", resource: { uri: "gw://data-server/file:///data.json", text: "..." }}]}
  */
 export function namespaceCallToolResultResources(
   serverName: string,
@@ -293,7 +296,7 @@ export function namespaceCallToolResultResources(
  *   ]
  * };
  * namespaceGetPromptResultResources("docs-server", promptResult)
- * // Returns result with URI: "mcp://docs-server/file:///docs/README.md"
+ * // Returns result with URI: "gw://docs-server/file:///docs/README.md"
  */
 export function namespaceGetPromptResultResources(
   serverName: string,

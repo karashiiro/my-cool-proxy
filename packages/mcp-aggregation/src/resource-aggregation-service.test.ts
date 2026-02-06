@@ -84,9 +84,9 @@ describe("ResourceAggregationService", () => {
       const result = await service.listResources("session-123");
 
       expect(result.resources).toHaveLength(3);
-      expect(result.resources[0]?.uri).toBe("mcp://server1/file:///doc1.md");
-      expect(result.resources[1]?.uri).toBe("mcp://server1/file:///doc2.md");
-      expect(result.resources[2]?.uri).toBe("mcp://server2/http://api/data");
+      expect(result.resources[0]?.uri).toBe("gw://server1/file:///doc1.md");
+      expect(result.resources[1]?.uri).toBe("gw://server1/file:///doc2.md");
+      expect(result.resources[2]?.uri).toBe("gw://server2/http://api/data");
     });
 
     it("should return empty array when no clients available", async () => {
@@ -174,14 +174,14 @@ describe("ResourceAggregationService", () => {
       );
 
       const result = await service.readResource(
-        "mcp://my-server/file:///doc.md",
+        "gw://my-server/file:///doc.md",
         "session-123",
       );
 
       expect(mockClient.readResource).toHaveBeenCalledWith({
         uri: "file:///doc.md",
       });
-      expect(result.contents[0]?.uri).toBe("mcp://my-server/file:///doc.md");
+      expect(result.contents[0]?.uri).toBe("gw://my-server/file:///doc.md");
     });
 
     it("should throw error for invalid URI format", async () => {
@@ -199,7 +199,7 @@ describe("ResourceAggregationService", () => {
 
       await expect(
         service.readResource(
-          "mcp://unknown-server/file:///doc.md",
+          "gw://unknown-server/file:///doc.md",
           "session-123",
         ),
       ).rejects.toThrow("not found");
@@ -255,11 +255,11 @@ describe("ResourceAggregationService", () => {
         { uri: "file:///mcp-doc.md", name: "MCP Doc" },
       ];
       const providerResources: Resource[] = [
-        { uri: "skill://my-skill", name: "My Skill" },
+        { uri: "gw-skill://my-skill", name: "My Skill" },
       ];
 
       const mockClient = createMockClientSession({ resources: mcpResources });
-      const mockProvider = createMockProvider(providerResources, "skill://");
+      const mockProvider = createMockProvider(providerResources, "gw-skill://");
 
       const clientsMap = new Map([["server1", mockClient]]);
       vi.mocked(mockClientManager.getClientsBySession).mockReturnValue(
@@ -275,12 +275,12 @@ describe("ResourceAggregationService", () => {
       const result = await serviceWithProvider.listResources("session-123");
 
       expect(result.resources).toHaveLength(2);
-      expect(result.resources[0]?.uri).toBe("mcp://server1/file:///mcp-doc.md");
-      expect(result.resources[1]?.uri).toBe("skill://my-skill");
+      expect(result.resources[0]?.uri).toBe("gw://server1/file:///mcp-doc.md");
+      expect(result.resources[1]?.uri).toBe("gw-skill://my-skill");
     });
 
     it("should route readResource to provider when handlesUri returns true", async () => {
-      const mockProvider = createMockProvider([], "skill://");
+      const mockProvider = createMockProvider([], "gw-skill://");
       const mockClient = createMockClientSession({});
       const clientsMap = new Map([["server1", mockClient]]);
       vi.mocked(mockClientManager.getClientsBySession).mockReturnValue(
@@ -294,18 +294,20 @@ describe("ResourceAggregationService", () => {
       );
 
       const result = await serviceWithProvider.readResource(
-        "skill://my-skill/scripts/run.py",
+        "gw-skill://my-skill/scripts/run.py",
         "session-123",
       );
 
       expect(mockProvider.handlesUri).toHaveBeenCalledWith(
-        "skill://my-skill/scripts/run.py",
+        "gw-skill://my-skill/scripts/run.py",
       );
       expect(mockProvider.readResource).toHaveBeenCalledWith(
-        "skill://my-skill/scripts/run.py",
+        "gw-skill://my-skill/scripts/run.py",
       );
       const content = result.contents[0] as { text?: string };
-      expect(content?.text).toBe("Content for skill://my-skill/scripts/run.py");
+      expect(content?.text).toBe(
+        "Content for gw-skill://my-skill/scripts/run.py",
+      );
       expect(mockClient.readResource).not.toHaveBeenCalled();
     });
 
@@ -319,7 +321,7 @@ describe("ResourceAggregationService", () => {
           },
         ],
       };
-      const mockProvider = createMockProvider([], "skill://");
+      const mockProvider = createMockProvider([], "gw-skill://");
       const mockClient = createMockClientSession({ readResult: mcpResult });
       const clientsMap = new Map([["server1", mockClient]]);
       vi.mocked(mockClientManager.getClientsBySession).mockReturnValue(
@@ -333,12 +335,12 @@ describe("ResourceAggregationService", () => {
       );
 
       const result = await serviceWithProvider.readResource(
-        "mcp://server1/file:///doc.md",
+        "gw://server1/file:///doc.md",
         "session-123",
       );
 
       expect(mockProvider.handlesUri).toHaveBeenCalledWith(
-        "mcp://server1/file:///doc.md",
+        "gw://server1/file:///doc.md",
       );
       expect(mockProvider.readResource).not.toHaveBeenCalled();
       expect(mockClient.readResource).toHaveBeenCalledWith({
@@ -395,7 +397,7 @@ describe("ResourceAggregationService", () => {
       const result = await serviceNoProviders.listResources("session-123");
 
       expect(result.resources).toHaveLength(1);
-      expect(result.resources[0]?.uri).toBe("mcp://server1/file:///doc.md");
+      expect(result.resources[0]?.uri).toBe("gw://server1/file:///doc.md");
     });
   });
 });

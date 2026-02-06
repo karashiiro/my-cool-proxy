@@ -249,7 +249,7 @@ describe("Stdio Mode E2E", () => {
 
       // Should have resources from data-server
       const dataServerResources = resources.resources.filter((r) =>
-        r.uri.startsWith("mcp://data-server/"),
+        r.uri.startsWith("gw://data-server/"),
       );
 
       expect(dataServerResources.length).toBeGreaterThan(0);

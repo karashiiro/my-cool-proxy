@@ -37,7 +37,7 @@ describe("ReadResourceTool", () => {
       resourceAggregation.readResource.mockResolvedValue({
         contents: [
           {
-            uri: "mcp://docs/file:///README.md",
+            uri: "gw://docs/file:///README.md",
             mimeType: "text/markdown",
             text: "# Hello World\n\nThis is the readme.",
           },
@@ -45,13 +45,13 @@ describe("ReadResourceTool", () => {
       });
 
       const result = await tool.execute(
-        { uri: "mcp://docs/file:///README.md" },
+        { uri: "gw://docs/file:///README.md" },
         { sessionId: "test-session" },
       );
 
       expect(result.isError).toBeUndefined();
       const text = (result.content[0] as { type: "text"; text: string }).text;
-      expect(text).toContain("[mcp://docs/file:///README.md]");
+      expect(text).toContain("[gw://docs/file:///README.md]");
       expect(text).toContain("(text/markdown)");
       expect(text).toContain("# Hello World");
       expect(text).toContain("This is the readme.");
@@ -63,7 +63,7 @@ describe("ReadResourceTool", () => {
       resourceAggregation.readResource.mockResolvedValue({
         contents: [
           {
-            uri: "mcp://files/file:///image.png",
+            uri: "gw://files/file:///image.png",
             mimeType: "image/png",
             blob: "SGVsbG8=",
           },
@@ -71,13 +71,13 @@ describe("ReadResourceTool", () => {
       });
 
       const result = await tool.execute(
-        { uri: "mcp://files/file:///image.png" },
+        { uri: "gw://files/file:///image.png" },
         { sessionId: "test" },
       );
 
       expect(result.isError).toBeUndefined();
       const text = (result.content[0] as { type: "text"; text: string }).text;
-      expect(text).toContain("[mcp://files/file:///image.png]");
+      expect(text).toContain("[gw://files/file:///image.png]");
       expect(text).toContain("(image/png)");
       expect(text).toContain("Binary content");
       expect(text).toContain("Base64 data omitted");
@@ -96,7 +96,7 @@ describe("ReadResourceTool", () => {
     it("should return error when ResourceAggregationService throws for invalid URI format", async () => {
       resourceAggregation.readResource.mockRejectedValue(
         new Error(
-          "Invalid resource URI format: 'bad-uri'. Expected format: mcp://{server-name}/{uri}",
+          "Invalid resource URI format: 'bad-uri'. Expected format: gw://{server-name}/{uri}",
         ),
       );
 
@@ -118,7 +118,7 @@ describe("ReadResourceTool", () => {
       );
 
       const result = await tool.execute(
-        { uri: "mcp://nonexistent/file:///foo" },
+        { uri: "gw://nonexistent/file:///foo" },
         { sessionId: "test" },
       );
 
@@ -133,7 +133,7 @@ describe("ReadResourceTool", () => {
       );
 
       const result = await tool.execute(
-        { uri: "mcp://docs/file:///missing.md" },
+        { uri: "gw://docs/file:///missing.md" },
         { sessionId: "test" },
       );
 
@@ -147,16 +147,16 @@ describe("ReadResourceTool", () => {
       resourceAggregation.readResource.mockResolvedValue({
         contents: [
           {
-            uri: "mcp://docs/file:///test.txt",
+            uri: "gw://docs/file:///test.txt",
             text: "content",
           },
         ],
       });
 
-      await tool.execute({ uri: "mcp://docs/file:///test.txt" }, {});
+      await tool.execute({ uri: "gw://docs/file:///test.txt" }, {});
 
       expect(resourceAggregation.readResource).toHaveBeenCalledWith(
-        "mcp://docs/file:///test.txt",
+        "gw://docs/file:///test.txt",
         "default",
       );
     });
@@ -165,12 +165,12 @@ describe("ReadResourceTool", () => {
       resourceAggregation.readResource.mockResolvedValue({
         contents: [
           {
-            uri: "mcp://docs/file:///part1.txt",
+            uri: "gw://docs/file:///part1.txt",
             mimeType: "text/plain",
             text: "Part 1 content",
           },
           {
-            uri: "mcp://docs/file:///part2.txt",
+            uri: "gw://docs/file:///part2.txt",
             mimeType: "text/plain",
             text: "Part 2 content",
           },
@@ -178,7 +178,7 @@ describe("ReadResourceTool", () => {
       });
 
       const result = await tool.execute(
-        { uri: "mcp://docs/file:///multi" },
+        { uri: "gw://docs/file:///multi" },
         { sessionId: "test" },
       );
 
@@ -186,8 +186,8 @@ describe("ReadResourceTool", () => {
       const text = (result.content[0] as { type: "text"; text: string }).text;
       expect(text).toContain("Part 1 content");
       expect(text).toContain("Part 2 content");
-      expect(text).toContain("[mcp://docs/file:///part1.txt]");
-      expect(text).toContain("[mcp://docs/file:///part2.txt]");
+      expect(text).toContain("[gw://docs/file:///part1.txt]");
+      expect(text).toContain("[gw://docs/file:///part2.txt]");
     });
 
     it("should return informational message for empty contents", async () => {
@@ -196,7 +196,7 @@ describe("ReadResourceTool", () => {
       });
 
       const result = await tool.execute(
-        { uri: "mcp://docs/file:///empty" },
+        { uri: "gw://docs/file:///empty" },
         { sessionId: "test" },
       );
 
@@ -209,21 +209,21 @@ describe("ReadResourceTool", () => {
       resourceAggregation.readResource.mockResolvedValue({
         contents: [
           {
-            uri: "mcp://api/data://users",
+            uri: "gw://api/data://users",
             text: '{"users": []}',
           },
         ],
       });
 
       const result = await tool.execute(
-        { uri: "mcp://api/data://users" },
+        { uri: "gw://api/data://users" },
         { sessionId: "test" },
       );
 
       expect(result.isError).toBeUndefined();
       const text = (result.content[0] as { type: "text"; text: string }).text;
       // Should show URI without MIME type parenthetical
-      expect(text).toContain("[mcp://api/data://users]");
+      expect(text).toContain("[gw://api/data://users]");
       expect(text).not.toMatch(/\(.*\)/);
       expect(text).toContain('{"users": []}');
     });
