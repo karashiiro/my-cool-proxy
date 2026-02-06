@@ -175,8 +175,7 @@ Use \`read-resource\` with \`skill://{skill-name}\` to load skill instructions.
 Use \`skill://{skill-name}/{path}\` to load nested resources (scripts/, references/, assets/).
 
 <CRITICAL>
-STRONGLY consider if there are relevant skills that may assist you in a task
-prior to taking substantial actions.
+STRONGLY consider if there are relevant skills that may assist you in the current task.
 </CRITICAL>
 `;
   }
