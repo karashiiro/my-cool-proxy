@@ -64,6 +64,18 @@ export function getPlatformConfigDir(): string {
 }
 
 /**
+ * Get the active config directory (respects CONFIG_PATH env var).
+ * If CONFIG_PATH is set, returns its parent directory.
+ * Otherwise returns the platform-specific config directory.
+ */
+export function getActiveConfigDir(): string {
+  if (process.env.CONFIG_PATH) {
+    return resolve(process.env.CONFIG_PATH, "..");
+  }
+  return paths.config;
+}
+
+/**
  * Get the platform-specific config file path.
  */
 export function getPlatformConfigPath(): string {

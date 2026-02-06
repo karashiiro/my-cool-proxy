@@ -165,13 +165,14 @@ export class ServerInfoPreloader implements IServerInfoPreloader {
     return `
 # Available Gateway Skills
 
-The following skills can be loaded using the \`load-gateway-skill\` tool:
+The following skills are available as MCP resources with the \`skill://\` URI scheme:
 
 <available_skills>
 ${skillsXml}
 </available_skills>
 
-Use the \`load-gateway-skill\` tool with the skill name to get full instructions.
+Use \`read-resource\` with \`skill://{skill-name}\` to load skill instructions.
+Use \`skill://{skill-name}/{path}\` to load nested resources (scripts/, references/, assets/).
 
 <CRITICAL>
 STRONGLY consider if there are relevant skills that may assist you in a task

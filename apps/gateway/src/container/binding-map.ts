@@ -14,6 +14,7 @@ import type {
   ResourceAggregationService,
   PromptAggregationService,
   MCPFormatterService,
+  IResourceProvider,
 } from "@my-cool-proxy/mcp-aggregation";
 import type { ITool } from "../tools/base-tool.js";
 import type { IToolRegistry } from "../tools/tool-registry.js";
@@ -38,4 +39,5 @@ export interface ContainerBindingMap {
   CapabilityStore: ICapabilityStore;
   ServerInfoPreloader: IServerInfoPreloader;
   SkillDiscoveryService: ISkillDiscoveryService;
+  SkillResourceProvider: IResourceProvider;
 }

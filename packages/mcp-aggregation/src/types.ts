@@ -106,3 +106,38 @@ export interface ToolInfo {
   luaName: string;
   description: string;
 }
+
+/**
+ * Interface for additional resource providers that can contribute to the
+ * aggregated resource list. This allows the gateway to inject custom resources
+ * (like skills) without coupling the aggregation package to specific logic.
+ *
+ * Providers are checked in order when reading resources, allowing them to
+ * handle their own URI schemes (e.g., skill:// for gateway skills).
+ */
+export interface IResourceProvider {
+  /**
+   * List all resources from this provider.
+   * Called during resource aggregation alongside MCP server resources.
+   */
+  listResources(): Promise<Resource[]>;
+
+  /**
+   * Read a resource by URI.
+   * Called when a read request is made and `handlesUri()` returns true.
+   *
+   * @param uri - The resource URI to read
+   * @returns The resource content, or null if not found
+   * @throws Error if the resource exists but cannot be read
+   */
+  readResource(uri: string): Promise<ReadResourceResult | null>;
+
+  /**
+   * Check if this provider handles the given URI scheme.
+   * Used to route read requests to the correct provider.
+   *
+   * @param uri - The resource URI to check
+   * @returns true if this provider should handle the URI
+   */
+  handlesUri(uri: string): boolean;
+}

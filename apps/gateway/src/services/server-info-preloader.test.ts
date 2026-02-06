@@ -44,7 +44,8 @@ describe("ServerInfoPreloader", () => {
         "<description>A test skill for testing</description>",
       );
       expect(result).toContain("</skill>");
-      expect(result).toContain("load-gateway-skill");
+      expect(result).toContain("skill://");
+      expect(result).toContain("read-resource");
     });
 
     it("should format multiple skills correctly", () => {
@@ -124,7 +125,7 @@ describe("ServerInfoPreloader", () => {
       expect(result).toContain("<description></description>");
     });
 
-    it("should include guidance about load-gateway-skill tool", () => {
+    it("should include guidance about read-resource with skill URIs", () => {
       const skills: SkillMetadata[] = [
         {
           name: "test",
@@ -135,8 +136,9 @@ describe("ServerInfoPreloader", () => {
 
       const result = preloader.buildSkillInstructions(skills);
 
-      expect(result).toContain("`load-gateway-skill`");
-      expect(result).toContain("full instructions");
+      expect(result).toContain("`read-resource`");
+      expect(result).toContain("`skill://{skill-name}`");
+      expect(result).toContain("skill instructions");
     });
   });
 

@@ -21,6 +21,7 @@ import {
   ToolDiscoveryService,
   ResourceAggregationService,
   PromptAggregationService,
+  type IResourceProvider,
 } from "@my-cool-proxy/mcp-aggregation";
 // Import gateway-specific services
 import { ConsoleLogger } from "../utils/logger.js";
@@ -29,6 +30,7 @@ import { ShutdownHandler } from "../handlers/shutdown-handler.js";
 import { CapabilityStore } from "../services/capability-store.js";
 import { ServerInfoPreloader } from "../services/server-info-preloader.js";
 import { SkillDiscoveryService } from "../services/skill-discovery-service.js";
+import { SkillResourceProvider } from "../services/skill-resource-provider.js";
 import type { ITool } from "../tools/base-tool.js";
 import { ExecuteLuaTool } from "../tools/execute-lua-tool.js";
 import { ListServersTool } from "../tools/list-servers-tool.js";
@@ -38,7 +40,6 @@ import { InspectToolResponseTool } from "../tools/inspect-tool-response-tool.js"
 import { SummaryStatsTool } from "../tools/summary-stats-tool.js";
 import { ListResourcesTool } from "../tools/list-resources-tool.js";
 import { ReadResourceTool } from "../tools/read-resource-tool.js";
-import { LoadGatewaySkillTool } from "../tools/load-gateway-skill-tool.js";
 import { InvokeGatewaySkillScriptTool } from "../tools/invoke-gateway-skill-script-tool.js";
 import { WriteGatewaySkillTool } from "../tools/write-gateway-skill-tool.js";
 import type { IToolRegistry } from "../tools/tool-registry.js";
@@ -106,7 +107,16 @@ export function createContainer(
         TYPES.MCPClientManager,
       );
       const logger = container.get<ILogger>(TYPES.Logger);
-      return new ResourceAggregationService(clientManager, logger);
+
+      // Collect additional resource providers (e.g., skill resources)
+      const providers: IResourceProvider[] = [];
+      if (container.isBound(TYPES.SkillResourceProvider)) {
+        providers.push(
+          container.get<IResourceProvider>(TYPES.SkillResourceProvider),
+        );
+      }
+
+      return new ResourceAggregationService(clientManager, logger, providers);
     })
     .inSingletonScope();
 
@@ -131,12 +141,18 @@ export function createContainer(
   container.bind<ITool>(TYPES.Tool).to(ListResourcesTool);
   container.bind<ITool>(TYPES.Tool).to(ReadResourceTool);
 
-  // Bind skill tools conditionally based on config
+  // Bind skill-related services conditionally based on config
   const skillsEnabled = config.skills?.enabled === true;
   const skillsMutable = config.skills?.mutable === true;
 
   if (skillsEnabled) {
-    container.bind<ITool>(TYPES.Tool).to(LoadGatewaySkillTool);
+    // Bind skill resource provider (exposes skills as MCP resources)
+    container
+      .bind<IResourceProvider>(TYPES.SkillResourceProvider)
+      .to(SkillResourceProvider)
+      .inSingletonScope();
+
+    // Bind skill tools
     container.bind<ITool>(TYPES.Tool).to(InvokeGatewaySkillScriptTool);
 
     if (skillsMutable) {

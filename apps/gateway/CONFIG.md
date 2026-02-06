@@ -493,14 +493,24 @@ Skills are reusable instruction sets that extend the gateway's capabilities. The
 
 #### Fields
 
-- **enabled** (boolean, optional): Enable skill discovery and skill-related tools. Default: `false`
-  - When `true`, exposes `load-gateway-skill` and `invoke-gateway-skill-script` tools
-  - Creates a default "writing-gateway-skills" skill on first startup that explains how to use the skill system
+- **enabled** (boolean, optional): Enable skill discovery and skill-related features. Default: `false`
+  - When `true`, skills are exposed as MCP resources with the `skill://` URI scheme
+  - Also exposes the `invoke-gateway-skill-script` tool for running skill scripts
+  - Includes a built-in "writing-gateway-skills" skill that explains how to create skills
 
 - **mutable** (boolean, optional): Allow creating and modifying skills. Default: `false`
   - Only takes effect if `enabled` is `true`
   - When `true`, exposes the `write-gateway-skill` tool
-  - When `false`, skills are read-only (can load and invoke, but not create/modify)
+  - When `false`, skills are read-only (can read via resources and invoke scripts, but not create/modify)
+
+### Accessing Skills
+
+Skills are exposed as MCP resources using the `skill://` URI scheme:
+
+- **`skill://{skill-name}`** - Read the main SKILL.md content
+- **`skill://{skill-name}/{path}`** - Read nested resources (scripts/, references/, assets/)
+
+Use the standard `resources/list` and `resources/read` MCP operations to discover and access skills.
 
 ### Available Tools
 
@@ -508,7 +518,6 @@ When skills are enabled, these tools become available:
 
 | Tool                          | Requires                            | Description                                         |
 | ----------------------------- | ----------------------------------- | --------------------------------------------------- |
-| `load-gateway-skill`          | `enabled: true`                     | Load skill content and resource files               |
 | `invoke-gateway-skill-script` | `enabled: true`                     | Execute scripts from a skill's `scripts/` directory |
 | `write-gateway-skill`         | `enabled: true` AND `mutable: true` | Create or modify skills and their files             |
 

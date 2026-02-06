@@ -3,11 +3,17 @@ export { sanitizeLuaIdentifier } from "./lua-identifier.js";
 
 // Resource URI utilities
 export {
+  // MCP server resource namespacing
   namespaceResourceUri,
   parseResourceUri,
   namespaceResource,
   namespaceCallToolResultResources,
   namespaceGetPromptResultResources,
+  // Skill resource URIs
+  SKILL_URI_SCHEME,
+  createSkillResourceUri,
+  parseSkillResourceUri,
+  isSkillResourceUri,
 } from "./resource-uri.js";
 
 // Prompt name utilities
