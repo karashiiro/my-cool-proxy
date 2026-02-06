@@ -17,7 +17,7 @@ import {
  */
 @injectable()
 export class SummaryStatsTool implements ITool {
-  readonly name = "summary";
+  readonly name = "summary-stats";
   readonly description =
     "Get a quick summary of the gateway: total number of connected MCP servers, " +
     "and aggregate counts of tools, resources, and prompts across all servers.";

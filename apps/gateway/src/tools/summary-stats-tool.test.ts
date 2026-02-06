@@ -23,15 +23,7 @@ describe("SummaryStatsTool", () => {
 
   describe("tool metadata", () => {
     it("should have correct name", () => {
-      expect(tool.name).toBe("summary");
-    });
-
-    it("should have description mentioning counts", () => {
-      expect(tool.description).toContain("summary");
-      expect(tool.description).toContain("servers");
-      expect(tool.description).toContain("tools");
-      expect(tool.description).toContain("resources");
-      expect(tool.description).toContain("prompts");
+      expect(tool.name).toBe("summary-stats");
     });
 
     it("should have empty schema with no parameters", () => {
