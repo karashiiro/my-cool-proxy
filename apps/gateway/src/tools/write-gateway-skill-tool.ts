@@ -29,7 +29,7 @@ interface SkillFrontmatter {
  * Tool that creates or overwrites a gateway skill and its files.
  *
  * This tool allows agents to dynamically create skills that can be loaded
- * by other agents using load-gateway-skill. Note that newly created skills
+ * by other agents using read-resource. Note that newly created skills
  * won't appear in server instructions until the gateway is restarted, but
  * they can still be loaded directly by name.
  */
@@ -38,7 +38,7 @@ export class WriteGatewaySkillTool implements ITool {
   readonly name = "write-gateway-skill";
   readonly description =
     "Create or overwrite a gateway skill and its files. Skills are stored locally and " +
-    "can be loaded using load-gateway-skill. Note: Newly created skills won't appear in " +
+    "can be loaded using read-resource. Note: Newly created skills won't appear in " +
     "server instructions until the gateway is restarted, but can still be loaded by name. " +
     "Returns the skill metadata upon successful creation.";
 
@@ -199,7 +199,7 @@ export class WriteGatewaySkillTool implements ITool {
         skill: skillInfo,
         writtenFiles,
         note:
-          "Skill created successfully. It can be loaded immediately using load-gateway-skill, " +
+          "Skill created successfully. It can be loaded immediately using read-resource, " +
           "but won't appear in server instructions until the gateway is restarted.",
       };
 

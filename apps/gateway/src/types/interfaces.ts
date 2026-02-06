@@ -101,7 +101,7 @@ export type MCPClientConfig = MCPClientConfigHTTP | MCPClientConfigStdio;
 export interface SkillsConfig {
   /**
    * Enable skill discovery and skill-related tools.
-   * When enabled, the gateway exposes load-gateway-skill and invoke-gateway-skill-script tools.
+   * When enabled, the gateway exposes skill URIs and invoke-gateway-skill-script tools.
    * Default: false
    */
   enabled?: boolean;
