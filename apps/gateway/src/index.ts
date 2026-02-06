@@ -236,30 +236,35 @@ async function startHttpMode(
   );
 
   // Preload upstream server info at startup to populate gateway instructions
+  // This is the expensive part (creates temporary MCP connections), so we do it once
   logger.info("Preloading upstream server info...");
   const preloadedServers = await serverInfoPreloader.preloadServerInfo(config);
-  let aggregatedInstructions =
+  const baseInstructions =
     serverInfoPreloader.buildAggregatedInstructions(preloadedServers);
   logger.info(
     `Preloaded info from ${preloadedServers.length} server(s) for gateway instructions`,
   );
 
-  // If skills are enabled, ensure directory exists and discover skills for instructions
+  // If skills are enabled, ensure the directory exists at startup
   const skillsEnabled = config.skills?.enabled === true;
   if (skillsEnabled) {
     skillDiscoveryService.ensureSkillsDirectory();
-    const skills = await skillDiscoveryService.discoverSkills();
-    if (skills.length > 0) {
-      const skillInstructions =
-        serverInfoPreloader.buildSkillInstructions(skills);
-      aggregatedInstructions += skillInstructions;
-    }
   }
 
   // Start HTTP server with per-session factory
   const handle = await serveHttp(
     async (sessionId) => {
       logger.info(`Creating gateway server for session ${sessionId}`);
+
+      // Discover skills fresh per session so runtime changes are reflected
+      let sessionInstructions = baseInstructions;
+      if (skillsEnabled) {
+        const skills = await skillDiscoveryService.discoverSkills();
+        if (skills.length > 0) {
+          sessionInstructions +=
+            serverInfoPreloader.buildSkillInstructions(skills);
+        }
+      }
 
       // Create gateway server FIRST (before upstream clients)
       // This allows us to capture downstream client capabilities during initialization
@@ -270,7 +275,7 @@ async function startHttpMode(
         logger,
         resourceAggregation,
         promptAggregation,
-        aggregatedInstructions,
+        sessionInstructions,
       );
 
       // Set up callback to initialize upstream clients when downstream client connects
@@ -395,7 +400,9 @@ async function startStdioMode(
     `Preloaded info from ${preloadedServers.length} server(s) for gateway instructions`,
   );
 
-  // If skills are enabled, ensure directory exists and discover skills for instructions
+  // Discover skills at startup for instructions
+  // Note: Unlike HTTP mode, stdio has a single session and a synchronous factory,
+  // so skills are discovered once here rather than per-session.
   const skillsEnabled = config.skills?.enabled === true;
   if (skillsEnabled) {
     skillDiscoveryService.ensureSkillsDirectory();
