@@ -36,6 +36,8 @@ import { ListServerToolsTool } from "../tools/list-server-tools-tool.js";
 import { ToolDetailsTool } from "../tools/tool-details-tool.js";
 import { InspectToolResponseTool } from "../tools/inspect-tool-response-tool.js";
 import { SummaryStatsTool } from "../tools/summary-stats-tool.js";
+import { ListResourcesTool } from "../tools/list-resources-tool.js";
+import { ReadResourceTool } from "../tools/read-resource-tool.js";
 import { LoadGatewaySkillTool } from "../tools/load-gateway-skill-tool.js";
 import { InvokeGatewaySkillScriptTool } from "../tools/invoke-gateway-skill-script-tool.js";
 import { WriteGatewaySkillTool } from "../tools/write-gateway-skill-tool.js";
@@ -126,6 +128,8 @@ export function createContainer(
   container.bind<ITool>(TYPES.Tool).to(ToolDetailsTool);
   container.bind<ITool>(TYPES.Tool).to(InspectToolResponseTool);
   container.bind<ITool>(TYPES.Tool).to(SummaryStatsTool);
+  container.bind<ITool>(TYPES.Tool).to(ListResourcesTool);
+  container.bind<ITool>(TYPES.Tool).to(ReadResourceTool);
 
   // Bind skill tools conditionally based on config
   const skillsEnabled = config.skills?.enabled === true;
