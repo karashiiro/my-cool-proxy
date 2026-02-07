@@ -38,3 +38,4 @@ jobs:
 
       - name: Publish to npm
         run: npm publish --access public
+        working-directory: apps/gateway
