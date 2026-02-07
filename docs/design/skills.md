@@ -71,11 +71,11 @@ sequenceDiagram
 
 Skills are stored in the platform-specific config directory:
 
-| Platform | Location |
-|----------|----------|
-| Windows  | `%APPDATA%\my-cool-proxy\skills\` |
+| Platform | Location                                      |
+| -------- | --------------------------------------------- |
+| Windows  | `%APPDATA%\my-cool-proxy\skills\`             |
 | macOS    | `~/Library/Preferences/my-cool-proxy/skills/` |
-| Linux    | `~/.config/my-cool-proxy/skills/` |
+| Linux    | `~/.config/my-cool-proxy/skills/`             |
 
 Each skill is a subdirectory containing:
 
@@ -113,10 +113,10 @@ Instructions for the agent on how to perform code reviews...
 
 When skills are enabled, these tools become available:
 
-| Tool | Requires | Description |
-|------|----------|-------------|
-| `invoke-gateway-skill-script` | `skills.enabled: true` | Execute a script from a skill's `scripts/` directory |
-| `write-gateway-skill` | `skills.enabled: true` AND `skills.mutable: true` | Create or modify skills |
+| Tool                          | Requires                                          | Description                                          |
+| ----------------------------- | ------------------------------------------------- | ---------------------------------------------------- |
+| `invoke-gateway-skill-script` | `skills.enabled: true`                            | Execute a script from a skill's `scripts/` directory |
+| `write-gateway-skill`         | `skills.enabled: true` AND `skills.mutable: true` | Create or modify skills                              |
 
 ## Configuration
 
@@ -140,12 +140,12 @@ See the [Configuration Guide](../configuration.md#skills) for detailed configura
 
 ### Key Components
 
-| Component | File | Purpose |
-|-----------|------|---------|
-| `SkillDiscoveryService` | `src/services/skill-discovery-service.ts` | Scans skill directories, resolves skill content |
-| `SkillResourceProvider` | `src/services/skill-resource-provider.ts` | Provides skills as MCP resources |
-| `InvokeGatewaySkillScriptTool` | `src/tools/invoke-gateway-skill-script-tool.ts` | Executes skill scripts |
-| `WriteGatewaySkillTool` | `src/tools/write-gateway-skill-tool.ts` | Creates/modifies skills |
+| Component                      | File                                            | Purpose                                         |
+| ------------------------------ | ----------------------------------------------- | ----------------------------------------------- |
+| `SkillDiscoveryService`        | `src/services/skill-discovery-service.ts`       | Scans skill directories, resolves skill content |
+| `SkillResourceProvider`        | `src/services/skill-resource-provider.ts`       | Provides skills as MCP resources                |
+| `InvokeGatewaySkillScriptTool` | `src/tools/invoke-gateway-skill-script-tool.ts` | Executes skill scripts                          |
+| `WriteGatewaySkillTool`        | `src/tools/write-gateway-skill-tool.ts`         | Creates/modifies skills                         |
 
 ### Resource Integration
 
