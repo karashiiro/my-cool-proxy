@@ -6,6 +6,7 @@ import type {
   ILuaRuntime,
   IMCPClientManager,
   ILogger,
+  ServerConfig,
 } from "../types/interfaces.js";
 import { $inject } from "../container/decorators.js";
 import { TYPES } from "../types/index.js";
@@ -18,10 +19,7 @@ import type { ITool, ToolExecutionContext } from "./base-tool.js";
  * available MCP servers. It's the primary way to orchestrate multi-server
  * tool calls.
  */
-@injectable()
-export class ExecuteLuaTool implements ITool {
-  readonly name = "execute";
-  readonly description = `Execute a Lua script that orchestrates tool calls across MCP servers. This is the primary way to use specialized tools discovered through this gateway.
+const BASE_DESCRIPTION = `Execute a Lua script that orchestrates tool calls across MCP servers. This is the primary way to use specialized tools discovered through this gateway.
 
 WORKFLOW:
 1. Call list-servers to discover available MCP servers
@@ -46,6 +44,17 @@ OPTIMIZATION:
    but returning large JSON objects wastes tokens
 4. Example: Instead of returning raw responses, extract specific fields into a summary table`;
 
+const SKILLS_NOTE = `
+
+SKILLS:
+Gateway skills are enabled. Before executing scripts, strongly consider checking for applicable skills
+that may provide optimized workflows or best practices for your task.`;
+
+@injectable()
+export class ExecuteLuaTool implements ITool {
+  readonly name = "execute";
+  readonly description: string;
+
   readonly schema = {
     script: z
       .string()
@@ -58,7 +67,13 @@ OPTIMIZATION:
     @$inject(TYPES.LuaRuntime) private luaRuntime: ILuaRuntime,
     @$inject(TYPES.MCPClientManager) private clientPool: IMCPClientManager,
     @$inject(TYPES.Logger) private logger: ILogger,
-  ) {}
+    @$inject(TYPES.ServerConfig) private config: ServerConfig,
+  ) {
+    this.description =
+      this.config.skills?.enabled === true
+        ? BASE_DESCRIPTION + SKILLS_NOTE
+        : BASE_DESCRIPTION;
+  }
 
   async execute(
     args: Record<string, unknown>,

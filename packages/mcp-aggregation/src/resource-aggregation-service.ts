@@ -14,6 +14,7 @@ import type {
   IMCPClientSession,
   ILogger,
   ICacheService,
+  IResourceProvider,
 } from "./types.js";
 
 export class ResourceAggregationService {
@@ -22,6 +23,7 @@ export class ResourceAggregationService {
   constructor(
     private clientPool: IMCPClientManager,
     private logger: ILogger,
+    private additionalProviders: IResourceProvider[] = [],
   ) {
     // Create a cache instance for this service
     this.cache = createCache<Resource[]>(logger);
@@ -38,49 +40,60 @@ export class ResourceAggregationService {
       return { resources: cached };
     }
 
+    const allResources: Resource[] = [];
+
+    // Collect resources from MCP servers
     const clients = this.clientPool.getClientsBySession(session);
+    if (clients.size > 0) {
+      const resourcePromises = Array.from(clients.entries()).map(
+        async ([name, client]) => {
+          try {
+            const result = await client.listResources();
+            return { name, resources: result };
+          } catch (error) {
+            if (
+              error instanceof Error &&
+              error.message.includes("Server does not support resources")
+            ) {
+              // Ignore noisy error - we already avoid sending the underlying request via enforceStrictCapabilities
+              return { name, resources: [] };
+            }
 
-    if (clients.size === 0) {
-      this.logger.info(`No clients available for session '${session}'`);
-      return { resources: [] };
-    }
-
-    const resourcePromises = Array.from(clients.entries()).map(
-      async ([name, client]) => {
-        try {
-          const result = await client.listResources();
-          return { name, resources: result };
-        } catch (error) {
-          if (
-            error instanceof Error &&
-            error.message.includes("Server does not support resources")
-          ) {
-            // Ignore noisy error - we already avoid sending the underlying request via enforceStrictCapabilities
+            this.logger.error(
+              `Failed to list resources from server '${name}':`,
+              error as Error,
+            );
             return { name, resources: [] };
           }
+        },
+      );
 
-          this.logger.error(
-            `Failed to list resources from server '${name}':`,
-            error as Error,
-          );
-          return { name, resources: [] };
+      const results = await Promise.all(resourcePromises);
+
+      for (const { name, resources } of results) {
+        for (const resource of resources) {
+          allResources.push(namespaceResource(name, resource));
         }
-      },
-    );
+      }
+    }
 
-    const results = await Promise.all(resourcePromises);
-
-    const allResources: Resource[] = [];
-    for (const { name, resources } of results) {
-      for (const resource of resources) {
-        allResources.push(namespaceResource(name, resource));
+    // Add resources from additional providers (e.g., gateway skills)
+    for (const provider of this.additionalProviders) {
+      try {
+        const providerResources = await provider.listResources();
+        allResources.push(...providerResources);
+      } catch (error) {
+        this.logger.error(
+          "Failed to list resources from additional provider:",
+          error as Error,
+        );
       }
     }
 
     this.cache.set(session, allResources);
 
     this.logger.info(
-      `Aggregated ${allResources.length} resources from ${clients.size} servers for session '${session}'`,
+      `Aggregated ${allResources.length} resources from ${clients.size} server(s) for session '${session}'`,
     );
 
     return { resources: allResources };
@@ -92,10 +105,22 @@ export class ResourceAggregationService {
   ): Promise<ReadResourceResult> {
     const session = sessionId || "default";
 
+    // Check additional providers first (e.g., gw-skill:// URIs)
+    for (const provider of this.additionalProviders) {
+      if (provider.handlesUri(uri)) {
+        const result = await provider.readResource(uri);
+        if (result) {
+          this.logger.debug(`Read resource '${uri}' from additional provider`);
+          return result;
+        }
+      }
+    }
+
+    // Fall back to MCP server routing for gw:// URIs
     const parsed = parseResourceUri(uri);
     if (!parsed) {
       throw new Error(
-        `Invalid resource URI format: '${uri}'. Expected format: mcp://{server-name}/{uri}`,
+        `Invalid resource URI format: '${uri}'. Expected format: gw://{server-name}/{uri}`,
       );
     }
 

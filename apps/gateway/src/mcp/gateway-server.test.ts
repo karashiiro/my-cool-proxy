@@ -16,6 +16,7 @@ import type {
   ILogger,
   ILuaRuntime,
   IMCPClientManager,
+  ServerConfig,
 } from "../types/interfaces.js";
 import * as z from "zod";
 import { MCPClientSession } from "@my-cool-proxy/mcp-client";
@@ -62,6 +63,7 @@ const createToolRegistry = (
   luaRuntime: ILuaRuntime,
   clientManager: IMCPClientManager,
   logger: ILogger,
+  config: ServerConfig = { port: 3000, host: "localhost", mcpClients: {} },
 ): IToolRegistry => {
   const toolDiscovery = new ToolDiscoveryService(
     clientManager,
@@ -71,11 +73,13 @@ const createToolRegistry = (
   );
 
   const registry = new ToolRegistry();
-  registry.register(new ExecuteLuaTool(luaRuntime, clientManager, logger));
-  registry.register(new ListServersTool(toolDiscovery));
-  registry.register(new ListServerToolsTool(toolDiscovery));
+  registry.register(
+    new ExecuteLuaTool(luaRuntime, clientManager, logger, config),
+  );
+  registry.register(new ListServersTool(toolDiscovery, config));
+  registry.register(new ListServerToolsTool(toolDiscovery, config));
   registry.register(new ToolDetailsTool(toolDiscovery));
-  registry.register(new InspectToolResponseTool(toolDiscovery));
+  registry.register(new InspectToolResponseTool(toolDiscovery, config));
 
   return registry;
 };
@@ -1346,11 +1350,9 @@ describe("MCPGatewayServer - Resource Aggregation", () => {
 
       // Check that URIs are namespaced
       const uris = result.resources.map((r) => r.uri);
-      expect(uris).toContain("mcp://docs-server/file:///docs/README.md");
-      expect(uris).toContain("mcp://docs-server/file:///docs/API.md");
-      expect(uris).toContain(
-        "mcp://config-server/file:///config/settings.json",
-      );
+      expect(uris).toContain("gw://docs-server/file:///docs/README.md");
+      expect(uris).toContain("gw://docs-server/file:///docs/API.md");
+      expect(uris).toContain("gw://config-server/file:///config/settings.json");
 
       // Check that original metadata is preserved
       const readmeResource = result.resources.find((r) =>
@@ -1505,12 +1507,12 @@ describe("MCPGatewayServer - Resource Aggregation", () => {
 
       // Read resource using namespaced URI
       const result = await gatewayClient.readResource({
-        uri: "mcp://docs-server/file:///docs/README.md",
+        uri: "gw://docs-server/file:///docs/README.md",
       });
 
       expect(result.contents).toHaveLength(1);
       expect(result.contents[0]).toMatchObject({
-        uri: "mcp://docs-server/file:///docs/README.md",
+        uri: "gw://docs-server/file:///docs/README.md",
         mimeType: "text/markdown",
         text: "# Project Documentation\n\nWelcome!",
       });
@@ -1569,7 +1571,7 @@ describe("MCPGatewayServer - Resource Aggregation", () => {
       // Try to read from non-existent server
       await expect(
         gatewayClient.readResource({
-          uri: "mcp://non-existent-server/file:///test.txt",
+          uri: "gw://non-existent-server/file:///test.txt",
         }),
       ).rejects.toThrow(/not found/);
     });
@@ -1687,8 +1689,8 @@ describe("MCPGatewayServer - Resource Aggregation", () => {
 
       // Step 2: Verify the URI is automatically namespaced!
       // The gateway should have automatically rewritten the URI from
-      // "file:///data/report.json" to "mcp://data-server/file:///data/report.json"
-      expect(resourceUri).toBe("mcp://data-server/file:///data/report.json");
+      // "file:///data/report.json" to "gw://data-server/file:///data/report.json"
+      expect(resourceUri).toBe("gw://data-server/file:///data/report.json");
 
       // Step 3: Now we can directly use this URI to read the resource!
       // No manual namespacing needed - the gateway did it for us!
@@ -1698,7 +1700,7 @@ describe("MCPGatewayServer - Resource Aggregation", () => {
 
       expect(readResult.contents).toHaveLength(1);
       expect(readResult.contents[0]).toMatchObject({
-        uri: "mcp://data-server/file:///data/report.json",
+        uri: "gw://data-server/file:///data/report.json",
         mimeType: "application/json",
         text: '{"sales": 1000, "users": 50}',
       });
@@ -1759,7 +1761,7 @@ describe("MCPGatewayServer - Resource Aggregation", () => {
       const result = await gatewayClient.listResources();
 
       expect(result.resources[0]?.uri).toBe(
-        "mcp://special-server/https://example.com/path?query=value&other=123",
+        "gw://special-server/https://example.com/path?query=value&other=123",
       );
     });
 
@@ -1850,12 +1852,12 @@ describe("MCPGatewayServer - Resource Aggregation", () => {
 
       expect(result.resources).toHaveLength(2);
       const uris = result.resources.map((r) => r.uri);
-      expect(uris).toContain("mcp://docs/file:///README.md");
-      expect(uris).toContain("mcp://docs-v2/file:///README.md");
+      expect(uris).toContain("gw://docs/file:///README.md");
+      expect(uris).toContain("gw://docs-v2/file:///README.md");
 
       // Read from each server to verify routing works
       const result1 = await gatewayClient.readResource({
-        uri: "mcp://docs/file:///README.md",
+        uri: "gw://docs/file:///README.md",
       });
       const content1 = result1.contents[0];
       expect(content1 && "text" in content1 ? content1.text : undefined).toBe(
@@ -1863,7 +1865,7 @@ describe("MCPGatewayServer - Resource Aggregation", () => {
       );
 
       const result2 = await gatewayClient.readResource({
-        uri: "mcp://docs-v2/file:///README.md",
+        uri: "gw://docs-v2/file:///README.md",
       });
       const content2 = result2.contents[0];
       expect(content2 && "text" in content2 ? content2.text : undefined).toBe(

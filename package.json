@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "build": "pnpm -r build",
-    "dev": "pnpm --filter @karashiiro/my-cool-proxy dev",
+    "dev": "pnpm build && pnpm --filter @karashiiro/my-cool-proxy dev",
     "test": "vitest run",
     "test:unit": "vitest run --exclude '**/e2e/**'",
     "test:e2e": "vitest run apps/gateway/src/e2e",
@@ -20,6 +20,9 @@
     "reflect-metadata": "^0.2.2"
   },
   "devDependencies": {
+    "@suites/di.inversify": "4.0.0-alpha.0",
+    "@suites/doubles.vitest": "4.0.0-beta.0",
+    "@suites/unit": "4.0.0-beta.0",
     "@eslint/js": "^9.39.2",
     "@vitest/coverage-v8": "^4.0.16",
     "eslint": "^9.39.2",

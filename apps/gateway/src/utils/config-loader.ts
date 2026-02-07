@@ -60,7 +60,7 @@ export function loadConfig(): ServerConfig {
     // Log to stderr (stdout may be used for MCP protocol in stdio mode)
     console.error(`\n  Created default config at: ${createdPath}`);
     console.error(`  Edit this file to add your MCP servers.`);
-    console.error(`  See CONFIG.md for configuration options.\n`);
+    console.error(`  See docs/configuration.md for configuration options.\n`);
 
     // Return the default config directly (we know what we wrote)
     return { ...DEFAULT_CONFIG };
@@ -105,6 +105,31 @@ export function loadConfig(): ServerConfig {
       if (typeof config.host !== "string") {
         throw new Error(
           "Config must specify 'host' as a string when using HTTP transport",
+        );
+      }
+    }
+
+    // Validate skills config if provided
+    if (config.skills !== undefined) {
+      if (typeof config.skills !== "object" || config.skills === null) {
+        throw new Error("Config 'skills' must be an object if specified");
+      }
+
+      if (
+        config.skills.enabled !== undefined &&
+        typeof config.skills.enabled !== "boolean"
+      ) {
+        throw new Error(
+          "Config 'skills.enabled' must be a boolean if specified",
+        );
+      }
+
+      if (
+        config.skills.mutable !== undefined &&
+        typeof config.skills.mutable !== "boolean"
+      ) {
+        throw new Error(
+          "Config 'skills.mutable' must be a boolean if specified",
         );
       }
     }

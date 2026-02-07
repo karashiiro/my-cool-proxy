@@ -48,7 +48,7 @@ Before you begin, make sure you have the following installed:
    cp config.example.json config.json
    ```
 
-   Edit `config.json` to add any MCP servers you want to test with. See [CONFIG.md](./CONFIG.md) for detailed configuration options.
+   Edit `config.json` to add any MCP servers you want to test with. See the [Configuration Guide](docs/configuration.md) for detailed configuration options.
 
 3. **Start the development server:**
    ```bash

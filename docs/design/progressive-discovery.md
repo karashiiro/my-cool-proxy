@@ -197,6 +197,68 @@ result({ sum = sum, product = product })
 
 See [Lua Runtime](./lua-runtime.md) for detailed script execution documentation.
 
+### 6. `list-resources`
+
+Lists all available MCP resources across connected servers.
+
+**Input:** None (optional `server` parameter to filter by server)
+
+**Output:** Formatted listing of resources grouped by server, showing:
+
+- Resource name
+- Namespaced URI (for use with `read-resource`)
+- Description (if available)
+- MIME type (if available)
+
+**Example Output:**
+
+```
+Available Resources (3 total across 2 servers)
+==============================================
+
+## data-server (2 resources)
+
+- **config**
+  URI: gw://data-server/file:///config.json
+  Description: Server configuration file
+  MIME type: application/json
+
+- **template**
+  URI: gw://data-server/file:///template.txt
+
+## calculator (1 resource)
+
+- **help**
+  URI: gw://calculator/docs://help
+  Description: Calculator usage documentation
+```
+
+**Implementation:** `src/tools/list-resources-tool.ts`
+
+### 7. `read-resource`
+
+Reads the contents of a specific MCP resource by its namespaced URI.
+
+**Input:**
+
+- `uri` - Namespaced resource URI (as returned by `list-resources`)
+
+**Output:** Resource content with URI and MIME type headers
+
+**Example:**
+
+```
+Input: { "uri": "gw://data-server/file:///config.json" }
+
+Output:
+[gw://data-server/file:///config.json] (application/json)
+{ "setting": "value" }
+```
+
+**Note:** URIs use the `gw://` namespace scheme to prevent collisions between servers. See [Resource Namespacing](./resource-namespacing.md) for details on how URIs are transformed.
+
+**Implementation:** `src/tools/read-resource-tool.ts`
+
 ## Tool Discovery Service
 
 The `ToolDiscoveryService` (`src/mcp/tool-discovery-service.ts`) powers the discovery tools:
@@ -208,6 +270,8 @@ flowchart TB
         ListTools["list-server-tools"]
         Details["tool-details"]
         Inspect["inspect-tool-response"]
+        ListResources["list-resources"]
+        ReadResource["read-resource"]
     end
 
     subgraph Service["Tool Discovery Service"]
@@ -215,6 +279,11 @@ flowchart TB
         LST["listServerTools()"]
         GTD["getToolDetails()"]
         ITR["inspectToolResponse()"]
+    end
+
+    subgraph ResourceService["Resource Aggregation Service"]
+        LR["listResources()"]
+        RR["readResource()"]
     end
 
     subgraph Clients["Client Manager"]
@@ -225,11 +294,15 @@ flowchart TB
     ListTools --> LST
     Details --> GTD
     Inspect --> ITR
+    ListResources --> LR
+    ReadResource --> RR
 
     LS --> Sessions
     LST --> Sessions
     GTD --> Sessions
     ITR --> Sessions
+    LR --> Sessions
+    RR --> Sessions
 ```
 
 ### Key Methods

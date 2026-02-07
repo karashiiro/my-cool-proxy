@@ -196,7 +196,7 @@ describe("HTTP Mode E2E", () => {
 
       // Should have resources from data-server (namespaced)
       const dataServerResources = resources.resources.filter((r) =>
-        r.uri.startsWith("mcp://data-server/"),
+        r.uri.startsWith("gw://data-server/"),
       );
 
       expect(dataServerResources.length).toBeGreaterThan(0);
@@ -209,7 +209,7 @@ describe("HTTP Mode E2E", () => {
     });
 
     it("should read resource via namespaced URI", async () => {
-      const uri = "mcp://data-server/file:///test-data.json";
+      const uri = "gw://data-server/file:///test-data.json";
 
       const result = await gatewayClient.readResource({ uri });
 

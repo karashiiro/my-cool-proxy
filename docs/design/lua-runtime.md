@@ -242,7 +242,7 @@ When tools return resources, URIs are namespaced with the server name:
 
 ```
 Original:    file:///data.json
-Namespaced:  mcp://calculator/file:///data.json
+Namespaced:  gw://calculator/file:///data.json
 ```
 
 This happens in the runtime during tool execution because:

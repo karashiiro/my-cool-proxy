@@ -14,3 +14,5 @@ export {
   startHttpElicitationServer,
   startStdioElicitationServer,
 } from "./elicitation-server.js";
+
+export { startStdioStderrServer } from "./stderr-server.js";

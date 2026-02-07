@@ -9,7 +9,7 @@ The gateway looks for `config.json` in the following locations (in priority orde
 1. **Environment variable**: Path specified in `CONFIG_PATH`
 2. **Platform-specific user directory**:
    - **Windows**: `%APPDATA%\my-cool-proxy\config.json`
-   - **macOS**: `~/Library/Application Support/my-cool-proxy/config.json`
+   - **macOS**: `~/Library/Preferences/my-cool-proxy/config.json`
    - **Linux**: `~/.config/my-cool-proxy/config.json` (respects `$XDG_CONFIG_HOME`)
 
 ## Automatic Config Creation
@@ -68,8 +68,8 @@ mkdir -p ~/.config/my-cool-proxy
 cp config.example.json ~/.config/my-cool-proxy/config.json
 
 # macOS
-mkdir -p ~/Library/Application\ Support/my-cool-proxy
-cp config.example.json ~/Library/Application\ Support/my-cool-proxy/config.json
+mkdir -p ~/Library/Preferences/my-cool-proxy
+cp config.example.json ~/Library/Preferences/my-cool-proxy/config.json
 
 # Windows (PowerShell)
 mkdir "$env:APPDATA\my-cool-proxy"
@@ -473,3 +473,112 @@ In this example:
 - `public-api` only exposes safe read-only tools
 - `admin-api` exposes additional administrative tools
 - `unrestricted-local` exposes all tools (no filter)
+
+## Skills
+
+Skills are reusable instruction sets that extend the gateway's capabilities. They can include scripts, reference materials, and specialized guidance for specific tasks.
+
+**Skills are disabled by default** and must be explicitly enabled in your configuration.
+
+### Configuration
+
+```json
+{
+  "skills": {
+    "enabled": true,
+    "mutable": false
+  }
+}
+```
+
+#### Fields
+
+- **enabled** (boolean, optional): Enable skill discovery and skill-related features. Default: `false`
+  - When `true`, skills are exposed as MCP resources with the `gw-skill://` URI scheme
+  - Also exposes the `invoke-gateway-skill-script` tool for running skill scripts
+  - Includes a built-in "writing-gateway-skills" skill that explains how to create skills
+
+- **mutable** (boolean, optional): Allow creating and modifying skills. Default: `false`
+  - Only takes effect if `enabled` is `true`
+  - When `true`, exposes the `write-gateway-skill` tool
+  - When `false`, skills are read-only (can read via resources and invoke scripts, but not create/modify)
+
+### Accessing Skills
+
+Skills are exposed as MCP resources using the `gw-skill://` URI scheme:
+
+- **`gw-skill://{skill-name}`** - Read the main SKILL.md content
+- **`gw-skill://{skill-name}/{path}`** - Read nested resources (scripts/, references/, assets/)
+
+Use the standard `resources/list` and `resources/read` MCP operations to discover and access skills.
+
+### Available Tools
+
+When skills are enabled, these tools become available:
+
+| Tool                          | Requires                            | Description                                         |
+| ----------------------------- | ----------------------------------- | --------------------------------------------------- |
+| `invoke-gateway-skill-script` | `enabled: true`                     | Execute scripts from a skill's `scripts/` directory |
+| `write-gateway-skill`         | `enabled: true` AND `mutable: true` | Create or modify skills and their files             |
+
+### Skill Directory Structure
+
+Skills are stored in the platform-specific config directory:
+
+- **Windows**: `%APPDATA%\my-cool-proxy\skills\`
+- **macOS**: `~/Library/Preferences/my-cool-proxy/skills/`
+- **Linux**: `~/.config/my-cool-proxy/skills/`
+
+Each skill lives in its own subdirectory:
+
+```
+skills/
+  my-skill/
+    SKILL.md              # Required - main content with YAML frontmatter
+    scripts/              # Optional - executable scripts
+      extract.py
+    references/           # Optional - reference documentation
+      API.md
+    assets/               # Optional - data files
+      template.json
+```
+
+### Example Configurations
+
+**Read-only skills:**
+
+```json
+{
+  "skills": {
+    "enabled": true,
+    "mutable": false
+  }
+}
+```
+
+Agents can load and use existing skills, but cannot create new ones or modify existing ones.
+
+**Full skill management:**
+
+```json
+{
+  "skills": {
+    "enabled": true,
+    "mutable": true
+  }
+}
+```
+
+Agents can create, modify, and use skills.
+
+**Skills disabled (default):**
+
+```json
+{
+  "skills": {
+    "enabled": false
+  }
+}
+```
+
+Or simply omit the `skills` field entirely - skill-related tools will not be exposed.

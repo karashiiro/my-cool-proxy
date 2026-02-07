@@ -19,10 +19,10 @@ All resource URIs are prefixed with the server name:
 
 ```
 Original:    file:///config.json
-Namespaced:  mcp://server-a/file:///config.json
+Namespaced:  gw://server-a/file:///config.json
 ```
 
-The `mcp://` scheme with server name creates a unique namespace.
+The `gw://` (gateway) scheme with server name creates a unique namespace.
 
 ```mermaid
 flowchart LR
@@ -36,8 +36,8 @@ flowchart LR
     end
 
     subgraph Agent["Agent View"]
-        NA["mcp://server-a/file:///config.json"]
-        NB["mcp://server-b/file:///config.json"]
+        NA["gw://server-a/file:///config.json"]
+        NB["gw://server-b/file:///config.json"]
     end
 
     SA --> Namespace
@@ -96,18 +96,18 @@ The runtime namespaces because:
 ### Namespaced URI Structure
 
 ```
-mcp://server-name/original-uri
+gw://server-name/original-uri
 └──┬─┘ └────┬────┘ └────┬────┘
 scheme  server     original
 ```
 
 ### Examples
 
-| Original                      | Server      | Namespaced                                 |
-| ----------------------------- | ----------- | ------------------------------------------ |
-| `file:///data.json`           | calculator  | `mcp://calculator/file:///data.json`       |
-| `https://api.example.com/doc` | my-api      | `mcp://my-api/https://api.example.com/doc` |
-| `custom://resource/1`         | data-server | `mcp://data-server/custom://resource/1`    |
+| Original                      | Server      | Namespaced                                |
+| ----------------------------- | ----------- | ----------------------------------------- |
+| `file:///data.json`           | calculator  | `gw://calculator/file:///data.json`       |
+| `https://api.example.com/doc` | my-api      | `gw://my-api/https://api.example.com/doc` |
+| `custom://resource/1`         | data-server | `gw://data-server/custom://resource/1`    |
 
 ## Resource Aggregation Service
 
@@ -130,7 +130,7 @@ sequenceDiagram
     ClientA-->>Service: [file:///a.txt]
     ClientB-->>Service: [file:///b.txt]
     Service->>Service: Namespace URIs
-    Service-->>Gateway: [mcp://server-a/file:///a.txt,<br/>mcp://server-b/file:///b.txt]
+    Service-->>Gateway: [gw://server-a/file:///a.txt,<br/>gw://server-b/file:///b.txt]
     Gateway-->>Agent: Aggregated list
 ```
 
@@ -143,7 +143,7 @@ sequenceDiagram
     participant Service as Resource Aggregation
     participant Client as Target Server
 
-    Agent->>Gateway: readResource(mcp://server-a/file:///data.json)
+    Agent->>Gateway: readResource(gw://server-a/file:///data.json)
     Gateway->>Service: readResource(uri)
     Service->>Service: Parse URI → server-a, file:///data.json
     Service->>Client: readResource(file:///data.json)
@@ -211,7 +211,7 @@ Prompts can contain embedded resources or resource links. These are also namespa
       "content": {
         "type": "resource",
         "resource": {
-          "uri": "mcp://calculator/file:///template.txt"
+          "uri": "gw://calculator/file:///template.txt"
         }
       }
     }
@@ -252,7 +252,7 @@ After namespacing (from `data-server`):
   "content": [
     {
       "type": "resource_link",
-      "uri": "mcp://data-server/file:///output.json"
+      "uri": "gw://data-server/file:///output.json"
     }
   ]
 }
@@ -266,13 +266,13 @@ The `src/utils/resource-uri.ts` module provides:
 
 ```typescript
 namespaceResourceUri("data-server", "file:///data.json");
-// → "mcp://data-server/file:///data.json"
+// → "gw://data-server/file:///data.json"
 ```
 
 ### parseResourceUri
 
 ```typescript
-parseResourceUri("mcp://data-server/file:///data.json");
+parseResourceUri("gw://data-server/file:///data.json");
 // → { serverName: "data-server", originalUri: "file:///data.json" }
 ```
 
@@ -282,7 +282,7 @@ Namespaces a full resource object:
 
 ```typescript
 namespaceResource("server", { uri: "file:///x", name: "X" });
-// → { uri: "mcp://server/file:///x", name: "X" }
+// → { uri: "gw://server/file:///x", name: "X" }
 ```
 
 ### namespaceCallToolResultResources
@@ -300,7 +300,7 @@ Namespaces resource URIs in prompt messages.
 If an agent requests a resource with an invalid namespaced URI:
 
 ```
-Requested: mcp://unknown-server/file:///data.json
+Requested: gw://unknown-server/file:///data.json
 Error: Server 'unknown-server' not found
 ```
 
@@ -309,7 +309,7 @@ Error: Server 'unknown-server' not found
 If the namespaced URI is malformed:
 
 ```
-Requested: mcp://server
+Requested: gw://server
 Error: Invalid namespaced URI format
 ```
 
@@ -324,11 +324,20 @@ Error: Invalid namespaced URI format
 
 ## Design Decisions
 
-### Why mcp:// Scheme?
+### Why gw:// Scheme?
 
 - Clear indication this is a gateway-namespaced URI
 - Won't conflict with other schemes (file, http, etc.)
 - Easy to identify and parse
+
+### Related Scheme: gw-skill://
+
+The gateway also uses a `gw-skill://` scheme for [Skills](./skills.md) - local process documents stored in the gateway's config directory. This scheme is distinct from `gw://` because:
+
+- **`gw://`** - Namespaces resources from upstream MCP servers (proxied content)
+- **`gw-skill://`** - References gateway-local skill resources (local content)
+
+Both schemes appear in `list-resources` results, allowing agents to discover both upstream resources and available skills.
 
 ### Why Namespace in Runtime Too?
 

@@ -4,7 +4,9 @@ import * as z from "zod";
 import { $inject } from "../container/decorators.js";
 import { TYPES } from "../types/index.js";
 import type { ITool, ToolExecutionContext } from "./base-tool.js";
+import type { ServerConfig } from "../types/interfaces.js";
 import { ToolDiscoveryService } from "@my-cool-proxy/mcp-aggregation";
+import { SKILLS_REMINDER_CONTENT_BLOCK } from "../utils/skills.js";
 
 /**
  * Tool that lists all tools available on a specific MCP server.
@@ -29,6 +31,8 @@ export class ListServerToolsTool implements ITool {
   constructor(
     @$inject(TYPES.ToolDiscoveryService)
     private toolDiscovery: ToolDiscoveryService,
+    @$inject(TYPES.ServerConfig)
+    private config: ServerConfig,
   ) {}
 
   async execute(
@@ -36,9 +40,16 @@ export class ListServerToolsTool implements ITool {
     context: ToolExecutionContext,
   ): Promise<CallToolResult> {
     const { luaServerName } = args;
-    return this.toolDiscovery.listServerTools(
+    const result = await this.toolDiscovery.listServerTools(
       luaServerName as string,
       context.sessionId || "default",
     );
+
+    // Add skill check note if skills are enabled
+    if (this.config.skills?.enabled === true) {
+      result.content.push(SKILLS_REMINDER_CONTENT_BLOCK);
+    }
+
+    return result;
   }
 }

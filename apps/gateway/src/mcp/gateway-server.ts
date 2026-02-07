@@ -35,7 +35,7 @@ import type { IToolRegistry } from "../tools/tool-registry.js";
  * un-namespaced (server-facing) URIs in different places:
  *
  * 1. Resources/Prompts → Client (Outbound):
- *    - listResources(): Namespaces URIs here (e.g., file:/// → mcp://server-name/file:///)
+ *    - listResources(): Namespaces URIs here (e.g., file:/// → gw://server-name/file:///)
  *    - listPrompts(): Namespaces names here (e.g., prompt → server-name/prompt)
  *
  * 2. Client → Resources/Prompts (Inbound):

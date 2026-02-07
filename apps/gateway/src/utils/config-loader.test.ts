@@ -136,7 +136,7 @@ describe("loadConfig", () => {
       expect.stringContaining("Created default config"),
     );
     expect(consoleSpy).toHaveBeenCalledWith(
-      expect.stringContaining("CONFIG.md"),
+      expect.stringContaining("configuration.md"),
     );
 
     // Cleanup

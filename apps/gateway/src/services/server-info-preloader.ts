@@ -7,6 +7,7 @@ import type {
   IServerInfoPreloader,
   PreloadedServerInfo,
   ServerConfig,
+  SkillMetadata,
 } from "../types/interfaces.js";
 import { $inject } from "../container/decorators.js";
 import { TYPES } from "../types/index.js";
@@ -141,6 +142,44 @@ export class ServerInfoPreloader implements IServerInfoPreloader {
     return lines.join("\n");
   }
 
+  /**
+   * Build skill instructions section from discovered skills.
+   * Returns a formatted string with skill metadata in XML format.
+   * Returns empty string if no skills are available.
+   */
+  buildSkillInstructions(skills: SkillMetadata[]): string {
+    if (skills.length === 0) {
+      return "";
+    }
+
+    const skillsXml = skills
+      .map(
+        (skill) =>
+          `  <skill>
+    <name>${this.escapeXml(skill.name)}</name>
+    <description>${this.escapeXml(skill.description)}</description>
+  </skill>`,
+      )
+      .join("\n");
+
+    return `
+# Available Gateway Skills
+
+The following skills are available as MCP resources with the \`gw-skill://\` URI scheme:
+
+<available_skills>
+${skillsXml}
+</available_skills>
+
+Use \`read-resource\` with \`gw-skill://{skill-name}\` to load skill instructions.
+Use \`gw-skill://{skill-name}/{path}\` to load nested resources (scripts/, references/, assets/).
+
+<CRITICAL>
+STRONGLY consider if there are relevant skills that may assist you in the current task.
+</CRITICAL>
+`;
+  }
+
   private truncateInstructions(
     instructions: string,
     maxLength: number,
@@ -161,5 +200,17 @@ export class ServerInfoPreloader implements IServerInfoPreloader {
     }
 
     return truncated + "...";
+  }
+
+  /**
+   * Escape special XML characters to prevent injection.
+   */
+  private escapeXml(str: string): string {
+    return str
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&apos;");
   }
 }

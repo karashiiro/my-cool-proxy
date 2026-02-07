@@ -5,12 +5,17 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { MCPClientSession } from "./client-session.js";
 import type { ILogger } from "./types.js";
+import { createWriteStream } from "fs";
+import type { WriteStream } from "fs";
 
 // Mock the SDK modules
 vi.mock("@modelcontextprotocol/sdk/client/index.js");
 vi.mock("@modelcontextprotocol/sdk/client/streamableHttp.js");
 vi.mock("@modelcontextprotocol/sdk/client/stdio.js");
 vi.mock("./client-session.js");
+vi.mock("fs", () => ({
+  createWriteStream: vi.fn(),
+}));
 
 // Mock logger factory
 const createMockLogger = (): ILogger => ({
@@ -173,11 +178,12 @@ describe("MCPClientManager", () => {
       expect(result.success).toBe(true);
       expect(result.name).toBe(name);
 
-      // Should create stdio transport
+      // Should create stdio transport with stderr: inherit by default
       expect(StdioClientTransport).toHaveBeenCalledWith({
         command,
         args: undefined,
         env: undefined,
+        stderr: "inherit",
       });
 
       // Should connect the client
@@ -198,6 +204,7 @@ describe("MCPClientManager", () => {
         command,
         args,
         env,
+        stderr: "inherit",
       });
     });
   });
@@ -408,6 +415,195 @@ describe("MCPClientManager", () => {
     it("should handle closing when no clients exist", async () => {
       // Should not throw
       await expect(clientManager.close()).resolves.toBeUndefined();
+    });
+  });
+
+  describe("stderr logging", () => {
+    let mockWriteStream: WriteStream;
+    let mockStderrStream: { pipe: ReturnType<typeof vi.fn> };
+
+    beforeEach(() => {
+      // Mock write stream
+      mockWriteStream = {
+        end: vi.fn(),
+        write: vi.fn(),
+      } as unknown as WriteStream;
+
+      vi.mocked(createWriteStream).mockReturnValue(mockWriteStream);
+
+      // Mock stderr stream on transport
+      mockStderrStream = {
+        pipe: vi.fn(),
+      };
+
+      // Create transport with stderr getter
+      const transportWithStderr = {
+        ...mockTransport,
+        stderr: mockStderrStream,
+      } as unknown as StdioClientTransport;
+
+      vi.mocked(StdioClientTransport).mockImplementation(function (
+        this: StdioClientTransport,
+      ) {
+        return transportWithStderr;
+      } as unknown as typeof StdioClientTransport);
+    });
+
+    it("should create stdio transport with stderr: pipe when stderrLogPath is provided", async () => {
+      const name = "stderr-server";
+      const command = "node";
+      const sessionId = "session-stderr";
+      const stderrLogPath = "/tmp/test-server.log";
+
+      await clientManager.addStdioClient(
+        name,
+        command,
+        sessionId,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        stderrLogPath,
+      );
+
+      // Should create transport with stderr: pipe
+      expect(StdioClientTransport).toHaveBeenCalledWith({
+        command,
+        args: undefined,
+        env: undefined,
+        stderr: "pipe",
+      });
+    });
+
+    it("should create write stream for stderr log file", async () => {
+      const stderrLogPath = "/tmp/server-stderr.log";
+
+      await clientManager.addStdioClient(
+        "log-server",
+        "node",
+        "session-log",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        stderrLogPath,
+      );
+
+      // Should create write stream with flags: 'w' to overwrite
+      expect(createWriteStream).toHaveBeenCalledWith(stderrLogPath, {
+        flags: "w",
+      });
+    });
+
+    it("should pipe stderr to file stream when stderrLogPath is provided", async () => {
+      const stderrLogPath = "/tmp/piped-stderr.log";
+
+      await clientManager.addStdioClient(
+        "pipe-server",
+        "node",
+        "session-pipe",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        stderrLogPath,
+      );
+
+      // Should pipe stderr to file stream
+      expect(mockStderrStream.pipe).toHaveBeenCalledWith(mockWriteStream);
+    });
+
+    it("should log debug message about stderr redirection", async () => {
+      const name = "debug-server";
+      const stderrLogPath = "/tmp/debug-stderr.log";
+
+      await clientManager.addStdioClient(
+        name,
+        "node",
+        "session-debug",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        stderrLogPath,
+      );
+
+      expect(logger.debug).toHaveBeenCalledWith(
+        `MCP client ${name} stderr redirected to ${stderrLogPath}`,
+      );
+    });
+
+    it("should close stderr stream when closeSession is called", async () => {
+      const sessionId = "session-close-stderr";
+      const stderrLogPath = "/tmp/close-stderr.log";
+
+      await clientManager.addStdioClient(
+        "close-server",
+        "node",
+        sessionId,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        stderrLogPath,
+      );
+
+      await clientManager.closeSession(sessionId);
+
+      // Should close the stderr file stream
+      expect(mockWriteStream.end).toHaveBeenCalled();
+    });
+
+    it("should close all stderr streams when close is called", async () => {
+      // Add multiple clients with stderr logging
+      await clientManager.addStdioClient(
+        "server1",
+        "node",
+        "session-1",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        "/tmp/server1.log",
+      );
+
+      await clientManager.addStdioClient(
+        "server2",
+        "node",
+        "session-2",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        "/tmp/server2.log",
+      );
+
+      await clientManager.close();
+
+      // Should close both stderr file streams
+      expect(mockWriteStream.end).toHaveBeenCalledTimes(2);
+    });
+
+    it("should clean up stderr stream on connection failure", async () => {
+      // Make connect fail
+      vi.mocked(mockSdkClient.connect).mockRejectedValueOnce(
+        new Error("Connection failed"),
+      );
+
+      const result = await clientManager.addStdioClient(
+        "failing-stderr-server",
+        "node",
+        "session-fail-stderr",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        "/tmp/failing.log",
+      );
+
+      expect(result.success).toBe(false);
+      // Should close the stderr file stream on failure
+      expect(mockWriteStream.end).toHaveBeenCalled();
     });
   });
 });

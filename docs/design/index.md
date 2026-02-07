@@ -66,12 +66,14 @@ flowchart TB
         PromptAgg["Prompt Aggregation"]
     end
 
-    subgraph Discovery["Tool Discovery"]
+    subgraph Discovery["Tool Discovery & Resources"]
         ListServers["list-servers"]
         ListTools["list-server-tools"]
         ToolDetails["tool-details"]
         Inspect["inspect-tool-response"]
         Execute["execute"]
+        ListResources["list-resources"]
+        ReadResource["read-resource"]
     end
 
     subgraph Runtime["Lua Runtime"]
@@ -175,7 +177,7 @@ The gateway is configured via `config.json`:
 }
 ```
 
-See `CONFIG.md` in the project root for the full configuration reference.
+See the [Configuration Guide](../configuration.md) for the full configuration reference.
 
 ## Detailed Documentation
 
@@ -184,3 +186,4 @@ See `CONFIG.md` in the project root for the full configuration reference.
 - [Lua Runtime](./lua-runtime.md) - Script execution system
 - [Session Management](./session-management.md) - Session isolation and client management
 - [Resource Namespacing](./resource-namespacing.md) - Resource and prompt aggregation
+- [Skills](./skills.md) - Reusable process documents for agents

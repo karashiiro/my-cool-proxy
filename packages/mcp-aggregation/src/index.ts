@@ -5,6 +5,7 @@ export type {
   IMCPClientManager,
   IMCPClientSession,
   ILuaRuntime,
+  IResourceProvider,
   ServerListItem,
   ToolInfo,
 } from "./types.js";

@@ -1,5 +1,7 @@
 # my-cool-proxy
 
+[![NPM Version](https://img.shields.io/npm/v/%40karashiiro%2Fmy-cool-proxy)](https://www.npmjs.com/package/@karashiiro/my-cool-proxy)
+
 MCP gateway server that lets you call multiple MCP servers from Lua scripts.
 
 ## Overview
@@ -93,7 +95,7 @@ Then edit the config to add your MCP servers:
 # Find your config location
 my-cool-proxy --config-path
 
-# Edit to add servers (see CONFIG.md for all options)
+# Edit to add servers (see docs/configuration.md for all options)
 ```
 
 Example config structure:
@@ -119,8 +121,8 @@ mkdir -p ~/.config/my-cool-proxy
 cp config.example.json ~/.config/my-cool-proxy/config.json
 
 # macOS
-mkdir -p ~/Library/Application\ Support/my-cool-proxy
-cp config.example.json ~/Library/Application\ Support/my-cool-proxy/config.json
+mkdir -p ~/Library/Preferences/my-cool-proxy
+cp config.example.json ~/Library/Preferences/my-cool-proxy/config.json
 
 # Windows (PowerShell)
 mkdir "$env:APPDATA\my-cool-proxy"
@@ -159,6 +161,12 @@ The proxy exposes these tools:
 - `list-servers` - See available servers
 - `list-server-tools` - See tools for a server
 - `tool-details` - Get full tool documentation
+- `inspect-tool-response` - Make a sample call to see response structure
+- `summary-stats` - Get aggregate counts of servers, tools, resources, and prompts
+- `list-resources` - See available resources from all servers
+- `read-resource` - Read a specific resource by its namespaced URI
+- `invoke-gateway-skill-script` - Execute scripts from skill packages (when skills enabled)
+- `write-gateway-skill` - Create or modify skills (when skills mutable)
 
 Example Lua script:
 
@@ -170,6 +178,16 @@ result(my_server.some_tool({ arg = "value" }):await())
 local data = my_server.some_tool({ arg = "value" }):await()
 result({ processed = data.something })
 ```
+
+### Skills
+
+Skills are reusable process documents that agents can load as MCP resources. When enabled, agents can:
+
+- Discover skills via `list-resources` (look for `gw-skill://` URIs)
+- Read skill content via `read-resource`
+- Execute skill scripts via `invoke-gateway-skill-script`
+
+Skills are disabled by default. See the [Configuration Guide](docs/configuration.md#skills) for setup options.
 
 ## MCP Client Transport Types
 
@@ -318,6 +336,18 @@ Restart Claude Desktop (or your MCP client) to pick up the new config. The gatew
 - Check that commands in your config are correct and dependencies are installed
 - Try running the upstream servers individually first to verify they work
 
+#### Server Logs
+
+Stderr output from stdio MCP servers is redirected to log files. Log location varies by platform:
+
+- **Windows:** `%LOCALAPPDATA%\my-cool-proxy\Log\servers\`
+- **macOS:** `~/Library/Logs/my-cool-proxy/servers/`
+- **Linux:** `~/.local/state/my-cool-proxy/servers/`
+
+Each server gets its own log file: `{server-name}-{session-id}.log`. In stdio mode, the session ID is always `default` (e.g., `calculator-default.log`).
+
+These logs are useful for debugging when upstream MCP servers encounter errors or when you want to see what stderr output they produce during operation.
+
 ## MCP Client Transport Types
 
 **HTTP** - Connect to remote MCP servers:
@@ -344,7 +374,7 @@ Restart Claude Desktop (or your MCP client) to pick up the new config. The gatew
 
 ## Documentation
 
-See [CONFIG.md](apps/gateway/CONFIG.md) for full configuration reference.
+See the [Configuration Guide](docs/configuration.md) for full configuration reference.
 
 ## Testing
 

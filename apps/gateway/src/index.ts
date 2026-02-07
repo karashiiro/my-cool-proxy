@@ -11,6 +11,7 @@ import type {
   IMCPClientManager,
   IServerInfoPreloader,
   IShutdownHandler,
+  ISkillDiscoveryService,
   ServerConfig,
 } from "./types/interfaces.js";
 import { serveHttp } from "@karashiiro/mcp/http";
@@ -28,6 +29,7 @@ import type {
 } from "@my-cool-proxy/mcp-aggregation";
 import { parseArgs } from "./utils/cli-args.js";
 import { getConfigPaths, getPlatformConfigDir } from "./utils/config-paths.js";
+import { ensureServerLogDir, getServerLogPath } from "./utils/log-paths.js";
 
 interface InitializationResult {
   successful: string[];
@@ -126,6 +128,9 @@ async function initializeClientsForSession(
   clientManager: IMCPClientManager,
   clientCapabilities?: DownstreamCapabilities,
 ): Promise<InitializationResult> {
+  // Ensure server log directory exists for stdio server stderr redirection
+  ensureServerLogDir();
+
   const connectionPromises = Object.entries(config.mcpClients).map(
     async ([name, clientConfig]): Promise<ClientConnectionResult> => {
       if (clientConfig.type === "http") {
@@ -138,6 +143,8 @@ async function initializeClientsForSession(
           clientCapabilities,
         );
       } else if (clientConfig.type === "stdio") {
+        // Generate log path for stdio server stderr
+        const stderrLogPath = getServerLogPath(name, sessionId);
         return clientManager.addStdioClient(
           name,
           clientConfig.command,
@@ -146,6 +153,7 @@ async function initializeClientsForSession(
           clientConfig.env,
           clientConfig.allowedTools,
           clientCapabilities,
+          stderrLogPath,
         );
       } else {
         // Exhaustiveness check - TypeScript will error if a new type is added
@@ -223,20 +231,40 @@ async function startHttpMode(
   const serverInfoPreloader = container.get<IServerInfoPreloader>(
     TYPES.ServerInfoPreloader,
   );
+  const skillDiscoveryService = container.get<ISkillDiscoveryService>(
+    TYPES.SkillDiscoveryService,
+  );
 
   // Preload upstream server info at startup to populate gateway instructions
+  // This is the expensive part (creates temporary MCP connections), so we do it once
   logger.info("Preloading upstream server info...");
   const preloadedServers = await serverInfoPreloader.preloadServerInfo(config);
-  const aggregatedInstructions =
+  const baseInstructions =
     serverInfoPreloader.buildAggregatedInstructions(preloadedServers);
   logger.info(
     `Preloaded info from ${preloadedServers.length} server(s) for gateway instructions`,
   );
 
+  // If skills are enabled, ensure the directory exists at startup
+  const skillsEnabled = config.skills?.enabled === true;
+  if (skillsEnabled) {
+    skillDiscoveryService.ensureSkillsDirectory();
+  }
+
   // Start HTTP server with per-session factory
   const handle = await serveHttp(
     async (sessionId) => {
       logger.info(`Creating gateway server for session ${sessionId}`);
+
+      // Discover skills fresh per session so runtime changes are reflected
+      let sessionInstructions = baseInstructions;
+      if (skillsEnabled) {
+        const skills = await skillDiscoveryService.discoverSkills();
+        if (skills.length > 0) {
+          sessionInstructions +=
+            serverInfoPreloader.buildSkillInstructions(skills);
+        }
+      }
 
       // Create gateway server FIRST (before upstream clients)
       // This allows us to capture downstream client capabilities during initialization
@@ -247,7 +275,7 @@ async function startHttpMode(
         logger,
         resourceAggregation,
         promptAggregation,
-        aggregatedInstructions,
+        sessionInstructions,
       );
 
       // Set up callback to initialize upstream clients when downstream client connects
@@ -356,6 +384,9 @@ async function startStdioMode(
   const serverInfoPreloader = container.get<IServerInfoPreloader>(
     TYPES.ServerInfoPreloader,
   );
+  const skillDiscoveryService = container.get<ISkillDiscoveryService>(
+    TYPES.SkillDiscoveryService,
+  );
 
   // Fixed session ID for stdio (single session mode)
   const SESSION_ID = "default";
@@ -363,11 +394,25 @@ async function startStdioMode(
   // Preload upstream server info at startup to populate gateway instructions
   logger.info("Preloading upstream server info...");
   const preloadedServers = await serverInfoPreloader.preloadServerInfo(config);
-  const aggregatedInstructions =
+  let aggregatedInstructions =
     serverInfoPreloader.buildAggregatedInstructions(preloadedServers);
   logger.info(
     `Preloaded info from ${preloadedServers.length} server(s) for gateway instructions`,
   );
+
+  // Discover skills at startup for instructions
+  // Note: Unlike HTTP mode, stdio has a single session and a synchronous factory,
+  // so skills are discovered once here rather than per-session.
+  const skillsEnabled = config.skills?.enabled === true;
+  if (skillsEnabled) {
+    skillDiscoveryService.ensureSkillsDirectory();
+    const skills = await skillDiscoveryService.discoverSkills();
+    if (skills.length > 0) {
+      const skillInstructions =
+        serverInfoPreloader.buildSkillInstructions(skills);
+      aggregatedInstructions += skillInstructions;
+    }
+  }
 
   // Start stdio server - upstream clients are initialized when downstream connects
   const handle = await serveStdio(() => {
@@ -464,7 +509,7 @@ function printHelp(): void {
   console.log("  CONFIG_PATH          Override config file location");
   console.log("  PORT                 Override server port (HTTP mode)");
   console.log("  HOST                 Override server host (HTTP mode)\n");
-  console.log("See CONFIG.md for full configuration reference.");
+  console.log("See docs/configuration.md for full configuration reference.");
 }
 
 /**
