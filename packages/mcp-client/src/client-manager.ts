@@ -115,9 +115,15 @@ export class MCPClientManager implements IMCPClientManager {
 
       // Log configuration
       if (allowedTools !== undefined) {
-        this.logger.info(
-          `MCP client ${name} configured with tool filter: ${allowedTools.length === 0 ? "all tools blocked" : allowedTools.join(", ")}`,
-        );
+        if (allowedTools.length === 0) {
+          this.logger.warn(
+            `MCP client ${name}: All tools blocked by empty allowedTools array`,
+          );
+        } else {
+          this.logger.info(
+            `MCP client ${name} configured with tool filter: ${allowedTools.join(", ")}`,
+          );
+        }
       }
 
       this.logger.info(`MCP client ${name} connected to ${endpoint}`);
@@ -216,9 +222,15 @@ export class MCPClientManager implements IMCPClientManager {
 
       // Log configuration
       if (allowedTools !== undefined) {
-        this.logger.info(
-          `MCP client ${name} configured with tool filter: ${allowedTools.length === 0 ? "all tools blocked" : allowedTools.join(", ")}`,
-        );
+        if (allowedTools.length === 0) {
+          this.logger.warn(
+            `MCP client ${name}: All tools blocked by empty allowedTools array`,
+          );
+        } else {
+          this.logger.info(
+            `MCP client ${name} configured with tool filter: ${allowedTools.join(", ")}`,
+          );
+        }
       }
 
       this.logger.info(
