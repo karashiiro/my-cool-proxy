@@ -1,5 +1,5 @@
 import { writeFileSync, mkdtempSync, mkdirSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import type { ServerConfig } from "../../types/interfaces.js";
 
@@ -59,7 +59,7 @@ export function generateTestConfig(
       if (skill.resources) {
         for (const [path, content] of Object.entries(skill.resources)) {
           const fullPath = join(skillDir, path);
-          const dir = fullPath.substring(0, fullPath.lastIndexOf("/"));
+          const dir = dirname(fullPath);
           if (dir && dir !== skillDir) {
             mkdirSync(dir, { recursive: true });
           }
