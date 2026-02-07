@@ -95,7 +95,7 @@ Then edit the config to add your MCP servers:
 # Find your config location
 my-cool-proxy --config-path
 
-# Edit to add servers (see CONFIG.md for all options)
+# Edit to add servers (see docs/configuration.md for all options)
 ```
 
 Example config structure:
@@ -161,6 +161,12 @@ The proxy exposes these tools:
 - `list-servers` - See available servers
 - `list-server-tools` - See tools for a server
 - `tool-details` - Get full tool documentation
+- `inspect-tool-response` - Make a sample call to see response structure
+- `summary-stats` - Get aggregate counts of servers, tools, resources, and prompts
+- `list-resources` - See available resources from all servers
+- `read-resource` - Read a specific resource by its namespaced URI
+- `invoke-gateway-skill-script` - Execute scripts from skill packages (when skills enabled)
+- `write-gateway-skill` - Create or modify skills (when skills mutable)
 
 Example Lua script:
 
@@ -172,6 +178,16 @@ result(my_server.some_tool({ arg = "value" }):await())
 local data = my_server.some_tool({ arg = "value" }):await()
 result({ processed = data.something })
 ```
+
+### Skills
+
+Skills are reusable process documents that agents can load as MCP resources. When enabled, agents can:
+
+- Discover skills via `list-resources` (look for `gw-skill://` URIs)
+- Read skill content via `read-resource`
+- Execute skill scripts via `invoke-gateway-skill-script`
+
+Skills are disabled by default. See the [Configuration Guide](docs/configuration.md#skills) for setup options.
 
 ## MCP Client Transport Types
 
@@ -358,7 +374,7 @@ These logs are useful for debugging when upstream MCP servers encounter errors o
 
 ## Documentation
 
-See [CONFIG.md](apps/gateway/CONFIG.md) for full configuration reference.
+See the [Configuration Guide](docs/configuration.md) for full configuration reference.
 
 ## Testing
 

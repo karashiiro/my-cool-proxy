@@ -509,7 +509,7 @@ function printHelp(): void {
   console.log("  CONFIG_PATH          Override config file location");
   console.log("  PORT                 Override server port (HTTP mode)");
   console.log("  HOST                 Override server host (HTTP mode)\n");
-  console.log("See CONFIG.md for full configuration reference.");
+  console.log("See docs/configuration.md for full configuration reference.");
 }
 
 /**

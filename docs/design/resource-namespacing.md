@@ -330,6 +330,15 @@ Error: Invalid namespaced URI format
 - Won't conflict with other schemes (file, http, etc.)
 - Easy to identify and parse
 
+### Related Scheme: gw-skill://
+
+The gateway also uses a `gw-skill://` scheme for [Skills](./skills.md) - local process documents stored in the gateway's config directory. This scheme is distinct from `gw://` because:
+
+- **`gw://`** - Namespaces resources from upstream MCP servers (proxied content)
+- **`gw-skill://`** - References gateway-local skill resources (local content)
+
+Both schemes appear in `list-resources` results, allowing agents to discover both upstream resources and available skills.
+
 ### Why Namespace in Runtime Too?
 
 The aggregation services handle list/read operations, but tool results also need namespacing because:

@@ -60,7 +60,7 @@ export function loadConfig(): ServerConfig {
     // Log to stderr (stdout may be used for MCP protocol in stdio mode)
     console.error(`\n  Created default config at: ${createdPath}`);
     console.error(`  Edit this file to add your MCP servers.`);
-    console.error(`  See CONFIG.md for configuration options.\n`);
+    console.error(`  See docs/configuration.md for configuration options.\n`);
 
     // Return the default config directly (we know what we wrote)
     return { ...DEFAULT_CONFIG };
