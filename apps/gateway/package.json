@@ -12,7 +12,9 @@
   ],
   "type": "module",
   "scripts": {
-    "build": "tsup",
+    "build": "tsup && tsgo -p tsconfig.test-build.json",
+    "build:bundle": "tsup",
+    "build:tests": "tsgo -p tsconfig.test-build.json",
     "dev": "tsx src/index.ts",
     "typecheck": "tsgo --noEmit"
   },
