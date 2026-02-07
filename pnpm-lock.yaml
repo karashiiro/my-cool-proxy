@@ -60,18 +60,6 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.25.2
         version: 1.25.3(hono@4.11.7)(zod@4.3.6)
-      '@my-cool-proxy/lua-runtime':
-        specifier: workspace:*
-        version: link:../../packages/lua-runtime
-      '@my-cool-proxy/mcp-aggregation':
-        specifier: workspace:*
-        version: link:../../packages/mcp-aggregation
-      '@my-cool-proxy/mcp-client':
-        specifier: workspace:*
-        version: link:../../packages/mcp-client
-      '@my-cool-proxy/mcp-utilities':
-        specifier: workspace:*
-        version: link:../../packages/mcp-utilities
       env-paths:
         specifier: ^3.0.0
         version: 3.0.0
@@ -90,6 +78,9 @@ importers:
       reflect-metadata:
         specifier: ^0.2.2
         version: 0.2.2
+      wasmoon:
+        specifier: ^1.16.0
+        version: 1.16.0
       yaml:
         specifier: ^2.8.2
         version: 2.8.2
@@ -97,6 +88,18 @@ importers:
         specifier: ^4.3.5
         version: 4.3.6
     devDependencies:
+      '@my-cool-proxy/lua-runtime':
+        specifier: workspace:*
+        version: link:../../packages/lua-runtime
+      '@my-cool-proxy/mcp-aggregation':
+        specifier: workspace:*
+        version: link:../../packages/mcp-aggregation
+      '@my-cool-proxy/mcp-client':
+        specifier: workspace:*
+        version: link:../../packages/mcp-client
+      '@my-cool-proxy/mcp-utilities':
+        specifier: workspace:*
+        version: link:../../packages/mcp-utilities
       '@suites/di.inversify':
         specifier: 4.0.0-alpha.0
         version: 4.0.0-alpha.0(inversify@7.11.0(reflect-metadata@0.2.2))(reflect-metadata@0.2.2)
