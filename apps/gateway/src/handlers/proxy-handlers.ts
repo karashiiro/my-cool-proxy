@@ -5,7 +5,7 @@ import {
 import type {
   ILogger,
   IMCPClientManager,
-  ISamplingPonyfill,
+  ISamplingShim,
   ClientCapabilities,
 } from "../types/interfaces.js";
 import type { MCPGatewayServer } from "../mcp/gateway-server.js";
@@ -21,7 +21,7 @@ export function registerProxyHandlers(
   gatewayServer: MCPGatewayServer,
   logger: ILogger,
   capabilities: ClientCapabilities,
-  samplingPonyfill?: ISamplingPonyfill,
+  samplingShim?: ISamplingShim,
 ): void {
   const clients = clientManager.getClientsBySession(sessionId);
 
@@ -55,23 +55,23 @@ export function registerProxyHandlers(
       logger.debug(
         `Registered sampling request handler for upstream server '${serverName}'`,
       );
-    } else if (samplingEnabled && samplingPonyfill) {
-      // Sampling ponyfill: route through ACP agent when client lacks native sampling
+    } else if (samplingEnabled && samplingShim) {
+      // Sampling shim: route through ACP agent when client lacks native sampling
       clientSession.setRequestHandler(
         CreateMessageRequestSchema,
         async (request) => {
           logger.debug(
-            `Received sampling request from upstream server '${serverName}', routing through ACP ponyfill`,
+            `Received sampling request from upstream server '${serverName}', routing through ACP shim`,
           );
           try {
-            const result = await samplingPonyfill.handleSamplingRequest(
+            const result = await samplingShim.handleSamplingRequest(
               sessionId,
               request.params,
             );
             return result;
           } catch (error) {
             logger.error(
-              `Failed to handle sampling request via ponyfill from '${serverName}'`,
+              `Failed to handle sampling request via shim from '${serverName}'`,
               error instanceof Error ? error : new Error(String(error)),
             );
             throw error;
@@ -79,12 +79,9 @@ export function registerProxyHandlers(
         },
       );
       logger.debug(
-        `Registered sampling ponyfill handler for upstream server '${serverName}'`,
+        `Registered sampling shim handler for upstream server '${serverName}'`,
       );
-    } else if (
-      !samplingEnabled &&
-      (capabilities.sampling || samplingPonyfill)
-    ) {
+    } else if (!samplingEnabled && (capabilities.sampling || samplingShim)) {
       logger.debug(
         `NOT registering sampling handler for server '${serverName}' - dangerouslyEnableSampling not enabled`,
       );
@@ -116,10 +113,10 @@ export function registerProxyHandlers(
   }
 
   const clientCount = clients.size;
-  if (capabilities.sampling || samplingPonyfill || capabilities.elicitation) {
+  if (capabilities.sampling || samplingShim || capabilities.elicitation) {
     logger.info(
       `Registered proxy handlers on ${clientCount} upstream client(s): ` +
-        `sampling=${!!capabilities.sampling}, samplingPonyfill=${!!samplingPonyfill}, elicitation=${!!capabilities.elicitation}`,
+        `sampling=${!!capabilities.sampling}, samplingShim=${!!samplingShim}, elicitation=${!!capabilities.elicitation}`,
     );
   }
 }

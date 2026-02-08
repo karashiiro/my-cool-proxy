@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { CreateMessageRequest } from "@modelcontextprotocol/sdk/types.js";
 import type { ACPAgentConfig } from "@my-cool-proxy/acp-client";
 import type { ILogger } from "@my-cool-proxy/logger";
-import { SamplingPonyfill } from "./sampling-ponyfill.js";
+import { SamplingShim } from "./sampling-shim.js";
 import { ACPClient } from "@my-cool-proxy/acp-client";
 import * as mappers from "../utils/index.js";
 
@@ -36,7 +36,7 @@ const createMockCapabilityStore = () => ({
   getWorkingDirectory: vi.fn().mockReturnValue("/tmp/test-session-1"),
 });
 
-describe("SamplingPonyfill", () => {
+describe("SamplingShim", () => {
   let mockAcpClient: {
     connect: ReturnType<typeof vi.fn>;
     createSession: ReturnType<typeof vi.fn>;
@@ -88,37 +88,37 @@ describe("SamplingPonyfill", () => {
 
   describe("initialize", () => {
     it("should create an ACPClient and connect", async () => {
-      const ponyfill = new SamplingPonyfill(
+      const shim = new SamplingShim(
         agentConfig,
         createMockLogger(),
         createMockCapabilityStore() as never,
       );
-      await ponyfill.initialize("session-1");
+      await shim.initialize("session-1");
 
       expect(ACPClient).toHaveBeenCalledWith(agentConfig, expect.anything());
       expect(mockAcpClient.connect).toHaveBeenCalled();
     });
 
     it("should throw if called twice for the same session", async () => {
-      const ponyfill = new SamplingPonyfill(
+      const shim = new SamplingShim(
         agentConfig,
         createMockLogger(),
         createMockCapabilityStore() as never,
       );
-      await ponyfill.initialize("session-1");
+      await shim.initialize("session-1");
 
-      await expect(ponyfill.initialize("session-1")).rejects.toThrow(
+      await expect(shim.initialize("session-1")).rejects.toThrow(
         /already initialized/,
       );
     });
 
     it("should store the client for the session", async () => {
-      const ponyfill = new SamplingPonyfill(
+      const shim = new SamplingShim(
         agentConfig,
         createMockLogger(),
         createMockCapabilityStore() as never,
       );
-      await ponyfill.initialize("session-1");
+      await shim.initialize("session-1");
 
       // Should not throw - session is now initialized
       const params: CreateMessageRequest["params"] = {
@@ -126,26 +126,26 @@ describe("SamplingPonyfill", () => {
         maxTokens: 100,
       };
       await expect(
-        ponyfill.handleSamplingRequest("session-1", params),
+        shim.handleSamplingRequest("session-1", params),
       ).resolves.toBeDefined();
     });
   });
 
   describe("handleSamplingRequest", () => {
     it("should create a session, map request, call prompt, and map result", async () => {
-      const ponyfill = new SamplingPonyfill(
+      const shim = new SamplingShim(
         agentConfig,
         createMockLogger(),
         createMockCapabilityStore() as never,
       );
-      await ponyfill.initialize("session-1");
+      await shim.initialize("session-1");
 
       const params: CreateMessageRequest["params"] = {
         messages: [{ role: "user", content: { type: "text", text: "Hello" } }],
         maxTokens: 100,
       };
 
-      const result = await ponyfill.handleSamplingRequest("session-1", params);
+      const result = await shim.handleSamplingRequest("session-1", params);
 
       // Should map MCP params to ACP prompt with agent's prompt capabilities
       expect(mappers.mapMcpToAcpPrompt).toHaveBeenCalledWith(params, {
@@ -179,7 +179,7 @@ describe("SamplingPonyfill", () => {
     });
 
     it("should throw for an uninitialized session", async () => {
-      const ponyfill = new SamplingPonyfill(
+      const shim = new SamplingShim(
         agentConfig,
         createMockLogger(),
         createMockCapabilityStore() as never,
@@ -191,32 +191,32 @@ describe("SamplingPonyfill", () => {
       };
 
       await expect(
-        ponyfill.handleSamplingRequest("nonexistent", params),
+        shim.handleSamplingRequest("nonexistent", params),
       ).rejects.toThrow(/not initialized/);
     });
   });
 
   describe("close", () => {
     it("should close the ACPClient for the session", async () => {
-      const ponyfill = new SamplingPonyfill(
+      const shim = new SamplingShim(
         agentConfig,
         createMockLogger(),
         createMockCapabilityStore() as never,
       );
-      await ponyfill.initialize("session-1");
-      await ponyfill.close("session-1");
+      await shim.initialize("session-1");
+      await shim.close("session-1");
 
       expect(mockAcpClient.close).toHaveBeenCalled();
     });
 
     it("should remove the session from the map after closing", async () => {
-      const ponyfill = new SamplingPonyfill(
+      const shim = new SamplingShim(
         agentConfig,
         createMockLogger(),
         createMockCapabilityStore() as never,
       );
-      await ponyfill.initialize("session-1");
-      await ponyfill.close("session-1");
+      await shim.initialize("session-1");
+      await shim.close("session-1");
 
       const params: CreateMessageRequest["params"] = {
         messages: [{ role: "user", content: { type: "text", text: "Hi" } }],
@@ -224,19 +224,19 @@ describe("SamplingPonyfill", () => {
       };
 
       await expect(
-        ponyfill.handleSamplingRequest("session-1", params),
+        shim.handleSamplingRequest("session-1", params),
       ).rejects.toThrow(/not initialized/);
     });
 
     it("should be safe to close a non-existent session", async () => {
-      const ponyfill = new SamplingPonyfill(
+      const shim = new SamplingShim(
         agentConfig,
         createMockLogger(),
         createMockCapabilityStore() as never,
       );
 
       // Should not throw
-      await ponyfill.close("nonexistent");
+      await shim.close("nonexistent");
     });
   });
 
@@ -260,29 +260,29 @@ describe("SamplingPonyfill", () => {
         return (callCount === 1 ? mockClient1 : mockClient2) as never;
       });
 
-      const ponyfill = new SamplingPonyfill(
+      const shim = new SamplingShim(
         agentConfig,
         createMockLogger(),
         createMockCapabilityStore() as never,
       );
-      await ponyfill.initialize("session-1");
-      await ponyfill.initialize("session-2");
+      await shim.initialize("session-1");
+      await shim.initialize("session-2");
 
-      await ponyfill.closeAll();
+      await shim.closeAll();
 
       expect(mockClient1.close).toHaveBeenCalled();
       expect(mockClient2.close).toHaveBeenCalled();
     });
 
     it("should clear the session map after closing all", async () => {
-      const ponyfill = new SamplingPonyfill(
+      const shim = new SamplingShim(
         agentConfig,
         createMockLogger(),
         createMockCapabilityStore() as never,
       );
-      await ponyfill.initialize("session-1");
+      await shim.initialize("session-1");
 
-      await ponyfill.closeAll();
+      await shim.closeAll();
 
       const params: CreateMessageRequest["params"] = {
         messages: [{ role: "user", content: { type: "text", text: "Hi" } }],
@@ -290,7 +290,7 @@ describe("SamplingPonyfill", () => {
       };
 
       await expect(
-        ponyfill.handleSamplingRequest("session-1", params),
+        shim.handleSamplingRequest("session-1", params),
       ).rejects.toThrow(/not initialized/);
     });
   });

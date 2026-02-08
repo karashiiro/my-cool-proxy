@@ -12,7 +12,7 @@ import type {
   ICapabilityStore,
   IServerInfoPreloader,
   ISkillDiscoveryService,
-  ISamplingPonyfill,
+  ISamplingShim,
 } from "../types/interfaces.js";
 // Import from workspace packages
 import { WasmoonRuntime } from "@my-cool-proxy/lua-runtime";
@@ -32,7 +32,7 @@ import { CapabilityStore } from "../services/capability-store.js";
 import { ServerInfoPreloader } from "../services/server-info-preloader.js";
 import { SkillDiscoveryService } from "../services/skill-discovery-service.js";
 import { SkillResourceProvider } from "../services/skill-resource-provider.js";
-import { SamplingPonyfill } from "../services/sampling-ponyfill.js";
+import { SamplingShim } from "../services/sampling-shim.js";
 import type { ITool } from "../tools/base-tool.js";
 import { ExecuteLuaTool } from "../tools/execute-lua-tool.js";
 import { ListServersTool } from "../tools/list-servers-tool.js";
@@ -166,20 +166,16 @@ export function createContainer(
     }
   }
 
-  // Bind sampling ponyfill conditionally when ACP agent is configured
+  // Bind sampling shim conditionally when ACP agent is configured
   if (config.acp?.agent) {
     container
-      .bind<ISamplingPonyfill>(TYPES.SamplingPonyfill)
+      .bind<ISamplingShim>(TYPES.SamplingShim)
       .toDynamicValue(() => {
         const logger = container.get<ILogger>(TYPES.Logger);
         const capabilityStore = container.get<ICapabilityStore>(
           TYPES.CapabilityStore,
         );
-        return new SamplingPonyfill(
-          config.acp!.agent!,
-          logger,
-          capabilityStore,
-        );
+        return new SamplingShim(config.acp!.agent!, logger, capabilityStore);
       })
       .inSingletonScope();
   }
