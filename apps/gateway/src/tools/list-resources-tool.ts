@@ -16,12 +16,12 @@ import { parseResourceUri } from "@my-cool-proxy/mcp-utilities";
 export class ListResourcesTool implements ITool {
   readonly name = "list-resources";
   readonly description =
-    "List available resources from configured MCP servers. " +
-    "Each returned resource will include all standard MCP resource fields plus a 'server' field " +
-    "indicating which server the resource belongs to.\n\n" +
+    "Lists gateway-proxied resources from upstream MCP servers. Returns only resources that are accessible " +
+    "through this gateway instance. Each resource includes a namespaced URI (gw:// or gw-skill:// scheme) " +
+    "that can be passed to read-resource.\n\n" +
     "Parameters:\n" +
     "- server (optional): The name of a specific MCP server to get resources from. If not provided, " +
-    "resources from all servers will be returned.";
+    "resources from all connected servers will be returned.";
   readonly schema = {};
 
   constructor(

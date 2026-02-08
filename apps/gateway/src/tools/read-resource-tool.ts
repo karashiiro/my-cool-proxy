@@ -17,10 +17,10 @@ import { ResourceAggregationService } from "@my-cool-proxy/mcp-aggregation";
 export class ReadResourceTool implements ITool {
   readonly name = "read-resource";
   readonly description =
-    "Reads a specific resource from an MCP server, identified by server name and resource URI.\n\n" +
+    "Reads a gateway-proxied resource by its namespaced URI. Only supports URIs with gw:// or gw-skill:// schemes " +
+    "(as returned by list-resources). Routes the request to the appropriate upstream MCP server and returns the content.\n\n" +
     "Parameters:\n" +
-    "- server (required): The name of the MCP server from which to read the resource\n" +
-    "- uri (required): The URI of the resource to read";
+    "- uri (required): The namespaced resource URI (e.g., gw://server-name/original-uri or gw-skill://skill-name/resource-path)";
   readonly schema = {
     uri: z
       .string()
