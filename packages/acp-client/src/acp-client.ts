@@ -105,6 +105,7 @@ export class ACPClient {
     this.process = spawn(command, args, {
       stdio: ["pipe", "pipe", "inherit"],
       env: env ? { ...process.env, ...env } : undefined,
+      shell: true,
     });
 
     // Handle process errors
