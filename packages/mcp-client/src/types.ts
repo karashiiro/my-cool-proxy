@@ -1,6 +1,8 @@
 import type { MCPClientSession } from "./client-session.js";
+import type { ClientCapabilities } from "@modelcontextprotocol/sdk/types.js";
 
 export type { ILogger } from "@my-cool-proxy/logger";
+export type { ClientCapabilities };
 
 /**
  * Result of a client connection attempt.
@@ -9,20 +11,6 @@ export interface ClientConnectionResult {
   name: string;
   success: boolean;
   error?: string;
-}
-
-/**
- * Downstream client capabilities for proxying.
- */
-export interface DownstreamCapabilities {
-  sampling?: {
-    context?: object;
-    tools?: object;
-  };
-  elicitation?: {
-    form?: object;
-    url?: object;
-  };
 }
 
 /**
@@ -35,7 +23,7 @@ export interface IMCPClientManager {
     sessionId: string,
     headers?: Record<string, string>,
     allowedTools?: string[],
-    clientCapabilities?: DownstreamCapabilities,
+    clientCapabilities?: ClientCapabilities,
   ): Promise<ClientConnectionResult>;
   addStdioClient(
     name: string,
@@ -44,7 +32,7 @@ export interface IMCPClientManager {
     args?: string[],
     env?: Record<string, string>,
     allowedTools?: string[],
-    clientCapabilities?: DownstreamCapabilities,
+    clientCapabilities?: ClientCapabilities,
     stderrLogPath?: string,
   ): Promise<ClientConnectionResult>;
   getClient(name: string, sessionId: string): Promise<MCPClientSession>;

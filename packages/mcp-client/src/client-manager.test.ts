@@ -4,7 +4,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { MCPClientSession } from "./client-session.js";
-import type { ILogger, DownstreamCapabilities } from "./types.js";
+import type { ILogger, ClientCapabilities } from "./types.js";
 import { createWriteStream } from "fs";
 import type { WriteStream } from "fs";
 
@@ -171,7 +171,7 @@ describe("MCPClientManager", () => {
     });
 
     it("forwards sampling capability", async () => {
-      const caps: DownstreamCapabilities = {
+      const caps: ClientCapabilities = {
         sampling: { context: {}, tools: {} },
       };
       await clientManager.addHttpClient(
@@ -194,7 +194,7 @@ describe("MCPClientManager", () => {
     });
 
     it("forwards capabilities for stdio client", async () => {
-      const caps: DownstreamCapabilities = { sampling: { tools: {} } };
+      const caps: ClientCapabilities = { sampling: { tools: {} } };
       await clientManager.addStdioClient(
         "stdio-caps",
         "node",

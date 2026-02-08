@@ -5,19 +5,17 @@ import {
   ReadResourceRequestSchema,
   ListPromptsRequestSchema,
   GetPromptRequestSchema,
-  ListRootsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import type {
   CreateMessageRequest,
   CreateMessageResult,
   ElicitRequest,
   ElicitResult,
-  Root,
 } from "@modelcontextprotocol/sdk/types.js";
 import type {
   IMCPClientManager,
   ILogger,
-  DownstreamCapabilities,
+  ClientCapabilities,
 } from "../types/interfaces.js";
 import { $inject } from "../container/decorators.js";
 import { TYPES } from "../types/index.js";
@@ -62,7 +60,7 @@ import type { IToolRegistry } from "../tools/tool-registry.js";
  * Receives the client's capabilities so upstream connections can be configured accordingly.
  */
 export type OnDownstreamInitializedCallback = (
-  capabilities: DownstreamCapabilities,
+  capabilities: ClientCapabilities,
 ) => void | Promise<void>;
 
 @injectable()
@@ -217,14 +215,11 @@ export class MCPGatewayServer {
     this.server.server.oninitialized = async () => {
       const clientCaps = this.server.server.getClientCapabilities();
 
-      // Extract the capabilities we care about for proxying
-      const downstreamCaps: DownstreamCapabilities = {
-        sampling: clientCaps?.sampling,
-        elicitation: clientCaps?.elicitation,
-      };
+      // Forward all client capabilities to upstream servers
+      const downstreamCaps: ClientCapabilities = clientCaps || {};
 
       this.logger.debug(
-        `Downstream client initialized with capabilities: sampling=${!!downstreamCaps.sampling}, elicitation=${!!downstreamCaps.elicitation}`,
+        `Downstream client initialized with capabilities: sampling=${!!downstreamCaps.sampling}, elicitation=${!!downstreamCaps.elicitation}, roots=${!!downstreamCaps.roots}`,
       );
 
       // Call the callback and await it to ensure proper initialization order
@@ -236,14 +231,12 @@ export class MCPGatewayServer {
    * Get the downstream client's capabilities after initialization.
    * Returns undefined if the client hasn't initialized yet.
    */
-  getDownstreamCapabilities(): DownstreamCapabilities | undefined {
+  getClientCapabilities(): ClientCapabilities | undefined {
     const clientCaps = this.server.server.getClientCapabilities();
     if (!clientCaps) return undefined;
 
-    return {
-      sampling: clientCaps.sampling,
-      elicitation: clientCaps.elicitation,
-    };
+    // Return all client capabilities
+    return clientCaps;
   }
 
   getServer(): McpServer {
@@ -307,41 +300,4 @@ export class MCPGatewayServer {
     }
   }
 
-  /**
-   * Request the list of roots from the downstream client.
-   * Returns undefined if the client doesn't support roots or the request fails.
-   *
-   * @returns The list of roots from the client, or undefined if unavailable
-   */
-  async requestRootsFromClient(): Promise<Root[] | undefined> {
-    try {
-      this.logger.debug("Requesting roots from downstream client");
-
-      // Add a timeout to prevent blocking if client doesn't support roots
-      const timeoutMs = 1000;
-      const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error("Timeout")), timeoutMs),
-      );
-
-      const requestPromise = this.server.server.request(
-        { method: "roots/list" },
-        ListRootsRequestSchema,
-      );
-
-      const result = (await Promise.race([
-        requestPromise,
-        timeoutPromise,
-      ])) as unknown as {
-        roots: Root[];
-      };
-
-      this.logger.debug(`Received ${result.roots.length} root(s) from client`);
-      return result.roots;
-    } catch {
-      this.logger.debug(
-        "Downstream client does not support roots or request failed",
-      );
-      return undefined;
-    }
-  }
 }

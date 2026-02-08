@@ -6,7 +6,7 @@ import type {
   ClientConnectionResult,
   ILogger,
   IMCPClientManager,
-  DownstreamCapabilities,
+  ClientCapabilities,
 } from "./types.js";
 import { MCPClientSession } from "./client-session.js";
 
@@ -47,7 +47,7 @@ export class MCPClientManager implements IMCPClientManager {
     sessionId: string,
     headers?: Record<string, string>,
     allowedTools?: string[],
-    clientCapabilities?: DownstreamCapabilities,
+    clientCapabilities?: ClientCapabilities,
   ): Promise<ClientConnectionResult> {
     const key = `${name}-${sessionId}`;
     if (this.clients.has(key)) {
@@ -146,7 +146,7 @@ export class MCPClientManager implements IMCPClientManager {
     args?: string[],
     env?: Record<string, string>,
     allowedTools?: string[],
-    clientCapabilities?: DownstreamCapabilities,
+    clientCapabilities?: ClientCapabilities,
     stderrLogPath?: string,
   ): Promise<ClientConnectionResult> {
     const key = `${name}-${sessionId}`;
@@ -327,7 +327,7 @@ export class MCPClientManager implements IMCPClientManager {
    * know they can send sampling/elicitation requests through the proxy.
    */
   private buildClientCapabilities(
-    downstreamCaps?: DownstreamCapabilities,
+    downstreamCaps?: ClientCapabilities,
   ): Record<string, unknown> {
     if (!downstreamCaps) {
       // No downstream capabilities known yet - don't advertise any special caps

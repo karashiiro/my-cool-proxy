@@ -5,7 +5,7 @@ import type { ContainerBindingMap } from "./container/binding-map.js";
 import { TYPES } from "./types/index.js";
 import type {
   ClientConnectionResult,
-  DownstreamCapabilities,
+  ClientCapabilities,
   ICapabilityStore,
   ILogger,
   IMCPClientManager,
@@ -31,7 +31,6 @@ import { ensureServerLogDir, getServerLogPath } from "./utils/log-paths.js";
 import {
   createSessionTempDir,
   cleanupSessionTempDir,
-  findValidLocalRoot,
 } from "./utils/index.js";
 
 interface InitializationResult {
@@ -53,7 +52,7 @@ async function initializeClientsForSession(
   sessionId: string,
   config: ServerConfig,
   clientManager: IMCPClientManager,
-  clientCapabilities?: DownstreamCapabilities,
+  clientCapabilities?: ClientCapabilities,
 ): Promise<InitializationResult> {
   // Ensure server log directory exists for stdio server stderr redirection
   ensureServerLogDir();
@@ -221,39 +220,11 @@ async function startHttpMode(
         // Store capabilities for this session
         capabilityStore.setCapabilities(sessionId, capabilities);
 
-        // Request roots and determine working directory FIRST
-        // This must happen before initializing the ponyfill since it needs the cwd
-        let workingDirectory: string;
-
-        logger.debug(`Session ${sessionId}: About to request roots`);
-
-        try {
-          const roots = await gatewayServer.requestRootsFromClient();
-          logger.debug(
-            `Session ${sessionId}: Roots request completed, roots=${!!roots}`,
-          );
-          const validRoot = roots ? findValidLocalRoot(roots) : undefined;
-
-          if (validRoot) {
-            logger.info(
-              `Session ${sessionId}: Using client root as cwd: ${validRoot}`,
-            );
-            workingDirectory = validRoot;
-          } else {
-            logger.info(
-              `Session ${sessionId}: No valid local roots, using tempdir`,
-            );
-            workingDirectory = createSessionTempDir(sessionId);
-          }
-        } catch (error) {
-          logger.warn(
-            `Session ${sessionId}: Failed to determine cwd from roots, using tempdir: ${error instanceof Error ? error.message : String(error)}`,
-          );
-          workingDirectory = createSessionTempDir(sessionId);
-        }
-
-        logger.debug(
-          `Session ${sessionId}: Working directory determined: ${workingDirectory}`,
+        // Create session-isolated tempdir for sampling ponyfill
+        // Note: roots/list is currently broken in the TS SDK, so we always use tempdir
+        const workingDirectory = createSessionTempDir(sessionId);
+        logger.info(
+          `Session ${sessionId}: Using tempdir as cwd: ${workingDirectory}`,
         );
 
         // Store working directory BEFORE initializing ponyfill
@@ -457,32 +428,10 @@ async function startStdioMode(
       // Store capabilities
       capabilityStore.setCapabilities(SESSION_ID, capabilities);
 
-      // Request roots and determine working directory FIRST
-      // This must happen before initializing the ponyfill since it needs the cwd
-      let workingDirectory: string;
-
-      logger.debug("About to request roots");
-
-      try {
-        const roots = await gatewayServer.requestRootsFromClient();
-        logger.debug(`Roots request completed, roots=${!!roots}`);
-        const validRoot = roots ? findValidLocalRoot(roots) : undefined;
-
-        if (validRoot) {
-          logger.info(`Using client root as cwd: ${validRoot}`);
-          workingDirectory = validRoot;
-        } else {
-          logger.info(`No valid local roots, using tempdir`);
-          workingDirectory = createSessionTempDir(SESSION_ID);
-        }
-      } catch (error) {
-        logger.warn(
-          `Failed to determine cwd from roots, using tempdir: ${error instanceof Error ? error.message : String(error)}`,
-        );
-        workingDirectory = createSessionTempDir(SESSION_ID);
-      }
-
-      logger.debug(`Working directory determined: ${workingDirectory}`);
+      // Create session-isolated tempdir for sampling ponyfill
+      // Note: roots/list is currently broken in the TS SDK, so we always use tempdir
+      const workingDirectory = createSessionTempDir(SESSION_ID);
+      logger.info(`Using tempdir as cwd: ${workingDirectory}`);
 
       // Store working directory BEFORE initializing ponyfill
       capabilityStore.setWorkingDirectory(SESSION_ID, workingDirectory);

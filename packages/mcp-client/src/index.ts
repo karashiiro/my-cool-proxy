@@ -11,7 +11,7 @@ export { MemoryCacheService, createCache } from "./cache-service.js";
 export type {
   ILogger,
   ClientConnectionResult,
-  DownstreamCapabilities,
+  ClientCapabilities,
   IMCPClientManager,
   ICacheService,
 } from "./types.js";

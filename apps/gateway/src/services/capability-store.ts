@@ -1,7 +1,7 @@
 import { injectable } from "inversify";
 import type {
   ICapabilityStore,
-  DownstreamCapabilities,
+  ClientCapabilities,
   ILogger,
 } from "../types/interfaces.js";
 import { $inject } from "../container/decorators.js";
@@ -14,19 +14,19 @@ import { TYPES } from "../types/index.js";
  */
 @injectable()
 export class CapabilityStore implements ICapabilityStore {
-  private capabilities = new Map<string, DownstreamCapabilities>();
+  private capabilities = new Map<string, ClientCapabilities>();
   private workingDirectories = new Map<string, string>();
 
   constructor(@$inject(TYPES.Logger) private logger: ILogger) {}
 
-  setCapabilities(sessionId: string, caps: DownstreamCapabilities): void {
+  setCapabilities(sessionId: string, caps: ClientCapabilities): void {
     this.capabilities.set(sessionId, caps);
     this.logger.debug(
       `Stored capabilities for session ${sessionId}: sampling=${!!caps.sampling}, elicitation=${!!caps.elicitation}`,
     );
   }
 
-  getCapabilities(sessionId: string): DownstreamCapabilities | undefined {
+  getCapabilities(sessionId: string): ClientCapabilities | undefined {
     return this.capabilities.get(sessionId);
   }
 
