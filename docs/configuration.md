@@ -716,6 +716,8 @@ Or simply omit the `skills` field entirely - skill-related tools will not be exp
 
 The gateway can use an ACP agent to provide sampling capability when the downstream MCP client does not natively support it. This acts as a "ponyfill" -- upstream MCP servers can send sampling requests even when connected through a client that lacks sampling support.
 
+You can find a list of ACP agents [here](https://agentclientprotocol.com/get-started/agents).
+
 ### How It Works
 
 | Client has sampling? | ACP agent configured? | Result                                |
