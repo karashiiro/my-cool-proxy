@@ -19,8 +19,8 @@ const ECHO_AGENT_PATH = resolve(
   "apps/gateway/dist/e2e/fixtures/toy-agents/echo-agent.js",
 );
 
-describe("Sampling Ponyfill E2E (HTTP Mode)", () => {
-  describe("Ponyfill activates when client lacks sampling", () => {
+describe("Sampling Shim E2E (HTTP Mode)", () => {
+  describe("Shim activates when client lacks sampling", () => {
     let gatewayPort: number;
     let samplingServerPort: number;
     let gatewayManager: HttpServerManager;
@@ -78,10 +78,10 @@ describe("Sampling Ponyfill E2E (HTTP Mode)", () => {
       });
 
       // Create client WITHOUT sampling capability
-      // The ponyfill should handle sampling via ACP agent instead
+      // The shim should handle sampling via ACP agent instead
       gatewayClient = await createGatewayClient({
         gatewayPort,
-        clientName: "ponyfill-e2e-client",
+        clientName: "shim-e2e-client",
         expectedServerCount: 1,
       });
     }, 30000);
@@ -109,7 +109,7 @@ describe("Sampling Ponyfill E2E (HTTP Mode)", () => {
       assertTextContains(result, "LLM responded");
     });
 
-    it("should handle multi-turn messages through ponyfill", async () => {
+    it("should handle multi-turn messages through shim", async () => {
       const script = `
         local res = sampling_test_server.multi_turn_llm({
           context = "We are discussing math.",
@@ -129,7 +129,7 @@ describe("Sampling Ponyfill E2E (HTTP Mode)", () => {
     });
   });
 
-  describe("Native sampling takes priority over ponyfill", () => {
+  describe("Native sampling takes priority over shim", () => {
     let gatewayPort: number;
     let samplingServerPort: number;
     let gatewayManager: HttpServerManager;
@@ -184,7 +184,7 @@ describe("Sampling Ponyfill E2E (HTTP Mode)", () => {
       });
 
       // Create client WITH sampling capability
-      // Native sampling should take priority over ponyfill
+      // Native sampling should take priority over shim
       gatewayClient = await createCapableGatewayClient({
         gatewayPort,
         clientName: "native-sampling-client",
@@ -200,7 +200,7 @@ describe("Sampling Ponyfill E2E (HTTP Mode)", () => {
       configCleanup?.();
     });
 
-    it("should use native sampling instead of ponyfill", async () => {
+    it("should use native sampling instead of shim", async () => {
       const script = `
         local res = sampling_test_server.ask_llm({ question = "What is 2+2?" }):await()
         result(res)
@@ -224,7 +224,7 @@ describe("Sampling Ponyfill E2E (HTTP Mode)", () => {
     });
   });
 
-  describe("No ponyfill and no sampling", () => {
+  describe("No shim and no sampling", () => {
     let gatewayPort: number;
     let samplingServerPort: number;
     let gatewayManager: HttpServerManager;
@@ -282,7 +282,7 @@ describe("Sampling Ponyfill E2E (HTTP Mode)", () => {
       configCleanup?.();
     });
 
-    it("should fail when sampling is requested without ponyfill or native support", async () => {
+    it("should fail when sampling is requested without shim or native support", async () => {
       const script = `
         local res = sampling_test_server.ask_llm({ question = "What is 2+2?" }):await()
         result(res)
@@ -298,7 +298,7 @@ describe("Sampling Ponyfill E2E (HTTP Mode)", () => {
     });
   });
 
-  describe("Ponyfill cleanup", () => {
+  describe("Shim cleanup", () => {
     it("should not leak agent processes after stop", async () => {
       const gatewayPort = await allocatePort();
       const samplingServerPort = await allocatePort();
@@ -344,7 +344,7 @@ describe("Sampling Ponyfill E2E (HTTP Mode)", () => {
         },
       });
 
-      // Create client and make a request to trigger ponyfill initialization
+      // Create client and make a request to trigger shim initialization
       const client = await createGatewayClient({
         gatewayPort,
         clientName: "cleanup-test-client",

@@ -28,7 +28,7 @@ class ACPClientHandler implements acp.Client {
   }
 
   async requestPermission(): Promise<acp.RequestPermissionResponse> {
-    // Deny all permission requests. The ponyfill agent is only used for
+    // Deny all permission requests. The shim agent is only used for
     // text generation (sampling), so it should not need to perform
     // privileged operations like file I/O or shell execution.
     // A configurable permission policy can be added later if needed.

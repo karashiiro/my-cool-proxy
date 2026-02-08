@@ -6,7 +6,7 @@ import type {
   ILogger,
   IMCPClientManager,
   ICapabilityStore,
-  ISamplingPonyfill,
+  ISamplingShim,
   ServerConfig,
   MCPClientConfig,
   ClientCapabilities,
@@ -26,7 +26,7 @@ import {
 export class HttpServerManager {
   private serverHandle: ServerHandle | null = null;
   private clientManager: IMCPClientManager | null = null;
-  private samplingPonyfill: ISamplingPonyfill | null = null;
+  private samplingShim: ISamplingShim | null = null;
 
   /**
    * Starts the HTTP gateway server with the provided configuration.
@@ -66,11 +66,11 @@ export class HttpServerManager {
       TYPES.CapabilityStore,
     );
 
-    // Resolve the sampling ponyfill from the container if bound
-    const samplingPonyfill = container.isBound(TYPES.SamplingPonyfill)
-      ? container.get<ISamplingPonyfill>(TYPES.SamplingPonyfill)
+    // Resolve the sampling shim from the container if bound
+    const samplingShim = container.isBound(TYPES.SamplingShim)
+      ? container.get<ISamplingShim>(TYPES.SamplingShim)
       : undefined;
-    this.samplingPonyfill = samplingPonyfill ?? null;
+    this.samplingShim = samplingShim ?? null;
 
     // Use @karashiiro/mcp's serveHttp with session-aware factory
     this.serverHandle = await serveHttp(
@@ -96,31 +96,31 @@ export class HttpServerManager {
           // Store capabilities for this session
           capabilityStore.setCapabilities(sessionId, capabilities);
 
-          // Create session-isolated tempdir for sampling ponyfill
+          // Create session-isolated tempdir for sampling shim
           // Note: roots/list is currently broken in the TS SDK, so we always use tempdir
           const workingDirectory = createSessionTempDir(sessionId);
           logger.info(
             `Session ${sessionId}: Using tempdir as cwd: ${workingDirectory}`,
           );
 
-          // Store working directory BEFORE initializing ponyfill
+          // Store working directory BEFORE initializing shim
           capabilityStore.setWorkingDirectory(sessionId, workingDirectory);
 
-          // Determine if we need the sampling ponyfill
-          let activePonyfill: ISamplingPonyfill | undefined;
+          // Determine if we need the sampling shim
+          let activeShim: ISamplingShim | undefined;
           let upstreamCapabilities = capabilities;
 
-          if (!capabilities.sampling && samplingPonyfill) {
+          if (!capabilities.sampling && samplingShim) {
             try {
               logger.info(
-                `Session ${sessionId}: Client lacks sampling support, initializing ACP ponyfill`,
+                `Session ${sessionId}: Client lacks sampling support, initializing ACP shim`,
               );
-              await samplingPonyfill.initialize(sessionId);
-              activePonyfill = samplingPonyfill;
+              await samplingShim.initialize(sessionId);
+              activeShim = samplingShim;
               upstreamCapabilities = { ...capabilities, sampling: {} };
             } catch (error) {
               logger.error(
-                "Failed to initialize sampling ponyfill, continuing without sampling support",
+                "Failed to initialize sampling shim, continuing without sampling support",
                 error instanceof Error ? error : new Error(String(error)),
               );
             }
@@ -141,7 +141,7 @@ export class HttpServerManager {
             gatewayServer,
             logger,
             capabilities,
-            activePonyfill,
+            activeShim,
           );
         });
 
@@ -162,8 +162,8 @@ export class HttpServerManager {
               }
 
               capabilityStore.deleteCapabilities(sessionId);
-              if (samplingPonyfill) {
-                await samplingPonyfill.close(sessionId);
+              if (samplingShim) {
+                await samplingShim.close(sessionId);
               }
             } catch {
               // Ignore cleanup errors
@@ -195,9 +195,9 @@ export class HttpServerManager {
       this.clientManager = null;
     }
 
-    if (this.samplingPonyfill) {
-      await this.samplingPonyfill.closeAll();
-      this.samplingPonyfill = null;
+    if (this.samplingShim) {
+      await this.samplingShim.closeAll();
+      this.samplingShim = null;
     }
   }
 

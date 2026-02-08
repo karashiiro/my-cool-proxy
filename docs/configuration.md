@@ -567,16 +567,16 @@ In this configuration:
 - `my-local-tools`: Sampling enabled (trusted local code)
 - `experimental-server`: No sampling access (default-deny), untrusted
 
-### ACP Ponyfill Compatibility
+### ACP Shim Compatibility
 
-If you configure an ACP ponyfill (for clients that lack native sampling support), the per-server filtering **still applies**:
+If you configure an ACP shim (for clients that lack native sampling support), the per-server filtering **still applies**:
 
-- The ponyfill is initialized once per session (global resource)
-- Access to the ponyfill is controlled per-server (via `dangerouslyEnableSampling`)
-- Only trusted servers can route requests through the ponyfill
-- Untrusted servers remain blocked, even though the ponyfill exists
+- The shim is initialized once per session (global resource)
+- Access to the shim is controlled per-server (via `dangerouslyEnableSampling`)
+- Only trusted servers can route requests through the shim
+- Untrusted servers remain blocked, even though the shim exists
 
-This means you can safely use the ponyfill to provide sampling support, and the gateway will ensure only trusted servers can access it.
+This means you can safely use the shim to provide sampling support, and the gateway will ensure only trusted servers can access it.
 
 ### Logging
 
@@ -714,7 +714,7 @@ Or simply omit the `skills` field entirely - skill-related tools will not be exp
 
 ## ACP (Agent Client Protocol)
 
-The gateway can use an ACP agent to provide sampling capability when the downstream MCP client does not natively support it. This acts as a "ponyfill" -- upstream MCP servers can send sampling requests even when connected through a client that lacks sampling support.
+The gateway can use an ACP agent to provide sampling capability when the downstream MCP client does not natively support it. This acts as a "shim" -- upstream MCP servers can send sampling requests even when connected through a client that lacks sampling support.
 
 You can find a list of ACP agents [here](https://agentclientprotocol.com/get-started/agents).
 
@@ -726,7 +726,7 @@ You can find a list of ACP agents [here](https://agentclientprotocol.com/get-sta
 | No                   | Yes                   | ACP agent handles sampling            |
 | No                   | No                    | Sampling disabled (existing behavior) |
 
-When the ponyfill activates:
+When the shim activates:
 
 1. The gateway spawns the configured ACP agent process
 2. Upstream MCP servers are told that sampling is available
@@ -754,7 +754,7 @@ Native client sampling always takes priority. If the downstream client supports 
 #### Fields
 
 - **acp** (object, optional): ACP configuration
-  - **agent** (object, optional): ACP agent configuration for the sampling ponyfill
+  - **agent** (object, optional): ACP agent configuration for the sampling shim
     - **command** (string, required): Command to execute the ACP agent
     - **args** (array of strings, optional): Command-line arguments
     - **env** (object, optional): Environment variables to set for the agent process
@@ -775,7 +775,7 @@ The configured agent must:
 
 ### Sampling Parameter Support
 
-The ACP protocol does not expose LLM inference parameters (temperature, max tokens, etc.) at the prompt level -- agents manage their own model configuration internally. This means MCP sampling parameters cannot be forwarded natively to the ACP agent. The ponyfill handles each `CreateMessageRequest` parameter as follows:
+The ACP protocol does not expose LLM inference parameters (temperature, max tokens, etc.) at the prompt level -- agents manage their own model configuration internally. This means MCP sampling parameters cannot be forwarded natively to the ACP agent. The shim handles each `CreateMessageRequest` parameter as follows:
 
 #### Mapped to ACP prompt content
 
@@ -802,8 +802,8 @@ These parameters are serialized into a `[Sampling parameters: ...]` text block a
 | **`includeContext`**           | No mechanism to inject MCP server context into an ACP session. The spec allows clients to ignore this parameter, and the values `thisServer`/`allServers` are soft-deprecated. |
 | **`metadata`**                 | Provider-specific LLM passthrough. ACP agents are not LLM providers, so there is no target for this data.                                                                      |
 | **`tools`** / **`toolChoice`** | Not yet supported. The gateway does not advertise `sampling.tools` capability, so well-behaved servers will not send these parameters.                                         |
-| **`task`**                     | Task-augmented execution is not supported by the ponyfill.                                                                                                                     |
-| **`_meta.progressToken`**      | The ponyfill does not emit progress notifications.                                                                                                                             |
+| **`task`**                     | Task-augmented execution is not supported by the shim.                                                                                                                         |
+| **`_meta.progressToken`**      | The shim does not emit progress notifications.                                                                                                                                 |
 
 #### Response mapping
 
@@ -821,4 +821,4 @@ The gateway connects to the ACP agent with minimal permissions:
 - **Client capabilities**: Empty (`{}`) -- the agent cannot request file system access or terminal execution through the gateway
 - **Permission requests**: All denied -- any tool permission requests from the agent are cancelled
 
-This means the ACP agent is sandboxed to pure text/content generation through the ponyfill. The agent may still use its own internal tools and capabilities, but cannot leverage the gateway as a proxy for privileged operations.
+This means the ACP agent is sandboxed to pure text/content generation through the shim. The agent may still use its own internal tools and capabilities, but cannot leverage the gateway as a proxy for privileged operations.

@@ -5,7 +5,7 @@ import type {
   CreateMessageResult,
 } from "@modelcontextprotocol/sdk/types.js";
 import type {
-  ISamplingPonyfill,
+  ISamplingShim,
   ILogger,
   ICapabilityStore,
 } from "../types/interfaces.js";
@@ -18,7 +18,7 @@ import { TYPES } from "../types/index.js";
  * support it, by routing sampling requests through a configured ACP agent.
  *
  * Thin orchestrator: all ACP protocol logic lives in @my-cool-proxy/acp-client,
- * all MCP<->ACP mapping lives in sampling-ponyfill-mappers.ts.
+ * all MCP<->ACP mapping lives in sampling-shim-mappers.ts.
  *
  * Lifecycle:
  * - One ACPClient per gateway session (long-lived agent process)
@@ -26,7 +26,7 @@ import { TYPES } from "../types/index.js";
  * - Working directory is determined by index.ts during initialization (roots or tempdir)
  */
 @injectable()
-export class SamplingPonyfill implements ISamplingPonyfill {
+export class SamplingShim implements ISamplingShim {
   private clients = new Map<string, ACPClient>();
 
   constructor(
@@ -37,26 +37,24 @@ export class SamplingPonyfill implements ISamplingPonyfill {
   ) {}
 
   /**
-   * Initialize the ponyfill for a gateway session.
+   * Initialize the shim for a gateway session.
    * Spawns an ACP agent process and establishes a connection.
    * Working directory is determined by the caller (index.ts) and stored in CapabilityStore.
    */
   async initialize(sessionId: string): Promise<void> {
     if (this.clients.has(sessionId)) {
       throw new Error(
-        `Sampling ponyfill already initialized for session ${sessionId}`,
+        `Sampling shim already initialized for session ${sessionId}`,
       );
     }
 
-    this.logger.debug(
-      `Initializing sampling ponyfill for session ${sessionId}`,
-    );
+    this.logger.debug(`Initializing sampling shim for session ${sessionId}`);
 
     const client = new ACPClient(this.agentConfig, this.logger);
     await client.connect();
     this.clients.set(sessionId, client);
 
-    this.logger.info(`Sampling ponyfill initialized for session ${sessionId}`);
+    this.logger.info(`Sampling shim initialized for session ${sessionId}`);
   }
 
   /**
@@ -72,9 +70,7 @@ export class SamplingPonyfill implements ISamplingPonyfill {
     const cwd = this.capabilityStore.getWorkingDirectory(sessionId);
 
     if (!client) {
-      throw new Error(
-        `Sampling ponyfill not initialized for session ${sessionId}`,
-      );
+      throw new Error(`Sampling shim not initialized for session ${sessionId}`);
     }
 
     if (!cwd) {
@@ -98,25 +94,25 @@ export class SamplingPonyfill implements ISamplingPonyfill {
   }
 
   /**
-   * Close the ponyfill for a specific session.
+   * Close the shim for a specific session.
    * Kills the ACP agent process. Tempdir cleanup is handled by the caller (index.ts).
    */
   async close(sessionId: string): Promise<void> {
     const client = this.clients.get(sessionId);
 
     if (client) {
-      this.logger.debug(`Closing sampling ponyfill for session ${sessionId}`);
+      this.logger.debug(`Closing sampling shim for session ${sessionId}`);
       await client.close();
       this.clients.delete(sessionId);
     }
   }
 
   /**
-   * Close all active ponyfill sessions.
+   * Close all active shim sessions.
    */
   async closeAll(): Promise<void> {
     this.logger.debug(
-      `Closing all sampling ponyfill sessions (${this.clients.size} active)`,
+      `Closing all sampling shim sessions (${this.clients.size} active)`,
     );
 
     const closePromises = Array.from(this.clients.entries()).map(
@@ -125,7 +121,7 @@ export class SamplingPonyfill implements ISamplingPonyfill {
           await client.close();
         } catch (error) {
           this.logger.error(
-            `Error closing ponyfill for session ${sessionId}`,
+            `Error closing shim for session ${sessionId}`,
             error instanceof Error ? error : new Error(String(error)),
           );
         }

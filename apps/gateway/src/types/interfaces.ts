@@ -120,7 +120,7 @@ export type MCPClientConfig = MCPClientConfigHTTP | MCPClientConfigStdio;
 
 /**
  * Configuration for ACP (Agent Client Protocol) features.
- * Currently supports configuring an ACP agent for sampling ponyfill.
+ * Currently supports configuring an ACP agent for sampling shim.
  */
 export interface ACPConfig {
   agent?: ACPAgentConfig;
@@ -130,9 +130,9 @@ export interface ACPConfig {
  * Service that provides sampling capability when the downstream client
  * does not natively support it, by routing requests through an ACP agent.
  */
-export interface ISamplingPonyfill {
+export interface ISamplingShim {
   /**
-   * Initialize the ponyfill for a gateway session.
+   * Initialize the shim for a gateway session.
    * Spawns an ACP agent process and establishes a connection.
    */
   initialize(sessionId: string): Promise<void>;

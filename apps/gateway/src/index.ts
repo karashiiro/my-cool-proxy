@@ -9,7 +9,7 @@ import type {
   ICapabilityStore,
   ILogger,
   IMCPClientManager,
-  ISamplingPonyfill,
+  ISamplingShim,
   IServerInfoPreloader,
   IShutdownHandler,
   ISkillDiscoveryService,
@@ -203,9 +203,9 @@ async function startHttpMode(
         sessionInstructions,
       );
 
-      // Resolve the sampling ponyfill from the container if bound
-      const samplingPonyfill = container.isBound(TYPES.SamplingPonyfill)
-        ? container.get<ISamplingPonyfill>(TYPES.SamplingPonyfill)
+      // Resolve the sampling shim from the container if bound
+      const samplingShim = container.isBound(TYPES.SamplingShim)
+        ? container.get<ISamplingShim>(TYPES.SamplingShim)
         : undefined;
 
       // Set up callback to initialize upstream clients when downstream client connects
@@ -219,28 +219,28 @@ async function startHttpMode(
         // Store capabilities for this session
         capabilityStore.setCapabilities(sessionId, capabilities);
 
-        // Create session-isolated tempdir for sampling ponyfill
+        // Create session-isolated tempdir for sampling shim
         // Note: roots/list is currently broken in the TS SDK, so we always use tempdir
         const workingDirectory = createSessionTempDir(sessionId);
         logger.info(
           `Session ${sessionId}: Using tempdir as cwd: ${workingDirectory}`,
         );
 
-        // Store working directory BEFORE initializing ponyfill
+        // Store working directory BEFORE initializing shim
         capabilityStore.setWorkingDirectory(sessionId, workingDirectory);
 
-        // Determine if we need the sampling ponyfill:
+        // Determine if we need the sampling shim:
         // Only when client lacks native sampling AND an ACP agent is configured
-        let activePonyfill: ISamplingPonyfill | undefined;
+        let activeShim: ISamplingShim | undefined;
         let upstreamCapabilities = capabilities;
 
-        if (!capabilities.sampling && samplingPonyfill) {
+        if (!capabilities.sampling && samplingShim) {
           try {
             logger.info(
-              `Session ${sessionId}: Client lacks sampling support, initializing ACP ponyfill`,
+              `Session ${sessionId}: Client lacks sampling support, initializing ACP shim`,
             );
-            await samplingPonyfill.initialize(sessionId);
-            activePonyfill = samplingPonyfill;
+            await samplingShim.initialize(sessionId);
+            activeShim = samplingShim;
 
             // Augment capabilities so upstream servers see sampling support.
             // This global augmentation is safe - buildClientCapabilities() filters
@@ -249,7 +249,7 @@ async function startHttpMode(
             upstreamCapabilities = { ...capabilities, sampling: {} };
           } catch (error) {
             logger.error(
-              "Failed to initialize sampling ponyfill, continuing without sampling support",
+              "Failed to initialize sampling shim, continuing without sampling support",
               error instanceof Error ? error : new Error(String(error)),
             );
           }
@@ -286,14 +286,14 @@ async function startHttpMode(
 
         // Register proxy handlers for sampling/elicitation forwarding
         // Pass real capabilities (not augmented) so the native path doesn't activate
-        // when only the ponyfill is providing sampling
+        // when only the shim is providing sampling
         registerProxyHandlers(
           sessionId,
           clientManager,
           gatewayServer,
           logger,
           capabilities,
-          activePonyfill,
+          activeShim,
         );
       });
 
@@ -321,12 +321,10 @@ async function startHttpMode(
 
             capabilityStore.deleteCapabilities(sessionId);
 
-            // Clean up sampling ponyfill if active
-            if (container.isBound(TYPES.SamplingPonyfill)) {
-              const ponyfill = container.get<ISamplingPonyfill>(
-                TYPES.SamplingPonyfill,
-              );
-              await ponyfill.close(sessionId);
+            // Clean up sampling shim if active
+            if (container.isBound(TYPES.SamplingShim)) {
+              const shim = container.get<ISamplingShim>(TYPES.SamplingShim);
+              await shim.close(sessionId);
             }
           } catch (error) {
             // Log but don't re-throw - ensure callback doesn't fail the cleanup
@@ -402,9 +400,9 @@ async function startStdioMode(
     }
   }
 
-  // Resolve the sampling ponyfill from the container if bound
-  const samplingPonyfill = container.isBound(TYPES.SamplingPonyfill)
-    ? container.get<ISamplingPonyfill>(TYPES.SamplingPonyfill)
+  // Resolve the sampling shim from the container if bound
+  const samplingShim = container.isBound(TYPES.SamplingShim)
+    ? container.get<ISamplingShim>(TYPES.SamplingShim)
     : undefined;
 
   // Start stdio server - upstream clients are initialized when downstream connects
@@ -430,25 +428,23 @@ async function startStdioMode(
       // Store capabilities
       capabilityStore.setCapabilities(SESSION_ID, capabilities);
 
-      // Create session-isolated tempdir for sampling ponyfill
+      // Create session-isolated tempdir for sampling shim
       // Note: roots/list is currently broken in the TS SDK, so we always use tempdir
       const workingDirectory = createSessionTempDir(SESSION_ID);
       logger.info(`Using tempdir as cwd: ${workingDirectory}`);
 
-      // Store working directory BEFORE initializing ponyfill
+      // Store working directory BEFORE initializing shim
       capabilityStore.setWorkingDirectory(SESSION_ID, workingDirectory);
 
-      // Determine if we need the sampling ponyfill
-      let activePonyfill: ISamplingPonyfill | undefined;
+      // Determine if we need the sampling shim
+      let activeShim: ISamplingShim | undefined;
       let upstreamCapabilities = capabilities;
 
-      if (!capabilities.sampling && samplingPonyfill) {
+      if (!capabilities.sampling && samplingShim) {
         try {
-          logger.info(
-            `Client lacks sampling support, initializing ACP ponyfill`,
-          );
-          await samplingPonyfill.initialize(SESSION_ID);
-          activePonyfill = samplingPonyfill;
+          logger.info(`Client lacks sampling support, initializing ACP shim`);
+          await samplingShim.initialize(SESSION_ID);
+          activeShim = samplingShim;
 
           // Augment capabilities so upstream servers see sampling support.
           // This global augmentation is safe - buildClientCapabilities() filters
@@ -457,7 +453,7 @@ async function startStdioMode(
           upstreamCapabilities = { ...capabilities, sampling: {} };
         } catch (error) {
           logger.error(
-            "Failed to initialize sampling ponyfill, continuing without sampling support",
+            "Failed to initialize sampling shim, continuing without sampling support",
             error instanceof Error ? error : new Error(String(error)),
           );
         }
@@ -498,7 +494,7 @@ async function startStdioMode(
         gatewayServer,
         logger,
         capabilities,
-        activePonyfill,
+        activeShim,
       );
     });
 
@@ -519,9 +515,9 @@ async function startStdioMode(
       logger.debug(`Cleaned up tempdir: ${workingDir}`);
     }
 
-    // Clean up sampling ponyfill if active
-    if (samplingPonyfill) {
-      await samplingPonyfill.closeAll();
+    // Clean up sampling shim if active
+    if (samplingShim) {
+      await samplingShim.closeAll();
     }
 
     logger.info("Shutdown complete");
