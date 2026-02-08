@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { CapabilityStore } from "./capability-store.js";
-import type { ILogger, DownstreamCapabilities } from "../types/interfaces.js";
+import type { ILogger, ClientCapabilities } from "../types/interfaces.js";
 
 // Mock logger factory
 const createMockLogger = (): ILogger => ({
@@ -22,7 +22,7 @@ describe("CapabilityStore", () => {
   describe("setCapabilities", () => {
     it("should store capabilities for a session", () => {
       const sessionId = "session-123";
-      const caps: DownstreamCapabilities = {
+      const caps: ClientCapabilities = {
         sampling: { context: {} },
       };
 
@@ -34,10 +34,10 @@ describe("CapabilityStore", () => {
 
     it("should overwrite existing capabilities for same session", () => {
       const sessionId = "session-456";
-      const oldCaps: DownstreamCapabilities = {
+      const oldCaps: ClientCapabilities = {
         sampling: { context: {} },
       };
-      const newCaps: DownstreamCapabilities = {
+      const newCaps: ClientCapabilities = {
         elicitation: { form: {} },
       };
 
@@ -51,7 +51,7 @@ describe("CapabilityStore", () => {
 
     it("should log debug message with capability status", () => {
       const sessionId = "session-log";
-      const caps: DownstreamCapabilities = {
+      const caps: ClientCapabilities = {
         sampling: { context: {} },
         elicitation: { form: {} },
       };
@@ -65,7 +65,7 @@ describe("CapabilityStore", () => {
 
     it("should log false for missing capabilities", () => {
       const sessionId = "session-empty";
-      const caps: DownstreamCapabilities = {};
+      const caps: ClientCapabilities = {};
 
       store.setCapabilities(sessionId, caps);
 
@@ -78,7 +78,7 @@ describe("CapabilityStore", () => {
   describe("getCapabilities", () => {
     it("should return capabilities for existing session", () => {
       const sessionId = "session-get";
-      const caps: DownstreamCapabilities = {
+      const caps: ClientCapabilities = {
         sampling: { tools: {} },
       };
 
@@ -95,7 +95,7 @@ describe("CapabilityStore", () => {
   describe("hasCapability", () => {
     it("should return true when session has sampling capability", () => {
       const sessionId = "session-has-sampling";
-      const caps: DownstreamCapabilities = {
+      const caps: ClientCapabilities = {
         sampling: { context: {} },
       };
 
@@ -106,7 +106,7 @@ describe("CapabilityStore", () => {
 
     it("should return true when session has elicitation capability", () => {
       const sessionId = "session-has-elicitation";
-      const caps: DownstreamCapabilities = {
+      const caps: ClientCapabilities = {
         elicitation: { form: {} },
       };
 
@@ -117,7 +117,7 @@ describe("CapabilityStore", () => {
 
     it("should return false when session lacks the capability", () => {
       const sessionId = "session-no-sampling";
-      const caps: DownstreamCapabilities = {
+      const caps: ClientCapabilities = {
         elicitation: { form: {} },
       };
 
@@ -133,7 +133,7 @@ describe("CapabilityStore", () => {
 
     it("should return false when capabilities object is empty", () => {
       const sessionId = "session-empty-caps";
-      const caps: DownstreamCapabilities = {};
+      const caps: ClientCapabilities = {};
 
       store.setCapabilities(sessionId, caps);
 
@@ -145,7 +145,7 @@ describe("CapabilityStore", () => {
   describe("hasElicitationMode", () => {
     it("should return true when session has form elicitation mode", () => {
       const sessionId = "session-form";
-      const caps: DownstreamCapabilities = {
+      const caps: ClientCapabilities = {
         elicitation: { form: {} },
       };
 
@@ -156,7 +156,7 @@ describe("CapabilityStore", () => {
 
     it("should return true when session has url elicitation mode", () => {
       const sessionId = "session-url";
-      const caps: DownstreamCapabilities = {
+      const caps: ClientCapabilities = {
         elicitation: { url: {} },
       };
 
@@ -167,7 +167,7 @@ describe("CapabilityStore", () => {
 
     it("should return true when session has both elicitation modes", () => {
       const sessionId = "session-both";
-      const caps: DownstreamCapabilities = {
+      const caps: ClientCapabilities = {
         elicitation: { form: {}, url: {} },
       };
 
@@ -179,7 +179,7 @@ describe("CapabilityStore", () => {
 
     it("should return false when session lacks the elicitation mode", () => {
       const sessionId = "session-only-form";
-      const caps: DownstreamCapabilities = {
+      const caps: ClientCapabilities = {
         elicitation: { form: {} },
       };
 
@@ -190,7 +190,7 @@ describe("CapabilityStore", () => {
 
     it("should return false when session has no elicitation capability", () => {
       const sessionId = "session-no-elicitation";
-      const caps: DownstreamCapabilities = {
+      const caps: ClientCapabilities = {
         sampling: { context: {} },
       };
 
@@ -209,7 +209,7 @@ describe("CapabilityStore", () => {
   describe("deleteCapabilities", () => {
     it("should remove capabilities for a session", () => {
       const sessionId = "session-to-delete";
-      const caps: DownstreamCapabilities = {
+      const caps: ClientCapabilities = {
         sampling: { context: {} },
       };
 
@@ -243,8 +243,8 @@ describe("CapabilityStore", () => {
     it("should not affect other sessions when deleting", () => {
       const session1 = "session-1";
       const session2 = "session-2";
-      const caps1: DownstreamCapabilities = { sampling: { context: {} } };
-      const caps2: DownstreamCapabilities = { elicitation: { form: {} } };
+      const caps1: ClientCapabilities = { sampling: { context: {} } };
+      const caps2: ClientCapabilities = { elicitation: { form: {} } };
 
       store.setCapabilities(session1, caps1);
       store.setCapabilities(session2, caps2);

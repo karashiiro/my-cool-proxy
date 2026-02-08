@@ -1,8 +1,9 @@
 import type { MCPClientSession } from "@my-cool-proxy/mcp-client";
 import type { ACPAgentConfig } from "@my-cool-proxy/acp-client";
 import type { SkillMetadata } from "./skill.js";
+import type { ClientCapabilities } from "@modelcontextprotocol/sdk/types.js";
 
-export type { ACPAgentConfig };
+export type { ACPAgentConfig, ClientCapabilities };
 
 export interface ILuaRuntime {
   executeScript(
@@ -24,7 +25,7 @@ export interface IMCPClientManager {
     sessionId: string,
     headers?: Record<string, string>,
     allowedTools?: string[],
-    clientCapabilities?: DownstreamCapabilities,
+    clientCapabilities?: ClientCapabilities,
   ): Promise<ClientConnectionResult>;
   addStdioClient(
     name: string,
@@ -33,7 +34,7 @@ export interface IMCPClientManager {
     args?: string[],
     env?: Record<string, string>,
     allowedTools?: string[],
-    clientCapabilities?: DownstreamCapabilities,
+    clientCapabilities?: ClientCapabilities,
     stderrLogPath?: string,
   ): Promise<ClientConnectionResult>;
   getClient(name: string, sessionId: string): Promise<MCPClientSession>;
@@ -211,21 +212,6 @@ export interface ICacheService<T> {
 }
 
 /**
- * Downstream client capabilities that we care about for proxying.
- * These are the capabilities that affect what we can forward to downstream clients.
- */
-export interface DownstreamCapabilities {
-  sampling?: {
-    context?: object;
-    tools?: object;
-  };
-  elicitation?: {
-    form?: object;
-    url?: object;
-  };
-}
-
-/**
  * Store for tracking downstream client capabilities per session.
  * Used to determine what capabilities to advertise to upstream servers.
  */
@@ -233,12 +219,12 @@ export interface ICapabilityStore {
   /**
    * Store capabilities for a session.
    */
-  setCapabilities(sessionId: string, caps: DownstreamCapabilities): void;
+  setCapabilities(sessionId: string, caps: ClientCapabilities): void;
 
   /**
    * Get capabilities for a session.
    */
-  getCapabilities(sessionId: string): DownstreamCapabilities | undefined;
+  getCapabilities(sessionId: string): ClientCapabilities | undefined;
 
   /**
    * Check if a session has a specific capability.

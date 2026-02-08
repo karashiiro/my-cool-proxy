@@ -6,7 +6,7 @@ import type {
   ILogger,
   IMCPClientManager,
   ISamplingPonyfill,
-  DownstreamCapabilities,
+  ClientCapabilities,
 } from "../types/interfaces.js";
 import type { MCPGatewayServer } from "../mcp/gateway-server.js";
 
@@ -20,7 +20,7 @@ export function registerProxyHandlers(
   clientManager: IMCPClientManager,
   gatewayServer: MCPGatewayServer,
   logger: ILogger,
-  capabilities: DownstreamCapabilities,
+  capabilities: ClientCapabilities,
   samplingPonyfill?: ISamplingPonyfill,
 ): void {
   const clients = clientManager.getClientsBySession(sessionId);

@@ -1,3 +1,4 @@
 export * from "./mcp-acp-mappers.js";
 export * from "./tempdir.js";
-export * from "./root-utils.js";
+// Root utils removed - roots/list is currently broken in the TS SDK
+// export * from "./root-utils.js";
