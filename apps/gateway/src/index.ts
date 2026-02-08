@@ -213,9 +213,9 @@ async function startHttpMode(
       // Set up callback to initialize upstream clients when downstream client connects
       // This ensures we forward the correct capabilities to upstream servers
       gatewayServer.setOnDownstreamInitialized(async (capabilities) => {
-        logger.info(
+        logger.debug(
           `Session ${sessionId}: Downstream client initialized with capabilities: ` +
-            `sampling=${!!capabilities.sampling}, elicitation=${!!capabilities.elicitation}`,
+            JSON.stringify(capabilities, null, 2),
         );
 
         // Store capabilities for this session
@@ -449,9 +449,9 @@ async function startStdioMode(
 
     // Set up callback to initialize upstream clients when downstream client connects
     gatewayServer.setOnDownstreamInitialized(async (capabilities) => {
-      logger.info(
+      logger.debug(
         `Downstream client initialized with capabilities: ` +
-          `sampling=${!!capabilities.sampling}, elicitation=${!!capabilities.elicitation}`,
+          JSON.stringify(capabilities, null, 2),
       );
 
       // Store capabilities
