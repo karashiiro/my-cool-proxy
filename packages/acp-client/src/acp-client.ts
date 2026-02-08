@@ -146,16 +146,17 @@ export class ACPClient {
   /**
    * Create a new ACP session.
    *
+   * @param cwd - Optional working directory for the session. Defaults to the gateway's cwd if not provided.
    * @returns An ACPClientSession that can be used to send prompts
    * @throws Error if the client is not connected
    */
-  async createSession(): Promise<ACPClientSession> {
+  async createSession(cwd?: string): Promise<ACPClientSession> {
     if (!this.connection || !this.handler) {
       throw new Error("ACPClient is not connected. Call connect() first.");
     }
 
     const sessionResult = await this.connection.newSession({
-      cwd: process.cwd(),
+      cwd: cwd ?? process.cwd(),
       mcpServers: [],
     });
 

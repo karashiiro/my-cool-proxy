@@ -4,8 +4,14 @@ import type {
   CreateMessageRequest,
   CreateMessageResult,
 } from "@modelcontextprotocol/sdk/types.js";
-import type { ISamplingPonyfill, ILogger } from "../types/interfaces.js";
+import type {
+  ISamplingPonyfill,
+  ILogger,
+  ICapabilityStore,
+} from "../types/interfaces.js";
 import { mapMcpToAcpPrompt, mapAcpToMcpResult } from "../utils/index.js";
+import { $inject } from "../container/decorators.js";
+import { TYPES } from "../types/index.js";
 
 /**
  * Provides sampling capability when the downstream client does not natively
@@ -17,6 +23,7 @@ import { mapMcpToAcpPrompt, mapAcpToMcpResult } from "../utils/index.js";
  * Lifecycle:
  * - One ACPClient per gateway session (long-lived agent process)
  * - One ACPClientSession per sampling request (short-lived, isolated)
+ * - Working directory is determined by index.ts during initialization (roots or tempdir)
  */
 @injectable()
 export class SamplingPonyfill implements ISamplingPonyfill {
@@ -24,12 +31,15 @@ export class SamplingPonyfill implements ISamplingPonyfill {
 
   constructor(
     private readonly agentConfig: ACPAgentConfig,
-    private readonly logger: ILogger,
+    @$inject(TYPES.Logger) private readonly logger: ILogger,
+    @$inject(TYPES.CapabilityStore)
+    private readonly capabilityStore: ICapabilityStore,
   ) {}
 
   /**
    * Initialize the ponyfill for a gateway session.
    * Spawns an ACP agent process and establishes a connection.
+   * Working directory is determined by the caller (index.ts) and stored in CapabilityStore.
    */
   async initialize(sessionId: string): Promise<void> {
     if (this.clients.has(sessionId)) {
@@ -52,15 +62,24 @@ export class SamplingPonyfill implements ISamplingPonyfill {
   /**
    * Handle a sampling request by forwarding it through the ACP agent.
    * Creates a new ACP session for each request (short-lived, isolated).
+   * Uses the working directory stored in CapabilityStore (client root or tempdir).
    */
   async handleSamplingRequest(
     sessionId: string,
     params: CreateMessageRequest["params"],
   ): Promise<CreateMessageResult> {
     const client = this.clients.get(sessionId);
+    const cwd = this.capabilityStore.getWorkingDirectory(sessionId);
+
     if (!client) {
       throw new Error(
         `Sampling ponyfill not initialized for session ${sessionId}`,
+      );
+    }
+
+    if (!cwd) {
+      throw new Error(
+        `Working directory not initialized for session ${sessionId}`,
       );
     }
 
@@ -68,8 +87,8 @@ export class SamplingPonyfill implements ISamplingPonyfill {
     // respecting the agent's advertised prompt capabilities
     const acpContent = mapMcpToAcpPrompt(params, client.promptCapabilities);
 
-    // Create a new ACP session for this request
-    const session = await client.createSession();
+    // Create a new ACP session for this request with the stored cwd
+    const session = await client.createSession(cwd);
 
     // Send the prompt and get the result
     const acpResult = await session.prompt(acpContent);
@@ -80,10 +99,11 @@ export class SamplingPonyfill implements ISamplingPonyfill {
 
   /**
    * Close the ponyfill for a specific session.
-   * Kills the ACP agent process and cleans up.
+   * Kills the ACP agent process. Tempdir cleanup is handled by the caller (index.ts).
    */
   async close(sessionId: string): Promise<void> {
     const client = this.clients.get(sessionId);
+
     if (client) {
       this.logger.debug(`Closing sampling ponyfill for session ${sessionId}`);
       await client.close();
