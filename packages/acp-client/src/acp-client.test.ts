@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import type { ChildProcess } from "child_process";
-import type { ILogger } from "./types.js";
+import { spawn, type ChildProcess } from "child_process";
+import type { ILogger } from "@my-cool-proxy/acp-client";
 
 // Mock child_process
 vi.mock("child_process", () => ({
@@ -84,7 +84,6 @@ describe("ACPClient", () => {
   describe("connect", () => {
     it("should spawn process with correct command and args", async () => {
       const { ACPClient } = await import("./acp-client.js");
-      const { spawn } = await import("child_process");
 
       const client = new ACPClient(
         { command: "node", args: ["agent.js"] },
@@ -96,12 +95,12 @@ describe("ACPClient", () => {
       expect(spawn).toHaveBeenCalledWith("node", ["agent.js"], {
         stdio: ["pipe", "pipe", "inherit"],
         env: undefined,
+        shell: true,
       });
     });
 
     it("should pass environment variables to spawned process", async () => {
       const { ACPClient } = await import("./acp-client.js");
-      const { spawn } = await import("child_process");
 
       const client = new ACPClient(
         { command: "node", args: ["agent.js"], env: { MODEL: "gpt-4" } },
@@ -113,6 +112,7 @@ describe("ACPClient", () => {
       expect(spawn).toHaveBeenCalledWith("node", ["agent.js"], {
         stdio: ["pipe", "pipe", "inherit"],
         env: expect.objectContaining({ MODEL: "gpt-4" }),
+        shell: true,
       });
     });
 
@@ -134,7 +134,6 @@ describe("ACPClient", () => {
 
     it("should throw if process stdio is not available", async () => {
       const { ACPClient } = await import("./acp-client.js");
-      const { spawn } = await import("child_process");
 
       // Mock process without stdin/stdout
       vi.mocked(spawn).mockReturnValue({
@@ -156,7 +155,6 @@ describe("ACPClient", () => {
 
     it("should use default empty args when none provided", async () => {
       const { ACPClient } = await import("./acp-client.js");
-      const { spawn } = await import("child_process");
 
       const client = new ACPClient({ command: "my-agent" }, createMockLogger());
 
