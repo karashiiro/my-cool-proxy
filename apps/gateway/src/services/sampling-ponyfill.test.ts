@@ -11,10 +11,12 @@ vi.mock("@my-cool-proxy/acp-client", () => ({
   ACPClient: vi.fn(),
 }));
 
-// Mock the mappers
+// Mock the mappers and tempdir utilities
 vi.mock("../utils/index.js", () => ({
   mapMcpToAcpPrompt: vi.fn(),
   mapAcpToMcpResult: vi.fn(),
+  createSessionTempDir: vi.fn((sessionId: string) => `/tmp/test-${sessionId}`),
+  cleanupSessionTempDir: vi.fn(),
 }));
 
 const createMockLogger = (): ILogger => ({
@@ -22,6 +24,16 @@ const createMockLogger = (): ILogger => ({
   warn: vi.fn(),
   error: vi.fn(),
   debug: vi.fn(),
+});
+
+const createMockCapabilityStore = () => ({
+  setCapabilities: vi.fn(),
+  getCapabilities: vi.fn(),
+  hasCapability: vi.fn(),
+  hasElicitationMode: vi.fn(),
+  deleteCapabilities: vi.fn(),
+  setWorkingDirectory: vi.fn(),
+  getWorkingDirectory: vi.fn().mockReturnValue("/tmp/test-session-1"),
 });
 
 describe("SamplingPonyfill", () => {
@@ -76,7 +88,11 @@ describe("SamplingPonyfill", () => {
 
   describe("initialize", () => {
     it("should create an ACPClient and connect", async () => {
-      const ponyfill = new SamplingPonyfill(agentConfig, createMockLogger());
+      const ponyfill = new SamplingPonyfill(
+        agentConfig,
+        createMockLogger(),
+        createMockCapabilityStore() as never,
+      );
       await ponyfill.initialize("session-1");
 
       expect(ACPClient).toHaveBeenCalledWith(agentConfig, expect.anything());
@@ -84,7 +100,11 @@ describe("SamplingPonyfill", () => {
     });
 
     it("should throw if called twice for the same session", async () => {
-      const ponyfill = new SamplingPonyfill(agentConfig, createMockLogger());
+      const ponyfill = new SamplingPonyfill(
+        agentConfig,
+        createMockLogger(),
+        createMockCapabilityStore() as never,
+      );
       await ponyfill.initialize("session-1");
 
       await expect(ponyfill.initialize("session-1")).rejects.toThrow(
@@ -93,7 +113,11 @@ describe("SamplingPonyfill", () => {
     });
 
     it("should store the client for the session", async () => {
-      const ponyfill = new SamplingPonyfill(agentConfig, createMockLogger());
+      const ponyfill = new SamplingPonyfill(
+        agentConfig,
+        createMockLogger(),
+        createMockCapabilityStore() as never,
+      );
       await ponyfill.initialize("session-1");
 
       // Should not throw - session is now initialized
@@ -109,7 +133,11 @@ describe("SamplingPonyfill", () => {
 
   describe("handleSamplingRequest", () => {
     it("should create a session, map request, call prompt, and map result", async () => {
-      const ponyfill = new SamplingPonyfill(agentConfig, createMockLogger());
+      const ponyfill = new SamplingPonyfill(
+        agentConfig,
+        createMockLogger(),
+        createMockCapabilityStore() as never,
+      );
       await ponyfill.initialize("session-1");
 
       const params: CreateMessageRequest["params"] = {
@@ -125,8 +153,10 @@ describe("SamplingPonyfill", () => {
         audio: true,
       });
 
-      // Should create an ACP session
-      expect(mockAcpClient.createSession).toHaveBeenCalled();
+      // Should create an ACP session with the cwd from CapabilityStore
+      expect(mockAcpClient.createSession).toHaveBeenCalledWith(
+        "/tmp/test-session-1",
+      );
 
       // Should call prompt with the mapped content
       expect(mockSession.prompt).toHaveBeenCalledWith([
@@ -149,7 +179,11 @@ describe("SamplingPonyfill", () => {
     });
 
     it("should throw for an uninitialized session", async () => {
-      const ponyfill = new SamplingPonyfill(agentConfig, createMockLogger());
+      const ponyfill = new SamplingPonyfill(
+        agentConfig,
+        createMockLogger(),
+        createMockCapabilityStore() as never,
+      );
 
       const params: CreateMessageRequest["params"] = {
         messages: [{ role: "user", content: { type: "text", text: "Hello" } }],
@@ -164,7 +198,11 @@ describe("SamplingPonyfill", () => {
 
   describe("close", () => {
     it("should close the ACPClient for the session", async () => {
-      const ponyfill = new SamplingPonyfill(agentConfig, createMockLogger());
+      const ponyfill = new SamplingPonyfill(
+        agentConfig,
+        createMockLogger(),
+        createMockCapabilityStore() as never,
+      );
       await ponyfill.initialize("session-1");
       await ponyfill.close("session-1");
 
@@ -172,7 +210,11 @@ describe("SamplingPonyfill", () => {
     });
 
     it("should remove the session from the map after closing", async () => {
-      const ponyfill = new SamplingPonyfill(agentConfig, createMockLogger());
+      const ponyfill = new SamplingPonyfill(
+        agentConfig,
+        createMockLogger(),
+        createMockCapabilityStore() as never,
+      );
       await ponyfill.initialize("session-1");
       await ponyfill.close("session-1");
 
@@ -187,7 +229,11 @@ describe("SamplingPonyfill", () => {
     });
 
     it("should be safe to close a non-existent session", async () => {
-      const ponyfill = new SamplingPonyfill(agentConfig, createMockLogger());
+      const ponyfill = new SamplingPonyfill(
+        agentConfig,
+        createMockLogger(),
+        createMockCapabilityStore() as never,
+      );
 
       // Should not throw
       await ponyfill.close("nonexistent");
@@ -214,7 +260,11 @@ describe("SamplingPonyfill", () => {
         return (callCount === 1 ? mockClient1 : mockClient2) as never;
       });
 
-      const ponyfill = new SamplingPonyfill(agentConfig, createMockLogger());
+      const ponyfill = new SamplingPonyfill(
+        agentConfig,
+        createMockLogger(),
+        createMockCapabilityStore() as never,
+      );
       await ponyfill.initialize("session-1");
       await ponyfill.initialize("session-2");
 
@@ -225,7 +275,11 @@ describe("SamplingPonyfill", () => {
     });
 
     it("should clear the session map after closing all", async () => {
-      const ponyfill = new SamplingPonyfill(agentConfig, createMockLogger());
+      const ponyfill = new SamplingPonyfill(
+        agentConfig,
+        createMockLogger(),
+        createMockCapabilityStore() as never,
+      );
       await ponyfill.initialize("session-1");
 
       await ponyfill.closeAll();

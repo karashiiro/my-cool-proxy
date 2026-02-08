@@ -18,6 +18,11 @@ import type {
   PromptAggregationService,
 } from "@my-cool-proxy/mcp-aggregation";
 import type { IToolRegistry } from "../../tools/tool-registry.js";
+import {
+  createSessionTempDir,
+  cleanupSessionTempDir,
+  findValidLocalRoot,
+} from "../../utils/index.js";
 
 export class HttpServerManager {
   private serverHandle: ServerHandle | null = null;
@@ -92,14 +97,43 @@ export class HttpServerManager {
           // Store capabilities for this session
           capabilityStore.setCapabilities(sessionId, capabilities);
 
+          // Request roots and determine working directory FIRST
+          // This must happen before initializing the ponyfill since it needs the cwd
+          let workingDirectory: string;
+
+          try {
+            const roots = await gatewayServer.requestRootsFromClient();
+            const validRoot = roots ? findValidLocalRoot(roots) : undefined;
+
+            if (validRoot) {
+              logger.info(
+                `Session ${sessionId}: Using client root as cwd: ${validRoot}`,
+              );
+              workingDirectory = validRoot;
+            } else {
+              logger.info(
+                `Session ${sessionId}: No valid local roots, using tempdir`,
+              );
+              workingDirectory = createSessionTempDir(sessionId);
+            }
+          } catch (error) {
+            logger.warn(
+              `Session ${sessionId}: Failed to determine cwd from roots, using tempdir: ${error instanceof Error ? error.message : String(error)}`,
+            );
+            workingDirectory = createSessionTempDir(sessionId);
+          }
+
+          // Store working directory BEFORE initializing ponyfill
+          capabilityStore.setWorkingDirectory(sessionId, workingDirectory);
+
           // Determine if we need the sampling ponyfill
           let activePonyfill: ISamplingPonyfill | undefined;
           let upstreamCapabilities = capabilities;
 
           if (!capabilities.sampling && samplingPonyfill) {
             try {
-              logger.debug(
-                `Session ${sessionId}: Client lacks sampling, initializing ACP ponyfill`,
+              logger.info(
+                `Session ${sessionId}: Client lacks sampling support, initializing ACP ponyfill`,
               );
               await samplingPonyfill.initialize(sessionId);
               activePonyfill = samplingPonyfill;
@@ -140,6 +174,13 @@ export class HttpServerManager {
           onSessionClosed: async (sessionId) => {
             try {
               await clientManager.closeSession(sessionId);
+
+              // Clean up working directory if it's a tempdir
+              const workingDir = capabilityStore.getWorkingDirectory(sessionId);
+              if (workingDir && workingDir.includes("mcp-gateway-")) {
+                cleanupSessionTempDir(workingDir);
+              }
+
               capabilityStore.deleteCapabilities(sessionId);
               if (samplingPonyfill) {
                 await samplingPonyfill.close(sessionId);

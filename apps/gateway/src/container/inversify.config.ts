@@ -172,7 +172,14 @@ export function createContainer(
       .bind<ISamplingPonyfill>(TYPES.SamplingPonyfill)
       .toDynamicValue(() => {
         const logger = container.get<ILogger>(TYPES.Logger);
-        return new SamplingPonyfill(config.acp!.agent!, logger);
+        const capabilityStore = container.get<ICapabilityStore>(
+          TYPES.CapabilityStore,
+        );
+        return new SamplingPonyfill(
+          config.acp!.agent!,
+          logger,
+          capabilityStore,
+        );
       })
       .inSingletonScope();
   }

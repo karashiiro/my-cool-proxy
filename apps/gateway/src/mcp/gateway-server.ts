@@ -5,12 +5,14 @@ import {
   ReadResourceRequestSchema,
   ListPromptsRequestSchema,
   GetPromptRequestSchema,
+  ListRootsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import type {
   CreateMessageRequest,
   CreateMessageResult,
   ElicitRequest,
   ElicitResult,
+  Root,
 } from "@modelcontextprotocol/sdk/types.js";
 import type {
   IMCPClientManager,
@@ -212,7 +214,7 @@ export class MCPGatewayServer {
     this.onDownstreamInitialized = callback;
 
     // Hook into the underlying server's initialization completion
-    this.server.server.oninitialized = () => {
+    this.server.server.oninitialized = async () => {
       const clientCaps = this.server.server.getClientCapabilities();
 
       // Extract the capabilities we care about for proxying
@@ -225,8 +227,8 @@ export class MCPGatewayServer {
         `Downstream client initialized with capabilities: sampling=${!!downstreamCaps.sampling}, elicitation=${!!downstreamCaps.elicitation}`,
       );
 
-      // Call the callback (may be async, but we don't await here)
-      void this.onDownstreamInitialized?.(downstreamCaps);
+      // Call the callback and await it to ensure proper initialization order
+      await this.onDownstreamInitialized?.(downstreamCaps);
     };
   }
 
@@ -302,6 +304,44 @@ export class MCPGatewayServer {
         error instanceof Error ? error : new Error(String(error)),
       );
       throw error;
+    }
+  }
+
+  /**
+   * Request the list of roots from the downstream client.
+   * Returns undefined if the client doesn't support roots or the request fails.
+   *
+   * @returns The list of roots from the client, or undefined if unavailable
+   */
+  async requestRootsFromClient(): Promise<Root[] | undefined> {
+    try {
+      this.logger.debug("Requesting roots from downstream client");
+
+      // Add a timeout to prevent blocking if client doesn't support roots
+      const timeoutMs = 1000;
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("Timeout")), timeoutMs),
+      );
+
+      const requestPromise = this.server.server.request(
+        { method: "roots/list" },
+        ListRootsRequestSchema,
+      );
+
+      const result = (await Promise.race([
+        requestPromise,
+        timeoutPromise,
+      ])) as unknown as {
+        roots: Root[];
+      };
+
+      this.logger.debug(`Received ${result.roots.length} root(s) from client`);
+      return result.roots;
+    } catch {
+      this.logger.debug(
+        "Downstream client does not support roots or request failed",
+      );
+      return undefined;
     }
   }
 }

@@ -257,6 +257,18 @@ export interface ICapabilityStore {
    * Remove capabilities for a session (cleanup).
    */
   deleteCapabilities(sessionId: string): void;
+
+  /**
+   * Store the working directory for a session.
+   * This is either a valid local root from the client, or a tempdir.
+   */
+  setWorkingDirectory(sessionId: string, cwd: string): void;
+
+  /**
+   * Get the working directory for a session.
+   * Returns undefined if not set.
+   */
+  getWorkingDirectory(sessionId: string): string | undefined;
 }
 
 /**

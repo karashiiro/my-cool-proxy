@@ -28,6 +28,11 @@ import type {
 import { parseArgs } from "./utils/cli-args.js";
 import { getConfigPaths, getPlatformConfigDir } from "./utils/config-paths.js";
 import { ensureServerLogDir, getServerLogPath } from "./utils/log-paths.js";
+import {
+  createSessionTempDir,
+  cleanupSessionTempDir,
+  findValidLocalRoot,
+} from "./utils/index.js";
 
 interface InitializationResult {
   successful: string[];
@@ -216,6 +221,44 @@ async function startHttpMode(
         // Store capabilities for this session
         capabilityStore.setCapabilities(sessionId, capabilities);
 
+        // Request roots and determine working directory FIRST
+        // This must happen before initializing the ponyfill since it needs the cwd
+        let workingDirectory: string;
+
+        logger.debug(`Session ${sessionId}: About to request roots`);
+
+        try {
+          const roots = await gatewayServer.requestRootsFromClient();
+          logger.debug(
+            `Session ${sessionId}: Roots request completed, roots=${!!roots}`,
+          );
+          const validRoot = roots ? findValidLocalRoot(roots) : undefined;
+
+          if (validRoot) {
+            logger.info(
+              `Session ${sessionId}: Using client root as cwd: ${validRoot}`,
+            );
+            workingDirectory = validRoot;
+          } else {
+            logger.info(
+              `Session ${sessionId}: No valid local roots, using tempdir`,
+            );
+            workingDirectory = createSessionTempDir(sessionId);
+          }
+        } catch (error) {
+          logger.warn(
+            `Session ${sessionId}: Failed to determine cwd from roots, using tempdir: ${error instanceof Error ? error.message : String(error)}`,
+          );
+          workingDirectory = createSessionTempDir(sessionId);
+        }
+
+        logger.debug(
+          `Session ${sessionId}: Working directory determined: ${workingDirectory}`,
+        );
+
+        // Store working directory BEFORE initializing ponyfill
+        capabilityStore.setWorkingDirectory(sessionId, workingDirectory);
+
         // Determine if we need the sampling ponyfill:
         // Only when client lacks native sampling AND an ACP agent is configured
         let activePonyfill: ISamplingPonyfill | undefined;
@@ -292,6 +335,17 @@ async function startHttpMode(
           logger.debug(`Session ${sessionId} closed, cleaning up...`);
           try {
             await clientManager.closeSession(sessionId);
+
+            // Clean up working directory if it's a tempdir
+            const workingDir = capabilityStore.getWorkingDirectory(sessionId);
+            if (workingDir && workingDir.includes("mcp-gateway-")) {
+              // Only clean up if it's one of our tempdirs (contains our prefix)
+              cleanupSessionTempDir(workingDir);
+              logger.debug(
+                `Cleaned up tempdir for session ${sessionId}: ${workingDir}`,
+              );
+            }
+
             capabilityStore.deleteCapabilities(sessionId);
 
             // Clean up sampling ponyfill if active
@@ -403,6 +457,36 @@ async function startStdioMode(
       // Store capabilities
       capabilityStore.setCapabilities(SESSION_ID, capabilities);
 
+      // Request roots and determine working directory FIRST
+      // This must happen before initializing the ponyfill since it needs the cwd
+      let workingDirectory: string;
+
+      logger.debug("About to request roots");
+
+      try {
+        const roots = await gatewayServer.requestRootsFromClient();
+        logger.debug(`Roots request completed, roots=${!!roots}`);
+        const validRoot = roots ? findValidLocalRoot(roots) : undefined;
+
+        if (validRoot) {
+          logger.info(`Using client root as cwd: ${validRoot}`);
+          workingDirectory = validRoot;
+        } else {
+          logger.info(`No valid local roots, using tempdir`);
+          workingDirectory = createSessionTempDir(SESSION_ID);
+        }
+      } catch (error) {
+        logger.warn(
+          `Failed to determine cwd from roots, using tempdir: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        workingDirectory = createSessionTempDir(SESSION_ID);
+      }
+
+      logger.debug(`Working directory determined: ${workingDirectory}`);
+
+      // Store working directory BEFORE initializing ponyfill
+      capabilityStore.setWorkingDirectory(SESSION_ID, workingDirectory);
+
       // Determine if we need the sampling ponyfill
       let activePonyfill: ISamplingPonyfill | undefined;
       let upstreamCapabilities = capabilities;
@@ -473,6 +557,13 @@ async function startStdioMode(
   process.on("SIGINT", async () => {
     await handle.close();
     await clientManager.close();
+
+    // Clean up working directory if it's a tempdir
+    const workingDir = capabilityStore.getWorkingDirectory(SESSION_ID);
+    if (workingDir && workingDir.includes("mcp-gateway-")) {
+      cleanupSessionTempDir(workingDir);
+      logger.debug(`Cleaned up tempdir: ${workingDir}`);
+    }
 
     // Clean up sampling ponyfill if active
     if (samplingPonyfill) {
