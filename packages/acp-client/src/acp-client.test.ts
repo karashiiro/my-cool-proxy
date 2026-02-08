@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { spawn, type ChildProcess } from "child_process";
-import type { ILogger } from "@my-cool-proxy/acp-client";
+import { ACPClient, type ILogger } from "@my-cool-proxy/acp-client";
 
 // Mock child_process
 vi.mock("child_process", () => ({
@@ -83,8 +83,6 @@ describe("ACPClient", () => {
 
   describe("connect", () => {
     it("should spawn process with correct command and args", async () => {
-      const { ACPClient } = await import("./acp-client.js");
-
       const client = new ACPClient(
         { command: "node", args: ["agent.js"] },
         createMockLogger(),
@@ -100,8 +98,6 @@ describe("ACPClient", () => {
     });
 
     it("should pass environment variables to spawned process", async () => {
-      const { ACPClient } = await import("./acp-client.js");
-
       const client = new ACPClient(
         { command: "node", args: ["agent.js"], env: { MODEL: "gpt-4" } },
         createMockLogger(),
@@ -117,8 +113,6 @@ describe("ACPClient", () => {
     });
 
     it("should initialize the ACP connection with protocol version", async () => {
-      const { ACPClient } = await import("./acp-client.js");
-
       const client = new ACPClient(
         { command: "node", args: ["agent.js"] },
         createMockLogger(),
@@ -133,8 +127,6 @@ describe("ACPClient", () => {
     });
 
     it("should throw if process stdio is not available", async () => {
-      const { ACPClient } = await import("./acp-client.js");
-
       // Mock process without stdin/stdout
       vi.mocked(spawn).mockReturnValue({
         stdin: null,
@@ -154,8 +146,6 @@ describe("ACPClient", () => {
     });
 
     it("should use default empty args when none provided", async () => {
-      const { ACPClient } = await import("./acp-client.js");
-
       const client = new ACPClient({ command: "my-agent" }, createMockLogger());
 
       await client.connect();
@@ -164,8 +154,6 @@ describe("ACPClient", () => {
     });
 
     it("should capture prompt capabilities from initialize response", async () => {
-      const { ACPClient } = await import("./acp-client.js");
-
       mockConnection.initialize.mockResolvedValue({
         protocolVersion: "2025-01-01",
         agentCapabilities: {
@@ -187,8 +175,6 @@ describe("ACPClient", () => {
     });
 
     it("should default to empty capabilities when agent omits them", async () => {
-      const { ACPClient } = await import("./acp-client.js");
-
       mockConnection.initialize.mockResolvedValue({
         protocolVersion: "2025-01-01",
         // No agentCapabilities at all
@@ -207,8 +193,6 @@ describe("ACPClient", () => {
 
   describe("createSession", () => {
     it("should create a new ACP session via the connection", async () => {
-      const { ACPClient } = await import("./acp-client.js");
-
       const client = new ACPClient(
         { command: "node", args: ["agent.js"] },
         createMockLogger(),
@@ -225,8 +209,6 @@ describe("ACPClient", () => {
     });
 
     it("should throw if not connected", async () => {
-      const { ACPClient } = await import("./acp-client.js");
-
       const client = new ACPClient(
         { command: "node", args: ["agent.js"] },
         createMockLogger(),
@@ -236,8 +218,6 @@ describe("ACPClient", () => {
     });
 
     it("should return an ACPClientSession that can prompt", async () => {
-      const { ACPClient } = await import("./acp-client.js");
-
       const client = new ACPClient(
         { command: "node", args: ["agent.js"] },
         createMockLogger(),
@@ -260,8 +240,6 @@ describe("ACPClient", () => {
 
   describe("close", () => {
     it("should kill the spawned process", async () => {
-      const { ACPClient } = await import("./acp-client.js");
-
       const client = new ACPClient(
         { command: "node", args: ["agent.js"] },
         createMockLogger(),
@@ -274,8 +252,6 @@ describe("ACPClient", () => {
     });
 
     it("should be safe to call when not connected", async () => {
-      const { ACPClient } = await import("./acp-client.js");
-
       const client = new ACPClient(
         { command: "node", args: ["agent.js"] },
         createMockLogger(),
@@ -286,8 +262,6 @@ describe("ACPClient", () => {
     });
 
     it("should prevent createSession after close", async () => {
-      const { ACPClient } = await import("./acp-client.js");
-
       const client = new ACPClient(
         { command: "node", args: ["agent.js"] },
         createMockLogger(),
