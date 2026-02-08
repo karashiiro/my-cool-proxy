@@ -28,6 +28,12 @@
       "command": "npx",
       "args": ["-y", "@modelcontextprotocol/server-filesystem"],
       "allowedTools": []
+    },
+    "trusted-server-with-sampling": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["path/to/trusted-server.js"],
+      "dangerouslyEnableSampling": true
     }
   }
 }

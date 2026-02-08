@@ -181,6 +181,7 @@ describe("MCPClientManager", () => {
         undefined,
         undefined,
         caps,
+        true, // dangerouslyEnableSampling
       );
       expect(Client).toHaveBeenCalledWith(
         expect.anything(),
@@ -203,6 +204,8 @@ describe("MCPClientManager", () => {
         undefined,
         undefined,
         caps,
+        undefined, // stderrLogPath
+        true, // dangerouslyEnableSampling
       );
       expect(Client).toHaveBeenCalledWith(
         expect.anything(),
@@ -212,6 +215,79 @@ describe("MCPClientManager", () => {
           }),
         }),
       );
+    });
+
+    it("does NOT forward sampling when dangerouslyEnableSampling=false", async () => {
+      const caps: ClientCapabilities = {
+        sampling: { context: {}, tools: {} },
+      };
+      await clientManager.addHttpClient(
+        "untrusted",
+        "http://x",
+        "sess-untrusted",
+        undefined,
+        undefined,
+        caps,
+        false, // dangerouslyEnableSampling
+      );
+      expect(Client).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          capabilities: {}, // sampling NOT included
+        }),
+      );
+      expect(logger.debug).toHaveBeenCalledWith(
+        expect.stringContaining("NOT advertised"),
+      );
+    });
+
+    it("does NOT forward sampling when dangerouslyEnableSampling=undefined", async () => {
+      const caps: ClientCapabilities = { sampling: { tools: {} } };
+      await clientManager.addHttpClient(
+        "default-deny",
+        "http://x",
+        "sess-default",
+        undefined,
+        undefined,
+        caps,
+        undefined, // dangerouslyEnableSampling (default-deny)
+      );
+      expect(Client).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          capabilities: {}, // sampling NOT included
+        }),
+      );
+    });
+
+    it("does NOT forward sampling when client lacks it even with dangerouslyEnableSampling=true", async () => {
+      const capsWithoutSampling: ClientCapabilities = {
+        elicitation: { form: {} },
+      };
+      await clientManager.addHttpClient(
+        "no-client-sampling",
+        "http://x",
+        "sess-no-sampling",
+        undefined,
+        undefined,
+        capsWithoutSampling,
+        true, // dangerouslyEnableSampling (but client lacks sampling)
+      );
+      expect(Client).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          capabilities: expect.objectContaining({
+            elicitation: expect.any(Object),
+          }),
+        }),
+      );
+      // sampling should NOT be in capabilities
+      const lastCall =
+        vi.mocked(Client).mock.calls[vi.mocked(Client).mock.calls.length - 1];
+      const clientCaps = lastCall?.[1]?.capabilities as
+        | Record<string, unknown>
+        | undefined;
+      expect(clientCaps?.sampling).toBeUndefined();
     });
   });
 

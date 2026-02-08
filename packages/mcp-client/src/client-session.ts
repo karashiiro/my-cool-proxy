@@ -29,6 +29,7 @@ import { createCache } from "./cache-service.js";
 export class MCPClientSession {
   private client: Client;
   private allowedTools: string[] | undefined;
+  private dangerouslyEnableSampling: boolean;
   private logger: ILogger;
   private serverName: string;
   private toolCache: ICacheService<Tool[]>;
@@ -46,10 +47,12 @@ export class MCPClientSession {
     onResourceListChanged?: (serverName: string) => void,
     onPromptListChanged?: (serverName: string) => void,
     onToolListChanged?: (serverName: string) => void,
+    dangerouslyEnableSampling?: boolean,
   ) {
     this.client = client;
     this.serverName = serverName;
     this.allowedTools = allowedTools;
+    this.dangerouslyEnableSampling = dangerouslyEnableSampling ?? false;
     this.logger = logger;
     this.onResourceListChanged = onResourceListChanged;
     this.onPromptListChanged = onPromptListChanged;
@@ -319,5 +322,13 @@ export class MCPClientSession {
    */
   getServerName(): string {
     return this.serverName;
+  }
+
+  /**
+   * Check if sampling is enabled for this server.
+   * Returns false by default for safety - servers must explicitly opt-in.
+   */
+  getDangerouslyEnableSampling(): boolean {
+    return this.dangerouslyEnableSampling;
   }
 }

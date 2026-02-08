@@ -64,6 +64,7 @@ async function initializeClientsForSession(
           clientConfig.headers,
           clientConfig.allowedTools,
           clientCapabilities,
+          clientConfig.dangerouslyEnableSampling,
         );
       } else if (clientConfig.type === "stdio") {
         // Generate log path for stdio server stderr
@@ -77,6 +78,7 @@ async function initializeClientsForSession(
           clientConfig.allowedTools,
           clientCapabilities,
           stderrLogPath,
+          clientConfig.dangerouslyEnableSampling,
         );
       } else {
         // Exhaustiveness check - TypeScript will error if a new type is added
@@ -240,7 +242,10 @@ async function startHttpMode(
             await samplingPonyfill.initialize(sessionId);
             activePonyfill = samplingPonyfill;
 
-            // Augment capabilities so upstream servers see sampling support
+            // Augment capabilities so upstream servers see sampling support.
+            // This global augmentation is safe - buildClientCapabilities() filters
+            // per-server based on dangerouslyEnableSampling, so only trusted servers
+            // will see the sampling capability. Untrusted servers remain unaware.
             upstreamCapabilities = { ...capabilities, sampling: {} };
           } catch (error) {
             logger.error(
@@ -445,7 +450,10 @@ async function startStdioMode(
           await samplingPonyfill.initialize(SESSION_ID);
           activePonyfill = samplingPonyfill;
 
-          // Augment capabilities so upstream servers see sampling support
+          // Augment capabilities so upstream servers see sampling support.
+          // This global augmentation is safe - buildClientCapabilities() filters
+          // per-server based on dangerouslyEnableSampling, so only trusted servers
+          // will see the sampling capability. Untrusted servers remain unaware.
           upstreamCapabilities = { ...capabilities, sampling: {} };
         } catch (error) {
           logger.error(

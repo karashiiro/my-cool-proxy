@@ -32,6 +32,7 @@ describe("Sampling Proxy E2E (HTTP Mode)", () => {
         "sampling-test-server": {
           type: "http",
           url: `http://localhost:${samplingServerPort}/mcp`,
+          dangerouslyEnableSampling: true,
         },
       },
     });
@@ -50,6 +51,7 @@ describe("Sampling Proxy E2E (HTTP Mode)", () => {
         "sampling-test-server": {
           type: "http",
           url: `http://localhost:${samplingServerPort}/mcp`,
+          dangerouslyEnableSampling: true,
         },
       },
     });

@@ -376,6 +376,39 @@ These logs are useful for debugging when upstream MCP servers encounter errors o
 
 See the [Configuration Guide](docs/configuration.md) for full configuration reference.
 
+## Security Considerations
+
+### Sampling Access Control
+
+**⚠️ IMPORTANT**: The gateway uses **default-deny** for sampling capabilities. Sampling allows MCP servers to request AI message generation, which can access your system through the downstream client. This powerful capability cannot be reliably scoped down by the gateway.
+
+**Key security features:**
+
+- **Sampling is disabled by default** - Servers cannot use sampling unless explicitly enabled
+- **Per-server opt-in required** - Set `dangerouslyEnableSampling: true` only for servers you fully trust
+- **Defense-in-depth** - Multiple security layers prevent untrusted servers from accessing sampling
+
+**Example configuration:**
+
+```json
+{
+  "mcpClients": {
+    "untrusted-server": {
+      "type": "http",
+      "url": "https://example.com/mcp"
+    },
+    "trusted-server": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["./my-trusted-server.js"],
+      "dangerouslyEnableSampling": true
+    }
+  }
+}
+```
+
+Only enable `dangerouslyEnableSampling` for servers whose code you have audited and trust with system access. See the [Sampling Security](docs/configuration.md#sampling-security) section in the configuration guide for detailed information.
+
 ## Testing
 
 ```bash

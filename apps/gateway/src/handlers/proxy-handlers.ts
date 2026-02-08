@@ -26,8 +26,12 @@ export function registerProxyHandlers(
   const clients = clientManager.getClientsBySession(sessionId);
 
   for (const [serverName, clientSession] of clients) {
-    // Register sampling handler if downstream supports it natively
-    if (capabilities.sampling) {
+    // SECURITY: Only register sampling handlers for trusted servers
+    // This is the second line of defense (after capability filtering)
+    const samplingEnabled = clientSession.getDangerouslyEnableSampling();
+
+    // Register sampling handler ONLY if server is trusted
+    if (samplingEnabled && capabilities.sampling) {
       clientSession.setRequestHandler(
         CreateMessageRequestSchema,
         async (request) => {
@@ -51,7 +55,7 @@ export function registerProxyHandlers(
       logger.debug(
         `Registered sampling request handler for upstream server '${serverName}'`,
       );
-    } else if (samplingPonyfill) {
+    } else if (samplingEnabled && samplingPonyfill) {
       // Sampling ponyfill: route through ACP agent when client lacks native sampling
       clientSession.setRequestHandler(
         CreateMessageRequestSchema,
@@ -76,6 +80,13 @@ export function registerProxyHandlers(
       );
       logger.debug(
         `Registered sampling ponyfill handler for upstream server '${serverName}'`,
+      );
+    } else if (
+      !samplingEnabled &&
+      (capabilities.sampling || samplingPonyfill)
+    ) {
+      logger.debug(
+        `NOT registering sampling handler for server '${serverName}' - dangerouslyEnableSampling not enabled`,
       );
     }
 

@@ -26,6 +26,7 @@ export interface IMCPClientManager {
     headers?: Record<string, string>,
     allowedTools?: string[],
     clientCapabilities?: ClientCapabilities,
+    dangerouslyEnableSampling?: boolean,
   ): Promise<ClientConnectionResult>;
   addStdioClient(
     name: string,
@@ -36,6 +37,7 @@ export interface IMCPClientManager {
     allowedTools?: string[],
     clientCapabilities?: ClientCapabilities,
     stderrLogPath?: string,
+    dangerouslyEnableSampling?: boolean,
   ): Promise<ClientConnectionResult>;
   getClient(name: string, sessionId: string): Promise<MCPClientSession>;
   getClientsBySession(sessionId: string): Map<string, MCPClientSession>;
@@ -82,19 +84,36 @@ export interface AuthInfo {
   expiresAt?: number;
 }
 
-export interface MCPClientConfigHTTP {
+/**
+ * Common configuration options shared by all MCP client types.
+ */
+export interface MCPClientConfigBase {
+  /**
+   * List of tool names to expose from this server.
+   * If undefined, all tools are exposed. If empty array, no tools are exposed.
+   */
+  allowedTools?: string[];
+  /**
+   * DANGEROUS: Enable sampling requests for this server.
+   * Sampling allows servers to request the AI client to create messages,
+   * potentially accessing your system through the downstream client.
+   * Only enable this for servers you fully trust with system access.
+   * Default: false
+   */
+  dangerouslyEnableSampling?: boolean;
+}
+
+export interface MCPClientConfigHTTP extends MCPClientConfigBase {
   type: "http";
   url: string;
   headers?: Record<string, string>;
-  allowedTools?: string[];
 }
 
-export interface MCPClientConfigStdio {
+export interface MCPClientConfigStdio extends MCPClientConfigBase {
   type: "stdio";
   command: string;
   args?: string[];
   env?: Record<string, string>;
-  allowedTools?: string[];
 }
 
 export type MCPClientConfig = MCPClientConfigHTTP | MCPClientConfigStdio;

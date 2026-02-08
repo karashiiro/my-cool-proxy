@@ -290,6 +290,7 @@ async function initializeSingleClient(
       clientConfig.headers,
       clientConfig.allowedTools,
       capabilities,
+      clientConfig.dangerouslyEnableSampling,
     );
   } else if (clientConfig.type === "stdio") {
     await clientManager.addStdioClient(
@@ -300,6 +301,8 @@ async function initializeSingleClient(
       clientConfig.env,
       clientConfig.allowedTools,
       capabilities,
+      undefined, // stderrLogPath - not used in e2e tests
+      clientConfig.dangerouslyEnableSampling,
     );
   }
 }

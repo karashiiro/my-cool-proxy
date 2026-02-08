@@ -474,6 +474,135 @@ In this example:
 - `admin-api` exposes additional administrative tools
 - `unrestricted-local` exposes all tools (no filter)
 
+## Sampling Security
+
+**⚠️ SECURITY CRITICAL**: Sampling is a powerful capability that allows MCP servers to request the AI client to create messages. This effectively gives servers access to your system through the downstream client. **Sampling is disabled by default for all servers** to protect you from untrusted code.
+
+### What is Sampling?
+
+Sampling allows an MCP server to send `sampling/createMessage` requests that:
+
+- Execute arbitrary prompts through your AI client
+- Potentially access your filesystem, network, and other system resources
+- Cannot be reliably scoped down by the gateway (the client decides what to allow)
+
+This means **any server with sampling access can potentially interact with your system** in ways the gateway cannot control.
+
+### Security Model
+
+The gateway implements **defense-in-depth** to prevent untrusted servers from using sampling:
+
+1. **Disabled by default**: All servers start without sampling access, even if your client supports it
+2. **Explicit opt-in per server**: You must set `dangerouslyEnableSampling: true` for each trusted server
+3. **Capability filtering**: Untrusted servers won't even know sampling exists (not advertised in capabilities)
+4. **Handler blocking**: Even if a malicious server guesses that sampling exists, no handler will be registered to process its requests
+
+### Configuration
+
+The `dangerouslyEnableSampling` field is an optional boolean in your server configuration.
+
+**Default (secure):**
+
+```json
+{
+  "untrusted-server": {
+    "type": "http",
+    "url": "https://example.com/mcp"
+  }
+}
+```
+
+When `dangerouslyEnableSampling` is not specified (or is `false`), the server **cannot** make sampling requests, even if your client supports sampling.
+
+**Explicitly enabled (use only for trusted servers):**
+
+```json
+{
+  "trusted-server": {
+    "type": "stdio",
+    "command": "node",
+    "args": ["my-trusted-server.js"],
+    "dangerouslyEnableSampling": true
+  }
+}
+```
+
+Only enable sampling for servers you **fully trust with system access**. This server will be able to make `sampling/createMessage` requests that execute through your AI client.
+
+### When to Enable Sampling
+
+Only enable `dangerouslyEnableSampling: true` when **ALL** of these conditions are met:
+
+1. **You trust the server code completely** - You've audited the source code or trust the author
+2. **The server needs sampling** - The functionality you want requires `sampling/createMessage` requests
+3. **You accept the security implications** - You understand the server can access your system through the client
+
+### Mixed Trust Example
+
+```json
+{
+  "mcpClients": {
+    "public-docs": {
+      "type": "http",
+      "url": "https://docs.example.com/mcp",
+      "allowedTools": ["search"]
+    },
+    "my-local-tools": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["./my-server.js"],
+      "dangerouslyEnableSampling": true
+    },
+    "experimental-server": {
+      "type": "http",
+      "url": "https://experimental.example.com/mcp"
+    }
+  }
+}
+```
+
+In this configuration:
+
+- `public-docs`: No sampling access (default-deny), limited to search tool
+- `my-local-tools`: Sampling enabled (trusted local code)
+- `experimental-server`: No sampling access (default-deny), untrusted
+
+### ACP Ponyfill Compatibility
+
+If you configure an ACP ponyfill (for clients that lack native sampling support), the per-server filtering **still applies**:
+
+- The ponyfill is initialized once per session (global resource)
+- Access to the ponyfill is controlled per-server (via `dangerouslyEnableSampling`)
+- Only trusted servers can route requests through the ponyfill
+- Untrusted servers remain blocked, even though the ponyfill exists
+
+This means you can safely use the ponyfill to provide sampling support, and the gateway will ensure only trusted servers can access it.
+
+### Logging
+
+The server logs helpful information about sampling configuration:
+
+**When sampling is blocked:**
+
+```
+Sampling capability NOT advertised - dangerouslyEnableSampling not enabled for this server
+NOT registering sampling handler for server 'untrusted-server' - dangerouslyEnableSampling not enabled
+```
+
+**When sampling is enabled:**
+
+```
+Advertising sampling capability to upstream (context: true, tools: true)
+Registered sampling request handler for upstream server 'trusted-server'
+```
+
+### Summary
+
+- **Default**: Sampling disabled for all servers (safe)
+- **Opt-in**: Set `dangerouslyEnableSampling: true` per server (dangerous)
+- **Trust model**: Only enable for servers you fully trust
+- **Best practice**: Leave disabled unless you have a specific need
+
 ## Skills
 
 Skills are reusable instruction sets that extend the gateway's capabilities. They can include scripts, reference materials, and specialized guidance for specific tasks.
