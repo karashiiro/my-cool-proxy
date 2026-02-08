@@ -582,3 +582,112 @@ Agents can create, modify, and use skills.
 ```
 
 Or simply omit the `skills` field entirely - skill-related tools will not be exposed.
+
+## ACP (Agent Client Protocol)
+
+The gateway can use an ACP agent to provide sampling capability when the downstream MCP client does not natively support it. This acts as a "ponyfill" -- upstream MCP servers can send sampling requests even when connected through a client that lacks sampling support.
+
+### How It Works
+
+| Client has sampling? | ACP agent configured? | Result                                |
+| -------------------- | --------------------- | ------------------------------------- |
+| Yes                  | Don't care            | Native sampling (existing behavior)   |
+| No                   | Yes                   | ACP agent handles sampling            |
+| No                   | No                    | Sampling disabled (existing behavior) |
+
+When the ponyfill activates:
+
+1. The gateway spawns the configured ACP agent process
+2. Upstream MCP servers are told that sampling is available
+3. When an upstream server sends a sampling request, the gateway converts it to an ACP prompt and forwards it to the agent
+4. The agent's response is converted back to MCP format and returned to the upstream server
+
+Native client sampling always takes priority. If the downstream client supports sampling natively, the ACP agent is not used even if configured.
+
+### Configuration
+
+```json
+{
+  "acp": {
+    "agent": {
+      "command": "node",
+      "args": ["path/to/acp-agent.js"],
+      "env": {
+        "MODEL": "gpt-4"
+      }
+    }
+  }
+}
+```
+
+#### Fields
+
+- **acp** (object, optional): ACP configuration
+  - **agent** (object, optional): ACP agent configuration for the sampling ponyfill
+    - **command** (string, required): Command to execute the ACP agent
+    - **args** (array of strings, optional): Command-line arguments
+    - **env** (object, optional): Environment variables to set for the agent process
+
+### ACP Agent Requirements
+
+The configured agent must:
+
+- Communicate over stdio using the ACP ndjson protocol
+- Implement the ACP `Agent` interface (initialize, newSession, prompt, cancel)
+- Send responses via `sessionUpdate` notifications with `agent_message_chunk` content type
+
+### Lifecycle
+
+- One ACP agent process is spawned per gateway session (long-lived)
+- One ACP session is created per sampling request (short-lived)
+- The agent process is automatically killed when the gateway session closes
+
+### Sampling Parameter Support
+
+The ACP protocol does not expose LLM inference parameters (temperature, max tokens, etc.) at the prompt level -- agents manage their own model configuration internally. This means MCP sampling parameters cannot be forwarded natively to the ACP agent. The ponyfill handles each `CreateMessageRequest` parameter as follows:
+
+#### Mapped to ACP prompt content
+
+| Parameter          | How it's mapped                                                                                                                                                                                                                                            |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`messages`**     | Each message is serialized as a `[Role]: text` content block. Image and audio content is passed through natively when the ACP agent advertises support via `promptCapabilities`; otherwise, it falls back to a text placeholder like `[image: image/png]`. |
+| **`systemPrompt`** | Prepended as a `[System]: {text}` content block before the messages. ACP has no native system prompt field, so this is informational context for the agent.                                                                                                |
+
+#### Included as informational text
+
+These parameters are serialized into a `[Sampling parameters: ...]` text block appended to the prompt. The ACP agent may read and act on them, but is not obligated to. This block is only included when parameters beyond the required `maxTokens` are present.
+
+| Parameter              | Serialized as                   |
+| ---------------------- | ------------------------------- |
+| **`maxTokens`**        | `maxTokens=200`                 |
+| **`temperature`**      | `temperature=0.7`               |
+| **`stopSequences`**    | `stopSequences=["STOP","END"]`  |
+| **`modelPreferences`** | `modelPreferences={...}` (JSON) |
+
+#### Not supported
+
+| Parameter                      | Reason                                                                                                                                                                         |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **`includeContext`**           | No mechanism to inject MCP server context into an ACP session. The spec allows clients to ignore this parameter, and the values `thisServer`/`allServers` are soft-deprecated. |
+| **`metadata`**                 | Provider-specific LLM passthrough. ACP agents are not LLM providers, so there is no target for this data.                                                                      |
+| **`tools`** / **`toolChoice`** | Not yet supported. The gateway does not advertise `sampling.tools` capability, so well-behaved servers will not send these parameters.                                         |
+| **`task`**                     | Task-augmented execution is not supported by the ponyfill.                                                                                                                     |
+| **`_meta.progressToken`**      | The ponyfill does not emit progress notifications.                                                                                                                             |
+
+#### Response mapping
+
+| `CreateMessageResult` field | Value                                                                                                                                                                                                                                                                         |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`role`**                  | Always `"assistant"`                                                                                                                                                                                                                                                          |
+| **`content`**               | Merged from the ACP agent's response content blocks. When the response contains both text and non-text (image/audio) blocks, the first non-text block takes priority since `CreateMessageResult` only supports a single content block. Multiple text blocks are concatenated. |
+| **`model`**                 | Always `"acp-agent"`. The actual model used by the agent is not exposed by the ACP protocol.                                                                                                                                                                                  |
+| **`stopReason`**            | Mapped from ACP stop reasons: `end_turn` to `endTurn`, `max_tokens` to `maxTokens`, `stop_sequence` to `stopSequence`. Unknown reasons default to `endTurn`.                                                                                                                  |
+
+### Security
+
+The gateway connects to the ACP agent with minimal permissions:
+
+- **Client capabilities**: Empty (`{}`) -- the agent cannot request file system access or terminal execution through the gateway
+- **Permission requests**: All denied -- any tool permission requests from the agent are cancelled
+
+This means the ACP agent is sandboxed to pure text/content generation through the ponyfill. The agent may still use its own internal tools and capabilities, but cannot leverage the gateway as a proxy for privileged operations.

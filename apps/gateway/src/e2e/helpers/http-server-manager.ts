@@ -6,24 +6,23 @@ import type {
   ILogger,
   IMCPClientManager,
   ICapabilityStore,
+  ISamplingPonyfill,
   ServerConfig,
   MCPClientConfig,
   DownstreamCapabilities,
 } from "../../types/interfaces.js";
 import { MCPGatewayServer } from "../../mcp/gateway-server.js";
+import { registerProxyHandlers } from "../../handlers/proxy-handlers.js";
 import type {
   ResourceAggregationService,
   PromptAggregationService,
 } from "@my-cool-proxy/mcp-aggregation";
 import type { IToolRegistry } from "../../tools/tool-registry.js";
-import {
-  CreateMessageRequestSchema,
-  ElicitRequestSchema,
-} from "@modelcontextprotocol/sdk/types.js";
 
 export class HttpServerManager {
   private serverHandle: ServerHandle | null = null;
   private clientManager: IMCPClientManager | null = null;
+  private samplingPonyfill: ISamplingPonyfill | null = null;
 
   /**
    * Starts the HTTP gateway server with the provided configuration.
@@ -63,6 +62,12 @@ export class HttpServerManager {
       TYPES.CapabilityStore,
     );
 
+    // Resolve the sampling ponyfill from the container if bound
+    const samplingPonyfill = container.isBound(TYPES.SamplingPonyfill)
+      ? container.get<ISamplingPonyfill>(TYPES.SamplingPonyfill)
+      : undefined;
+    this.samplingPonyfill = samplingPonyfill ?? null;
+
     // Use @karashiiro/mcp's serveHttp with session-aware factory
     this.serverHandle = await serveHttp(
       async (sessionId) => {
@@ -87,12 +92,32 @@ export class HttpServerManager {
           // Store capabilities for this session
           capabilityStore.setCapabilities(sessionId, capabilities);
 
-          // Initialize upstream MCP clients with the downstream capabilities
+          // Determine if we need the sampling ponyfill
+          let activePonyfill: ISamplingPonyfill | undefined;
+          let upstreamCapabilities = capabilities;
+
+          if (!capabilities.sampling && samplingPonyfill) {
+            try {
+              logger.debug(
+                `Session ${sessionId}: Client lacks sampling, initializing ACP ponyfill`,
+              );
+              await samplingPonyfill.initialize(sessionId);
+              activePonyfill = samplingPonyfill;
+              upstreamCapabilities = { ...capabilities, sampling: {} };
+            } catch (error) {
+              logger.error(
+                "Failed to initialize sampling ponyfill, continuing without sampling support",
+                error instanceof Error ? error : new Error(String(error)),
+              );
+            }
+          }
+
+          // Initialize upstream MCP clients with the (possibly augmented) capabilities
           await initializeClientsForSession(
             sessionId,
             config,
             clientManager,
-            capabilities,
+            upstreamCapabilities,
           );
 
           // Register proxy handlers for sampling/elicitation forwarding
@@ -102,6 +127,7 @@ export class HttpServerManager {
             gatewayServer,
             logger,
             capabilities,
+            activePonyfill,
           );
         });
 
@@ -115,6 +141,9 @@ export class HttpServerManager {
             try {
               await clientManager.closeSession(sessionId);
               capabilityStore.deleteCapabilities(sessionId);
+              if (samplingPonyfill) {
+                await samplingPonyfill.close(sessionId);
+              }
             } catch {
               // Ignore cleanup errors
             }
@@ -143,6 +172,11 @@ export class HttpServerManager {
     if (this.clientManager) {
       await this.clientManager.close();
       this.clientManager = null;
+    }
+
+    if (this.samplingPonyfill) {
+      await this.samplingPonyfill.closeAll();
+      this.samplingPonyfill = null;
     }
   }
 
@@ -187,82 +221,6 @@ export class HttpServerManager {
     }
 
     throw new Error(`Server did not become ready within ${timeoutMs}ms`);
-  }
-}
-
-/**
- * Register sampling and elicitation request handlers on upstream clients.
- * These handlers forward requests from upstream servers to the downstream client
- * via the gateway server.
- */
-function registerProxyHandlers(
-  sessionId: string,
-  clientManager: IMCPClientManager,
-  gatewayServer: MCPGatewayServer,
-  logger: ILogger,
-  capabilities: DownstreamCapabilities,
-): void {
-  const clients = clientManager.getClientsBySession(sessionId);
-
-  for (const [serverName, clientSession] of clients) {
-    // Register sampling handler if downstream supports it
-    if (capabilities.sampling) {
-      clientSession.setRequestHandler(
-        CreateMessageRequestSchema,
-        async (request) => {
-          logger.debug(
-            `Received sampling request from upstream server '${serverName}', forwarding to downstream`,
-          );
-          try {
-            const result = await gatewayServer.forwardSamplingRequest(
-              request.params,
-            );
-            return result;
-          } catch (error) {
-            logger.error(
-              `Failed to forward sampling request from '${serverName}'`,
-              error instanceof Error ? error : new Error(String(error)),
-            );
-            throw error;
-          }
-        },
-      );
-      logger.debug(
-        `Registered sampling request handler for upstream server '${serverName}'`,
-      );
-    }
-
-    // Register elicitation handler if downstream supports it
-    if (capabilities.elicitation) {
-      clientSession.setRequestHandler(ElicitRequestSchema, async (request) => {
-        logger.debug(
-          `Received elicitation request from upstream server '${serverName}', forwarding to downstream`,
-        );
-        try {
-          const result = await gatewayServer.forwardElicitationRequest(
-            request.params,
-          );
-          return result;
-        } catch (error) {
-          logger.error(
-            `Failed to forward elicitation request from '${serverName}'`,
-            error instanceof Error ? error : new Error(String(error)),
-          );
-          throw error;
-        }
-      });
-      logger.debug(
-        `Registered elicitation request handler for upstream server '${serverName}'`,
-      );
-    }
-  }
-
-  const clientCount = clients.size;
-  if (capabilities.sampling || capabilities.elicitation) {
-    logger.info(
-      `Registered proxy handlers on ${clientCount} upstream client(s): ` +
-        `sampling=${!!capabilities.sampling}, elicitation=${!!capabilities.elicitation}`,
-    );
   }
 }
 

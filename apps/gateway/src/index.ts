@@ -9,6 +9,7 @@ import type {
   ICapabilityStore,
   ILogger,
   IMCPClientManager,
+  ISamplingPonyfill,
   IServerInfoPreloader,
   IShutdownHandler,
   ISkillDiscoveryService,
@@ -18,10 +19,7 @@ import { serveHttp } from "@karashiiro/mcp/http";
 import { serveStdio } from "@karashiiro/mcp/stdio";
 import { loadConfig, mergeEnvConfig } from "./utils/config-loader.js";
 import { MCPGatewayServer } from "./mcp/gateway-server.js";
-import {
-  CreateMessageRequestSchema,
-  ElicitRequestSchema,
-} from "@modelcontextprotocol/sdk/types.js";
+import { registerProxyHandlers } from "./handlers/proxy-handlers.js";
 import type { IToolRegistry } from "./tools/tool-registry.js";
 import type {
   ResourceAggregationService,
@@ -34,82 +32,6 @@ import { ensureServerLogDir, getServerLogPath } from "./utils/log-paths.js";
 interface InitializationResult {
   successful: string[];
   failed: Array<{ name: string; error: string }>;
-}
-
-/**
- * Register sampling and elicitation request handlers on upstream clients.
- * These handlers forward requests from upstream servers to the downstream client
- * via the gateway server.
- */
-function registerProxyHandlers(
-  sessionId: string,
-  clientManager: IMCPClientManager,
-  gatewayServer: MCPGatewayServer,
-  logger: ILogger,
-  capabilities: DownstreamCapabilities,
-): void {
-  const clients = clientManager.getClientsBySession(sessionId);
-
-  for (const [serverName, clientSession] of clients) {
-    // Register sampling handler if downstream supports it
-    if (capabilities.sampling) {
-      clientSession.setRequestHandler(
-        CreateMessageRequestSchema,
-        async (request) => {
-          logger.debug(
-            `Received sampling request from upstream server '${serverName}', forwarding to downstream`,
-          );
-          try {
-            const result = await gatewayServer.forwardSamplingRequest(
-              request.params,
-            );
-            return result;
-          } catch (error) {
-            logger.error(
-              `Failed to forward sampling request from '${serverName}'`,
-              error instanceof Error ? error : new Error(String(error)),
-            );
-            throw error;
-          }
-        },
-      );
-      logger.debug(
-        `Registered sampling request handler for upstream server '${serverName}'`,
-      );
-    }
-
-    // Register elicitation handler if downstream supports it
-    if (capabilities.elicitation) {
-      clientSession.setRequestHandler(ElicitRequestSchema, async (request) => {
-        logger.debug(
-          `Received elicitation request from upstream server '${serverName}', forwarding to downstream`,
-        );
-        try {
-          const result = await gatewayServer.forwardElicitationRequest(
-            request.params,
-          );
-          return result;
-        } catch (error) {
-          logger.error(
-            `Failed to forward elicitation request from '${serverName}'`,
-            error instanceof Error ? error : new Error(String(error)),
-          );
-          throw error;
-        }
-      });
-      logger.debug(
-        `Registered elicitation request handler for upstream server '${serverName}'`,
-      );
-    }
-  }
-
-  const clientCount = clients.size;
-  if (capabilities.sampling || capabilities.elicitation) {
-    logger.info(
-      `Registered proxy handlers on ${clientCount} upstream client(s): ` +
-        `sampling=${!!capabilities.sampling}, elicitation=${!!capabilities.elicitation}`,
-    );
-  }
 }
 
 /**
@@ -278,6 +200,11 @@ async function startHttpMode(
         sessionInstructions,
       );
 
+      // Resolve the sampling ponyfill from the container if bound
+      const samplingPonyfill = container.isBound(TYPES.SamplingPonyfill)
+        ? container.get<ISamplingPonyfill>(TYPES.SamplingPonyfill)
+        : undefined;
+
       // Set up callback to initialize upstream clients when downstream client connects
       // This ensures we forward the correct capabilities to upstream servers
       gatewayServer.setOnDownstreamInitialized(async (capabilities) => {
@@ -289,13 +216,36 @@ async function startHttpMode(
         // Store capabilities for this session
         capabilityStore.setCapabilities(sessionId, capabilities);
 
-        // Now initialize upstream MCP clients with the downstream capabilities
+        // Determine if we need the sampling ponyfill:
+        // Only when client lacks native sampling AND an ACP agent is configured
+        let activePonyfill: ISamplingPonyfill | undefined;
+        let upstreamCapabilities = capabilities;
+
+        if (!capabilities.sampling && samplingPonyfill) {
+          try {
+            logger.info(
+              `Session ${sessionId}: Client lacks sampling support, initializing ACP ponyfill`,
+            );
+            await samplingPonyfill.initialize(sessionId);
+            activePonyfill = samplingPonyfill;
+
+            // Augment capabilities so upstream servers see sampling support
+            upstreamCapabilities = { ...capabilities, sampling: {} };
+          } catch (error) {
+            logger.error(
+              "Failed to initialize sampling ponyfill, continuing without sampling support",
+              error instanceof Error ? error : new Error(String(error)),
+            );
+          }
+        }
+
+        // Now initialize upstream MCP clients with the (possibly augmented) capabilities
         // This tells upstream servers what requests they can send through the proxy
         const initResult = await initializeClientsForSession(
           sessionId,
           config,
           clientManager,
-          capabilities,
+          upstreamCapabilities,
         );
 
         if (initResult.failed.length > 0) {
@@ -319,12 +269,15 @@ async function startHttpMode(
         );
 
         // Register proxy handlers for sampling/elicitation forwarding
+        // Pass real capabilities (not augmented) so the native path doesn't activate
+        // when only the ponyfill is providing sampling
         registerProxyHandlers(
           sessionId,
           clientManager,
           gatewayServer,
           logger,
           capabilities,
+          activePonyfill,
         );
       });
 
@@ -340,6 +293,14 @@ async function startHttpMode(
           try {
             await clientManager.closeSession(sessionId);
             capabilityStore.deleteCapabilities(sessionId);
+
+            // Clean up sampling ponyfill if active
+            if (container.isBound(TYPES.SamplingPonyfill)) {
+              const ponyfill = container.get<ISamplingPonyfill>(
+                TYPES.SamplingPonyfill,
+              );
+              await ponyfill.close(sessionId);
+            }
           } catch (error) {
             // Log but don't re-throw - ensure callback doesn't fail the cleanup
             logger.error(
@@ -414,6 +375,11 @@ async function startStdioMode(
     }
   }
 
+  // Resolve the sampling ponyfill from the container if bound
+  const samplingPonyfill = container.isBound(TYPES.SamplingPonyfill)
+    ? container.get<ISamplingPonyfill>(TYPES.SamplingPonyfill)
+    : undefined;
+
   // Start stdio server - upstream clients are initialized when downstream connects
   const handle = await serveStdio(() => {
     // Create gateway server FIRST
@@ -437,12 +403,34 @@ async function startStdioMode(
       // Store capabilities
       capabilityStore.setCapabilities(SESSION_ID, capabilities);
 
-      // Initialize upstream MCP clients with downstream capabilities
+      // Determine if we need the sampling ponyfill
+      let activePonyfill: ISamplingPonyfill | undefined;
+      let upstreamCapabilities = capabilities;
+
+      if (!capabilities.sampling && samplingPonyfill) {
+        try {
+          logger.info(
+            `Client lacks sampling support, initializing ACP ponyfill`,
+          );
+          await samplingPonyfill.initialize(SESSION_ID);
+          activePonyfill = samplingPonyfill;
+
+          // Augment capabilities so upstream servers see sampling support
+          upstreamCapabilities = { ...capabilities, sampling: {} };
+        } catch (error) {
+          logger.error(
+            "Failed to initialize sampling ponyfill, continuing without sampling support",
+            error instanceof Error ? error : new Error(String(error)),
+          );
+        }
+      }
+
+      // Initialize upstream MCP clients with (possibly augmented) capabilities
       const initResult = await initializeClientsForSession(
         SESSION_ID,
         config,
         clientManager,
-        capabilities,
+        upstreamCapabilities,
       );
 
       if (initResult.failed.length > 0) {
@@ -472,6 +460,7 @@ async function startStdioMode(
         gatewayServer,
         logger,
         capabilities,
+        activePonyfill,
       );
     });
 
@@ -484,6 +473,12 @@ async function startStdioMode(
   process.on("SIGINT", async () => {
     await handle.close();
     await clientManager.close();
+
+    // Clean up sampling ponyfill if active
+    if (samplingPonyfill) {
+      await samplingPonyfill.closeAll();
+    }
+
     logger.info("Shutdown complete");
     process.exit(0);
   });

@@ -1,8 +1,15 @@
-import { injectable } from "inversify";
-import type { ILogger } from "../types/interfaces.js";
+import type { ILogger } from "./types.js";
 import pino from "pino";
 
-@injectable()
+/**
+ * Logger implementation backed by pino.
+ * Outputs all log messages to stderr so stdout remains clean for
+ * protocol communication (e.g. MCP stdio transport).
+ *
+ * Note: This class is intentionally NOT decorated with @injectable()
+ * to keep the logger package DI-framework-agnostic. The gateway app
+ * wires it into Inversify via toDynamicValue() in its container config.
+ */
 export class ConsoleLogger implements ILogger {
   private logger = pino({
     level: "debug",

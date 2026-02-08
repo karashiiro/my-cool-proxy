@@ -22,4 +22,5 @@ export const TYPES = {
   ServerInfoPreloader: "ServerInfoPreloader",
   SkillDiscoveryService: "SkillDiscoveryService",
   SkillResourceProvider: "SkillResourceProvider",
+  SamplingPonyfill: "SamplingPonyfill",
 } as const;
