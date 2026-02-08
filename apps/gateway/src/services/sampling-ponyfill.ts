@@ -5,10 +5,7 @@ import type {
   CreateMessageResult,
 } from "@modelcontextprotocol/sdk/types.js";
 import type { ISamplingPonyfill, ILogger } from "../types/interfaces.js";
-import {
-  mapMcpToAcpPrompt,
-  mapAcpToMcpResult,
-} from "../utils/mcp-acp-mappers.js";
+import { mapMcpToAcpPrompt, mapAcpToMcpResult } from "../utils/index.js";
 
 /**
  * Provides sampling capability when the downstream client does not natively
