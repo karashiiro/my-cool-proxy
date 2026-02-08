@@ -304,6 +304,175 @@ describe("loadConfig", () => {
 
     expect(() => loadConfig()).toThrow(/Invalid JSON in config file/);
   });
+
+  describe("acp config validation", () => {
+    it("should accept valid acp config with agent", () => {
+      const validConfig = {
+        port: 3000,
+        host: "localhost",
+        mcpClients: {},
+        acp: {
+          agent: {
+            command: "node",
+            args: ["agent.js"],
+            env: { MODEL: "gpt-4" },
+          },
+        },
+      };
+
+      writeFileSync(testConfigPath, JSON.stringify(validConfig));
+      process.env.CONFIG_PATH = testConfigPath;
+
+      const config = loadConfig();
+      expect(config.acp).toEqual(validConfig.acp);
+    });
+
+    it("should accept acp config with only command", () => {
+      const validConfig = {
+        port: 3000,
+        host: "localhost",
+        mcpClients: {},
+        acp: {
+          agent: {
+            command: "my-agent",
+          },
+        },
+      };
+
+      writeFileSync(testConfigPath, JSON.stringify(validConfig));
+      process.env.CONFIG_PATH = testConfigPath;
+
+      const config = loadConfig();
+      expect(config.acp?.agent?.command).toBe("my-agent");
+    });
+
+    it("should accept empty acp config (no agent)", () => {
+      const validConfig = {
+        port: 3000,
+        host: "localhost",
+        mcpClients: {},
+        acp: {},
+      };
+
+      writeFileSync(testConfigPath, JSON.stringify(validConfig));
+      process.env.CONFIG_PATH = testConfigPath;
+
+      const config = loadConfig();
+      expect(config.acp).toEqual({});
+    });
+
+    it("should throw error if acp is not an object", () => {
+      const invalidConfig = {
+        port: 3000,
+        host: "localhost",
+        mcpClients: {},
+        acp: "invalid",
+      };
+
+      writeFileSync(testConfigPath, JSON.stringify(invalidConfig));
+      process.env.CONFIG_PATH = testConfigPath;
+
+      expect(() => loadConfig()).toThrow(
+        /Config 'acp' must be an object if specified/,
+      );
+    });
+
+    it("should throw error if acp.agent is not an object", () => {
+      const invalidConfig = {
+        port: 3000,
+        host: "localhost",
+        mcpClients: {},
+        acp: { agent: "invalid" },
+      };
+
+      writeFileSync(testConfigPath, JSON.stringify(invalidConfig));
+      process.env.CONFIG_PATH = testConfigPath;
+
+      expect(() => loadConfig()).toThrow(
+        /Config 'acp.agent' must be an object if specified/,
+      );
+    });
+
+    it("should throw error if acp.agent is missing command", () => {
+      const invalidConfig = {
+        port: 3000,
+        host: "localhost",
+        mcpClients: {},
+        acp: { agent: { args: ["test"] } },
+      };
+
+      writeFileSync(testConfigPath, JSON.stringify(invalidConfig));
+      process.env.CONFIG_PATH = testConfigPath;
+
+      expect(() => loadConfig()).toThrow(
+        /Config 'acp.agent' must specify 'command' as a string/,
+      );
+    });
+
+    it("should throw error if acp.agent.args is not an array", () => {
+      const invalidConfig = {
+        port: 3000,
+        host: "localhost",
+        mcpClients: {},
+        acp: { agent: { command: "node", args: "invalid" } },
+      };
+
+      writeFileSync(testConfigPath, JSON.stringify(invalidConfig));
+      process.env.CONFIG_PATH = testConfigPath;
+
+      expect(() => loadConfig()).toThrow(
+        /Config 'acp.agent.args' must be an array if specified/,
+      );
+    });
+
+    it("should throw error if acp.agent.args contains non-strings", () => {
+      const invalidConfig = {
+        port: 3000,
+        host: "localhost",
+        mcpClients: {},
+        acp: { agent: { command: "node", args: [123] } },
+      };
+
+      writeFileSync(testConfigPath, JSON.stringify(invalidConfig));
+      process.env.CONFIG_PATH = testConfigPath;
+
+      expect(() => loadConfig()).toThrow(
+        /Config 'acp.agent.args' must contain only strings/,
+      );
+    });
+
+    it("should throw error if acp.agent.env is not an object", () => {
+      const invalidConfig = {
+        port: 3000,
+        host: "localhost",
+        mcpClients: {},
+        acp: { agent: { command: "node", env: "invalid" } },
+      };
+
+      writeFileSync(testConfigPath, JSON.stringify(invalidConfig));
+      process.env.CONFIG_PATH = testConfigPath;
+
+      expect(() => loadConfig()).toThrow(
+        /Config 'acp.agent.env' must be an object if specified/,
+      );
+    });
+
+    it("should throw error if acp.agent.env contains non-string values", () => {
+      const invalidConfig = {
+        port: 3000,
+        host: "localhost",
+        mcpClients: {},
+        acp: { agent: { command: "node", env: { BAD: 123 } } },
+      };
+
+      writeFileSync(testConfigPath, JSON.stringify(invalidConfig));
+      process.env.CONFIG_PATH = testConfigPath;
+
+      expect(() => loadConfig()).toThrow(
+        /Config 'acp.agent.env.BAD' must be a string/,
+      );
+    });
+  });
 });
 
 describe("mergeEnvConfig", () => {

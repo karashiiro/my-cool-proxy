@@ -134,6 +134,61 @@ export function loadConfig(): ServerConfig {
       }
     }
 
+    // Validate acp config if provided
+    if (config.acp !== undefined) {
+      if (typeof config.acp !== "object" || config.acp === null) {
+        throw new Error("Config 'acp' must be an object if specified");
+      }
+
+      if (config.acp.agent !== undefined) {
+        if (typeof config.acp.agent !== "object" || config.acp.agent === null) {
+          throw new Error("Config 'acp.agent' must be an object if specified");
+        }
+
+        if (typeof config.acp.agent.command !== "string") {
+          throw new Error(
+            "Config 'acp.agent' must specify 'command' as a string",
+          );
+        }
+
+        if (
+          config.acp.agent.args !== undefined &&
+          !Array.isArray(config.acp.agent.args)
+        ) {
+          throw new Error(
+            "Config 'acp.agent.args' must be an array if specified",
+          );
+        }
+
+        if (config.acp.agent.args !== undefined) {
+          for (const arg of config.acp.agent.args) {
+            if (typeof arg !== "string") {
+              throw new Error(
+                "Config 'acp.agent.args' must contain only strings",
+              );
+            }
+          }
+        }
+
+        if (config.acp.agent.env !== undefined) {
+          if (
+            typeof config.acp.agent.env !== "object" ||
+            config.acp.agent.env === null
+          ) {
+            throw new Error(
+              "Config 'acp.agent.env' must be an object if specified",
+            );
+          }
+
+          for (const [key, value] of Object.entries(config.acp.agent.env)) {
+            if (typeof value !== "string") {
+              throw new Error(`Config 'acp.agent.env.${key}' must be a string`);
+            }
+          }
+        }
+      }
+    }
+
     // Validate each MCP client config
     for (const [name, clientConfig] of Object.entries(config.mcpClients)) {
       if (typeof clientConfig !== "object" || clientConfig === null) {

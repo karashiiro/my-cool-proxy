@@ -12,6 +12,7 @@ import type {
   ICapabilityStore,
   IServerInfoPreloader,
   ISkillDiscoveryService,
+  ISamplingPonyfill,
 } from "../types/interfaces.js";
 // Import from workspace packages
 import { WasmoonRuntime } from "@my-cool-proxy/lua-runtime";
@@ -23,14 +24,15 @@ import {
   PromptAggregationService,
   type IResourceProvider,
 } from "@my-cool-proxy/mcp-aggregation";
-// Import gateway-specific services
-import { ConsoleLogger } from "../utils/logger.js";
+// Import logger from shared package
+import { ConsoleLogger } from "@my-cool-proxy/logger";
 import { MCPGatewayServer } from "../mcp/gateway-server.js";
 import { ShutdownHandler } from "../handlers/shutdown-handler.js";
 import { CapabilityStore } from "../services/capability-store.js";
 import { ServerInfoPreloader } from "../services/server-info-preloader.js";
 import { SkillDiscoveryService } from "../services/skill-discovery-service.js";
 import { SkillResourceProvider } from "../services/skill-resource-provider.js";
+import { SamplingPonyfill } from "../services/sampling-ponyfill.js";
 import type { ITool } from "../tools/base-tool.js";
 import { ExecuteLuaTool } from "../tools/execute-lua-tool.js";
 import { ListServersTool } from "../tools/list-servers-tool.js";
@@ -53,8 +55,12 @@ export function createContainer(
   // Bind configuration
   container.bind<ServerConfig>(TYPES.ServerConfig).toConstantValue(config);
 
-  // Bind logger (gateway-specific, keeps Inversify decorator)
-  container.bind<ILogger>(TYPES.Logger).to(ConsoleLogger).inSingletonScope();
+  // Bind logger (from shared package - use factory binding since ConsoleLogger
+  // is DI-framework-agnostic and doesn't have @injectable() decorator)
+  container
+    .bind<ILogger>(TYPES.Logger)
+    .toDynamicValue(() => new ConsoleLogger())
+    .inSingletonScope();
 
   // Bind Lua runtime (from package - use factory binding)
   container
@@ -158,6 +164,17 @@ export function createContainer(
     if (skillsMutable) {
       container.bind<ITool>(TYPES.Tool).to(WriteGatewaySkillTool);
     }
+  }
+
+  // Bind sampling ponyfill conditionally when ACP agent is configured
+  if (config.acp?.agent) {
+    container
+      .bind<ISamplingPonyfill>(TYPES.SamplingPonyfill)
+      .toDynamicValue(() => {
+        const logger = container.get<ILogger>(TYPES.Logger);
+        return new SamplingPonyfill(config.acp!.agent!, logger);
+      })
+      .inSingletonScope();
   }
 
   // Bind tool registry and populate it with all registered tools

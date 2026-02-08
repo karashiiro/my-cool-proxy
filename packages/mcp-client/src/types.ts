@@ -1,14 +1,6 @@
 import type { MCPClientSession } from "./client-session.js";
 
-/**
- * Logger interface required by MCP client components.
- */
-export interface ILogger {
-  info(message: string): void;
-  warn(message: string): void;
-  error(message: string, error?: Error): void;
-  debug(message: string): void;
-}
+export type { ILogger } from "@my-cool-proxy/logger";
 
 /**
  * Result of a client connection attempt.

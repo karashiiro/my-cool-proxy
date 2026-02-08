@@ -1,5 +1,8 @@
 import type { MCPClientSession } from "@my-cool-proxy/mcp-client";
+import type { ACPAgentConfig } from "@my-cool-proxy/acp-client";
 import type { SkillMetadata } from "./skill.js";
+
+export type { ACPAgentConfig };
 
 export interface ILuaRuntime {
   executeScript(
@@ -96,6 +99,45 @@ export interface MCPClientConfigStdio {
 export type MCPClientConfig = MCPClientConfigHTTP | MCPClientConfigStdio;
 
 /**
+ * Configuration for ACP (Agent Client Protocol) features.
+ * Currently supports configuring an ACP agent for sampling ponyfill.
+ */
+export interface ACPConfig {
+  agent?: ACPAgentConfig;
+}
+
+/**
+ * Service that provides sampling capability when the downstream client
+ * does not natively support it, by routing requests through an ACP agent.
+ */
+export interface ISamplingPonyfill {
+  /**
+   * Initialize the ponyfill for a gateway session.
+   * Spawns an ACP agent process and establishes a connection.
+   */
+  initialize(sessionId: string): Promise<void>;
+
+  /**
+   * Handle a sampling request by forwarding it through the ACP agent.
+   * Creates a new ACP session for each request.
+   */
+  handleSamplingRequest(
+    sessionId: string,
+    params: import("@modelcontextprotocol/sdk/types.js").CreateMessageRequest["params"],
+  ): Promise<import("@modelcontextprotocol/sdk/types.js").CreateMessageResult>;
+
+  /**
+   * Close the ACP agent for a specific session.
+   */
+  close(sessionId: string): Promise<void>;
+
+  /**
+   * Close all ACP agents across all sessions.
+   */
+  closeAll(): Promise<void>;
+}
+
+/**
  * Configuration for the skills feature.
  */
 export interface SkillsConfig {
@@ -124,14 +166,15 @@ export interface ServerConfig {
    * Skills are reusable instruction sets that extend the gateway's capabilities.
    */
   skills?: SkillsConfig;
+  /**
+   * ACP (Agent Client Protocol) configuration.
+   * Enables routing capabilities through an ACP agent when the downstream
+   * client doesn't natively support them.
+   */
+  acp?: ACPConfig;
 }
 
-export interface ILogger {
-  info(message: string): void;
-  warn(message: string): void;
-  error(message: string, error?: Error): void;
-  debug(message: string): void;
-}
+export type { ILogger } from "@my-cool-proxy/logger";
 
 export interface ServerInfo {
   luaIdentifier: string;

@@ -1,5 +1,5 @@
 {
-  "name": "@my-cool-proxy/mcp-client",
+  "name": "@my-cool-proxy/acp-client",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -16,7 +16,7 @@
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.25.2",
+    "@agentclientprotocol/sdk": "^0.14.1",
     "@my-cool-proxy/logger": "workspace:*"
   },
   "devDependencies": {
