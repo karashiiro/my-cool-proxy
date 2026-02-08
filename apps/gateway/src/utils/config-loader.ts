@@ -231,6 +231,15 @@ export function loadConfig(): ServerConfig {
           }
         }
       }
+
+      // Validate dangerouslyEnableSampling if provided
+      if (clientConfig.dangerouslyEnableSampling !== undefined) {
+        if (typeof clientConfig.dangerouslyEnableSampling !== "boolean") {
+          throw new Error(
+            `MCP client '${name}' has invalid 'dangerouslyEnableSampling'. Must be a boolean (true or false)`,
+          );
+        }
+      }
     }
 
     return config;

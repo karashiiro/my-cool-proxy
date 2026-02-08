@@ -44,6 +44,7 @@ describe("Sampling Ponyfill E2E (HTTP Mode)", () => {
           "sampling-test-server": {
             type: "http",
             url: `http://localhost:${samplingServerPort}/mcp`,
+            dangerouslyEnableSampling: true,
           },
         },
         acp: {
@@ -65,6 +66,7 @@ describe("Sampling Ponyfill E2E (HTTP Mode)", () => {
           "sampling-test-server": {
             type: "http",
             url: `http://localhost:${samplingServerPort}/mcp`,
+            dangerouslyEnableSampling: true,
           },
         },
         acp: {
@@ -149,6 +151,7 @@ describe("Sampling Ponyfill E2E (HTTP Mode)", () => {
           "sampling-test-server": {
             type: "http",
             url: `http://localhost:${samplingServerPort}/mcp`,
+            dangerouslyEnableSampling: true,
           },
         },
         acp: {
@@ -169,6 +172,7 @@ describe("Sampling Ponyfill E2E (HTTP Mode)", () => {
           "sampling-test-server": {
             type: "http",
             url: `http://localhost:${samplingServerPort}/mcp`,
+            dangerouslyEnableSampling: true,
           },
         },
         acp: {
@@ -243,6 +247,7 @@ describe("Sampling Ponyfill E2E (HTTP Mode)", () => {
           "sampling-test-server": {
             type: "http",
             url: `http://localhost:${samplingServerPort}/mcp`,
+            dangerouslyEnableSampling: true,
           },
         },
       });
@@ -257,6 +262,7 @@ describe("Sampling Ponyfill E2E (HTTP Mode)", () => {
           "sampling-test-server": {
             type: "http",
             url: `http://localhost:${samplingServerPort}/mcp`,
+            dangerouslyEnableSampling: true,
           },
         },
       });
@@ -307,6 +313,7 @@ describe("Sampling Ponyfill E2E (HTTP Mode)", () => {
           "sampling-test-server": {
             type: "http",
             url: `http://localhost:${samplingServerPort}/mcp`,
+            dangerouslyEnableSampling: true,
           },
         },
         acp: {
@@ -326,6 +333,7 @@ describe("Sampling Ponyfill E2E (HTTP Mode)", () => {
           "sampling-test-server": {
             type: "http",
             url: `http://localhost:${samplingServerPort}/mcp`,
+            dangerouslyEnableSampling: true,
           },
         },
         acp: {

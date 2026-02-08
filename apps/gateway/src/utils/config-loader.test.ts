@@ -305,6 +305,113 @@ describe("loadConfig", () => {
     expect(() => loadConfig()).toThrow(/Invalid JSON in config file/);
   });
 
+  describe("dangerouslyEnableSampling validation", () => {
+    it("should accept dangerouslyEnableSampling: true", () => {
+      const validConfig = {
+        port: 3000,
+        host: "localhost",
+        mcpClients: {
+          trusted: {
+            type: "http",
+            url: "http://example.com",
+            dangerouslyEnableSampling: true,
+          },
+        },
+      };
+
+      writeFileSync(testConfigPath, JSON.stringify(validConfig));
+      process.env.CONFIG_PATH = testConfigPath;
+
+      const config = loadConfig();
+      expect(config.mcpClients.trusted?.dangerouslyEnableSampling).toBe(true);
+    });
+
+    it("should accept dangerouslyEnableSampling: false", () => {
+      const validConfig = {
+        port: 3000,
+        host: "localhost",
+        mcpClients: {
+          untrusted: {
+            type: "stdio",
+            command: "node",
+            dangerouslyEnableSampling: false,
+          },
+        },
+      };
+
+      writeFileSync(testConfigPath, JSON.stringify(validConfig));
+      process.env.CONFIG_PATH = testConfigPath;
+
+      const config = loadConfig();
+      expect(config.mcpClients.untrusted?.dangerouslyEnableSampling).toBe(
+        false,
+      );
+    });
+
+    it("should accept omitted dangerouslyEnableSampling (undefined)", () => {
+      const validConfig = {
+        port: 3000,
+        host: "localhost",
+        mcpClients: {
+          server: {
+            type: "http",
+            url: "http://example.com",
+          },
+        },
+      };
+
+      writeFileSync(testConfigPath, JSON.stringify(validConfig));
+      process.env.CONFIG_PATH = testConfigPath;
+
+      const config = loadConfig();
+      expect(
+        config.mcpClients.server?.dangerouslyEnableSampling,
+      ).toBeUndefined();
+    });
+
+    it("should reject dangerouslyEnableSampling as string", () => {
+      const invalidConfig = {
+        port: 3000,
+        host: "localhost",
+        mcpClients: {
+          bad: {
+            type: "http",
+            url: "http://example.com",
+            dangerouslyEnableSampling: "true", // string, not boolean
+          },
+        },
+      };
+
+      writeFileSync(testConfigPath, JSON.stringify(invalidConfig));
+      process.env.CONFIG_PATH = testConfigPath;
+
+      expect(() => loadConfig()).toThrow(
+        /MCP client 'bad' has invalid 'dangerouslyEnableSampling'. Must be a boolean \(true or false\)/,
+      );
+    });
+
+    it("should reject dangerouslyEnableSampling as number", () => {
+      const invalidConfig = {
+        port: 3000,
+        host: "localhost",
+        mcpClients: {
+          bad: {
+            type: "stdio",
+            command: "node",
+            dangerouslyEnableSampling: 1, // number, not boolean
+          },
+        },
+      };
+
+      writeFileSync(testConfigPath, JSON.stringify(invalidConfig));
+      process.env.CONFIG_PATH = testConfigPath;
+
+      expect(() => loadConfig()).toThrow(
+        /MCP client 'bad' has invalid 'dangerouslyEnableSampling'. Must be a boolean \(true or false\)/,
+      );
+    });
+  });
+
   describe("acp config validation", () => {
     it("should accept valid acp config with agent", () => {
       const validConfig = {
