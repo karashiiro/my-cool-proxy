@@ -299,5 +299,4 @@ export class MCPGatewayServer {
       throw error;
     }
   }
-
 }

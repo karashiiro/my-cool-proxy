@@ -28,10 +28,7 @@ import type {
 import { parseArgs } from "./utils/cli-args.js";
 import { getConfigPaths, getPlatformConfigDir } from "./utils/config-paths.js";
 import { ensureServerLogDir, getServerLogPath } from "./utils/log-paths.js";
-import {
-  createSessionTempDir,
-  cleanupSessionTempDir,
-} from "./utils/index.js";
+import { createSessionTempDir, cleanupSessionTempDir } from "./utils/index.js";
 
 interface InitializationResult {
   successful: string[];
