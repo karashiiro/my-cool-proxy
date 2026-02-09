@@ -4,6 +4,9 @@ export type {
   ACPAgentConfig,
   ACPPromptResult,
   ContentBlock,
+  EnvVariable,
   ILogger,
+  McpServer,
+  McpServerStdio,
   PromptCapabilities,
 } from "./types.js";

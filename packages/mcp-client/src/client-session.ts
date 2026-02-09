@@ -287,6 +287,18 @@ export class MCPClientSession {
     return this.client.getPrompt(params);
   }
 
+  /**
+   * Call a tool on the connected MCP server.
+   * @param params Tool call parameters (name and arguments)
+   * @returns The tool call result
+   */
+  async callTool(params: {
+    name: string;
+    arguments?: Record<string, unknown>;
+  }) {
+    return this.client.callTool(params);
+  }
+
   // Pass through other methods we need
   get experimental() {
     return this.client.experimental;

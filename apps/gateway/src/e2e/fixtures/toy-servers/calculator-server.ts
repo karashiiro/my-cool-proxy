@@ -223,14 +223,26 @@ export async function startStdioCalculatorServer(): Promise<never> {
   });
 }
 
-// If this file is run directly, start in stdio mode
-// Check if this is the main module
+// If this file is run directly, check for --http flag
 if (process.argv[1]) {
   const { fileURLToPath } = await import("node:url");
   const currentFile = fileURLToPath(import.meta.url);
   const mainFile = process.argv[1];
 
   if (currentFile === mainFile) {
-    startStdioCalculatorServer().catch(console.error);
+    const httpIndex = process.argv.indexOf("--http");
+    if (httpIndex !== -1) {
+      // HTTP mode: use port from args or default to 3002
+      const port = parseInt(process.argv[httpIndex + 1] ?? "3002", 10);
+      console.log(`Starting calculator server in HTTP mode on port ${port}...`);
+      startHttpCalculatorServer(port)
+        .then(() => {
+          console.log(`Server running at http://localhost:${port}/mcp`);
+        })
+        .catch(console.error);
+    } else {
+      // Default to stdio mode
+      startStdioCalculatorServer().catch(console.error);
+    }
   }
 }

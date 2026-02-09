@@ -43,6 +43,7 @@
   "dependencies": {
     "@my-cool-proxy/acp-client": "workspace:*",
     "@my-cool-proxy/logger": "workspace:*",
+    "@my-cool-proxy/mcp-sampling-sidecar": "workspace:*",
     "@hono/node-server": "^1.19.9",
     "@inversifyjs/strongly-typed": "^2.2.0",
     "@karashiiro/mcp": "0.5.0",

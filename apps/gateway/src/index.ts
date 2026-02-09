@@ -246,7 +246,7 @@ async function startHttpMode(
             // This global augmentation is safe - buildClientCapabilities() filters
             // per-server based on dangerouslyEnableSampling, so only trusted servers
             // will see the sampling capability. Untrusted servers remain unaware.
-            upstreamCapabilities = { ...capabilities, sampling: {} };
+            upstreamCapabilities = { ...capabilities, sampling: { tools: {} } };
           } catch (error) {
             logger.error(
               "Failed to initialize sampling shim, continuing without sampling support",
@@ -450,7 +450,7 @@ async function startStdioMode(
           // This global augmentation is safe - buildClientCapabilities() filters
           // per-server based on dangerouslyEnableSampling, so only trusted servers
           // will see the sampling capability. Untrusted servers remain unaware.
-          upstreamCapabilities = { ...capabilities, sampling: {} };
+          upstreamCapabilities = { ...capabilities, sampling: { tools: {} } };
         } catch (error) {
           logger.error(
             "Failed to initialize sampling shim, continuing without sampling support",

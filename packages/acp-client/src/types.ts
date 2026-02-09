@@ -3,6 +3,9 @@ import type { ContentBlock } from "@agentclientprotocol/sdk";
 // Re-export ACP types so consumers don't need a direct ACP SDK dependency
 export type {
   ContentBlock,
+  McpServer,
+  McpServerStdio,
+  EnvVariable,
   PromptCapabilities,
 } from "@agentclientprotocol/sdk";
 

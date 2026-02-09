@@ -175,7 +175,15 @@ export function createContainer(
         const capabilityStore = container.get<ICapabilityStore>(
           TYPES.CapabilityStore,
         );
-        return new SamplingShim(config.acp!.agent!, logger, capabilityStore);
+        const clientManager = container.get<IMCPClientManager>(
+          TYPES.MCPClientManager,
+        );
+        return new SamplingShim(
+          config.acp!.agent!,
+          logger,
+          capabilityStore,
+          clientManager,
+        );
       })
       .inSingletonScope();
   }

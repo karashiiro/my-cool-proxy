@@ -1,5 +1,11 @@
 import { injectable } from "inversify";
-import { ACPClient, type ACPAgentConfig } from "@my-cool-proxy/acp-client";
+import { createRequire } from "node:module";
+import { randomUUID } from "node:crypto";
+import {
+  ACPClient,
+  type ACPAgentConfig,
+  type McpServerStdio,
+} from "@my-cool-proxy/acp-client";
 import type {
   CreateMessageRequest,
   CreateMessageResult,
@@ -8,10 +14,15 @@ import type {
   ISamplingShim,
   ILogger,
   ICapabilityStore,
+  IMCPClientManager,
 } from "../types/interfaces.js";
 import { mapMcpToAcpPrompt, mapAcpToMcpResult } from "../utils/index.js";
 import { $inject } from "../container/decorators.js";
 import { TYPES } from "../types/index.js";
+import { ToolCallbackServer } from "./tool-callback-server.js";
+
+// Used to resolve the sidecar package path
+const require = createRequire(import.meta.url);
 
 /**
  * Provides sampling capability when the downstream client does not natively
@@ -34,6 +45,8 @@ export class SamplingShim implements ISamplingShim {
     @$inject(TYPES.Logger) private readonly logger: ILogger,
     @$inject(TYPES.CapabilityStore)
     private readonly capabilityStore: ICapabilityStore,
+    @$inject(TYPES.MCPClientManager)
+    private readonly clientManager: IMCPClientManager,
   ) {}
 
   /**
@@ -61,6 +74,9 @@ export class SamplingShim implements ISamplingShim {
    * Handle a sampling request by forwarding it through the ACP agent.
    * Creates a new ACP session for each request (short-lived, isolated).
    * Uses the working directory stored in CapabilityStore (client root or tempdir).
+   *
+   * If the request includes tools, sets up an ephemeral MCP sidecar to proxy
+   * tool calls back to the gateway's upstream MCP servers.
    */
   async handleSamplingRequest(
     sessionId: string,
@@ -79,18 +95,69 @@ export class SamplingShim implements ISamplingShim {
       );
     }
 
-    // Map MCP sampling params to ACP prompt content,
-    // respecting the agent's advertised prompt capabilities
-    const acpContent = mapMcpToAcpPrompt(params, client.promptCapabilities);
+    let callbackServer: ToolCallbackServer | null = null;
+    let mcpServers: McpServerStdio[] = [];
+    let toolTag: string | undefined;
 
-    // Create a new ACP session for this request with the stored cwd
-    const session = await client.createSession(cwd);
+    // Set up tool proxy if tools are provided
+    // No capability check needed - stdio MCP is required by ACP spec
+    if (params.tools && params.tools.length > 0) {
+      this.logger.debug(
+        `Setting up tool sidecar for ${params.tools.length} tools`,
+      );
 
-    // Send the prompt and get the result
-    const acpResult = await session.prompt(acpContent);
+      callbackServer = new ToolCallbackServer(
+        this.clientManager,
+        sessionId,
+        this.logger,
+      );
+      const callbackUrl = await callbackServer.start();
 
-    // Map ACP result back to MCP format
-    return mapAcpToMcpResult(acpResult.content, acpResult.stopReason);
+      // Generate a unique tag for this session's tools
+      // This tag is appended to tool names so we can identify them in permission requests
+      toolTag = randomUUID().slice(0, 8);
+
+      // Resolve the path to the compiled sidecar script
+      // Note: We resolve the package directory and append the dist path explicitly
+      // because require.resolve() doesn't work well with ESM exports
+      const packageDir =
+        require.resolve("@my-cool-proxy/mcp-sampling-sidecar/package.json");
+      const sidecarPath = packageDir.replace("/package.json", "/dist/index.js");
+
+      mcpServers = [
+        {
+          name: "sampling-tools",
+          command: "node",
+          args: [sidecarPath],
+          env: [
+            { name: "CALLBACK_URL", value: callbackUrl },
+            { name: "TOOLS_JSON", value: JSON.stringify(params.tools) },
+            { name: "TOOL_TAG", value: toolTag },
+          ],
+        },
+      ];
+    }
+
+    try {
+      // Map MCP sampling params to ACP prompt content,
+      // respecting the agent's advertised prompt capabilities
+      const acpContent = mapMcpToAcpPrompt(params, client.promptCapabilities);
+
+      // Create a new ACP session for this request with the stored cwd,
+      // optional MCP servers for tool support, and tool tag for permission matching
+      const session = await client.createSession(cwd, mcpServers, toolTag);
+
+      // Send the prompt and get the result
+      const acpResult = await session.prompt(acpContent);
+
+      // Map ACP result back to MCP format
+      return mapAcpToMcpResult(acpResult.content, acpResult.stopReason);
+    } finally {
+      // Always clean up the callback server
+      if (callbackServer) {
+        await callbackServer.stop();
+      }
+    }
   }
 
   /**

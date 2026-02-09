@@ -3,6 +3,7 @@ import { Readable, Writable } from "stream";
 import * as acp from "@agentclientprotocol/sdk";
 import type {
   ContentBlock,
+  McpServer,
   PromptCapabilities,
 } from "@agentclientprotocol/sdk";
 import { ACPClientSession } from "./acp-client-session.js";
@@ -16,23 +17,64 @@ type ContentBlockHandler = (block: ContentBlock) => void;
 /**
  * Internal ACP Client handler that implements the acp.Client interface.
  *
- * - Denies all permission requests (secure default until configurable policies are added)
+ * - Allows permission requests for tools that contain a registered session tag
+ * - Denies all other permission requests (secure default)
  * - Dispatches sessionUpdate content blocks to registered per-session handlers
  * - Reports minimal client capabilities (no fs/terminal)
  */
 class ACPClientHandler implements acp.Client {
   private contentHandlers = new Map<string, ContentBlockHandler>();
+  private sessionToolTags = new Map<string, string>();
 
   get clientCapabilities(): acp.ClientCapabilities {
     return {};
   }
 
-  async requestPermission(): Promise<acp.RequestPermissionResponse> {
-    // Deny all permission requests. The shim agent is only used for
+  async requestPermission(
+    params: acp.RequestPermissionRequest,
+  ): Promise<acp.RequestPermissionResponse> {
+    const { sessionId, toolCall, options } = params;
+
+    // Check if this session has a tool tag registered
+    const toolTag = this.sessionToolTags.get(sessionId);
+
+    // If we have a tool tag, check if the tool title contains it
+    // This is robust to any prefixing scheme the agent uses
+    if (toolTag && toolCall.title && toolCall.title.includes(toolTag)) {
+      // Find an "allow" option from the available options
+      // Prefer allow_always over allow_once for session consistency
+      const allowOption = options.find(
+        (opt) => opt.kind === "allow_always" || opt.kind === "allow_once",
+      );
+      if (allowOption) {
+        return {
+          outcome: {
+            outcome: "selected",
+            optionId: allowOption.optionId,
+          },
+        };
+      }
+    }
+
+    // Deny all other permission requests. The shim agent is only used for
     // text generation (sampling), so it should not need to perform
     // privileged operations like file I/O or shell execution.
-    // A configurable permission policy can be added later if needed.
     return { outcome: { outcome: "cancelled" } };
+  }
+
+  /**
+   * Register a tool tag for a session.
+   * Tool calls with titles containing this tag will be auto-approved.
+   */
+  registerToolTag(sessionId: string, tag: string): void {
+    this.sessionToolTags.set(sessionId, tag);
+  }
+
+  /**
+   * Deregister the tool tag for a session.
+   */
+  deregisterToolTag(sessionId: string): void {
+    this.sessionToolTags.delete(sessionId);
   }
 
   async sessionUpdate(params: acp.SessionNotification): Promise<void> {
@@ -147,20 +189,36 @@ export class ACPClient {
    * Create a new ACP session.
    *
    * @param cwd - Optional working directory for the session. Defaults to the gateway's cwd if not provided.
+   * @param mcpServers - Optional list of MCP servers to connect to for this session.
+   *                     Stdio transport is always supported (per ACP spec), HTTP/SSE require capability checks.
+   * @param toolTag - Optional unique tag for auto-approving tool permission requests.
+   *                  If provided, any tool whose title contains this tag will be auto-approved.
    * @returns An ACPClientSession that can be used to send prompts
    * @throws Error if the client is not connected
    */
-  async createSession(cwd?: string): Promise<ACPClientSession> {
+  async createSession(
+    cwd?: string,
+    mcpServers?: McpServer[],
+    toolTag?: string,
+  ): Promise<ACPClientSession> {
     if (!this.connection || !this.handler) {
       throw new Error("ACPClient is not connected. Call connect() first.");
     }
 
     const sessionResult = await this.connection.newSession({
       cwd: cwd ?? process.cwd(),
-      mcpServers: [],
+      mcpServers: mcpServers ?? [],
     });
 
     this.logger.debug(`ACP session created: ${sessionResult.sessionId}`);
+
+    // Register tool tag for this session (for auto-approving permission requests)
+    if (toolTag) {
+      this.handler.registerToolTag(sessionResult.sessionId, toolTag);
+      this.logger.debug(
+        `Registered tool tag "${toolTag}" for session ${sessionResult.sessionId}`,
+      );
+    }
 
     const connection = this.connection;
     const handler = this.handler;
@@ -175,9 +233,10 @@ export class ACPClient {
       (sessionId: string, contentHandler: (block: ContentBlock) => void) => {
         handler.registerContentHandler(sessionId, contentHandler);
       },
-      // Deregister handler
+      // Deregister handler (also cleans up tool tag)
       (sessionId: string) => {
         handler.deregisterContentHandler(sessionId);
+        handler.deregisterToolTag(sessionId);
       },
     );
   }
