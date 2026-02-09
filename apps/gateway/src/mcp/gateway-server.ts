@@ -9,6 +9,7 @@ import {
 import type {
   CreateMessageRequest,
   CreateMessageResult,
+  CreateMessageResultWithTools,
   ElicitRequest,
   ElicitResult,
 } from "@modelcontextprotocol/sdk/types.js";
@@ -252,7 +253,7 @@ export class MCPGatewayServer {
    */
   async forwardSamplingRequest(
     params: CreateMessageRequest["params"],
-  ): Promise<CreateMessageResult> {
+  ): Promise<CreateMessageResult | CreateMessageResultWithTools> {
     this.logger.debug(
       `Forwarding sampling request to downstream: ${params.messages.length} message(s), maxTokens=${params.maxTokens}`,
     );

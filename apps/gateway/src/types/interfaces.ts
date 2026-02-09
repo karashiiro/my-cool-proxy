@@ -140,11 +140,22 @@ export interface ISamplingShim {
   /**
    * Handle a sampling request by forwarding it through the ACP agent.
    * Creates a new ACP session for each request.
+   *
+   * Returns `CreateMessageResult` (single content block) for standard responses,
+   * or `CreateMessageResultWithTools` (content array with tool_use blocks) when
+   * the request includes tools and the model returns tool calls.
+   *
+   * Note: The current ACP-based implementation always returns `CreateMessageResult`
+   * since ACP responses don't contain tool blocks. The union type allows for future
+   * expansion and matches the MCP SDK's `createMessage()` return type.
    */
   handleSamplingRequest(
     sessionId: string,
     params: import("@modelcontextprotocol/sdk/types.js").CreateMessageRequest["params"],
-  ): Promise<import("@modelcontextprotocol/sdk/types.js").CreateMessageResult>;
+  ): Promise<
+    | import("@modelcontextprotocol/sdk/types.js").CreateMessageResult
+    | import("@modelcontextprotocol/sdk/types.js").CreateMessageResultWithTools
+  >;
 
   /**
    * Close the ACP agent for a specific session.

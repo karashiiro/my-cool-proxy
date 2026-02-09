@@ -9,6 +9,7 @@ import {
 import type {
   CreateMessageRequest,
   CreateMessageResult,
+  CreateMessageResultWithTools,
 } from "@modelcontextprotocol/sdk/types.js";
 import type {
   ISamplingShim,
@@ -81,7 +82,7 @@ export class SamplingShim implements ISamplingShim {
   async handleSamplingRequest(
     sessionId: string,
     params: CreateMessageRequest["params"],
-  ): Promise<CreateMessageResult> {
+  ): Promise<CreateMessageResult | CreateMessageResultWithTools> {
     const client = this.clients.get(sessionId);
     const cwd = this.capabilityStore.getWorkingDirectory(sessionId);
 
