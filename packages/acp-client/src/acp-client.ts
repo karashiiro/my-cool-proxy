@@ -98,6 +98,14 @@ class ACPClientHandler implements acp.Client {
   deregisterContentHandler(sessionId: string): void {
     this.contentHandlers.delete(sessionId);
   }
+
+  /**
+   * Handle extension notifications from the agent.
+   * Silently ignores unknown notification types (e.g., custom agent notifications).
+   */
+  extNotification: acp.Client["extNotification"] = async () => {
+    // Silently ignore - we don't need to handle custom agent notifications
+  };
 }
 
 /**

@@ -69,6 +69,11 @@ async function main(): Promise<void> {
     },
   );
 
+  // Silently handle unknown notifications and requests (e.g., custom agent messages)
+  // Some agents send custom protocol extensions that we don't need to handle
+  server.server.fallbackNotificationHandler = async () => {};
+  server.server.fallbackRequestHandler = async () => ({});
+
   // Register each tool with a handler that calls back to the gateway
   // Tool names are suffixed with the tag for permission matching
   for (const tool of tools) {
