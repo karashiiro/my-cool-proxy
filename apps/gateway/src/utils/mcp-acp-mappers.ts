@@ -127,6 +127,20 @@ export function mapMcpToAcpPrompt(
     } as ContentBlock);
   }
 
+  // Inject tool requirement directive if toolChoice.mode === "required"
+  // ACP doesn't have a native toolChoice mechanism, so we use prompt injection
+  // as a best-effort approach. The model may not always comply, but this provides the intent.
+  if (
+    params.toolChoice?.mode === "required" &&
+    params.tools &&
+    params.tools.length > 0
+  ) {
+    blocks.push({
+      type: "text",
+      text: "[IMPORTANT: You MUST use at least one of the provided tools to complete this request. Do not provide a final response without first calling a tool.]",
+    } as ContentBlock);
+  }
+
   // Messages with role labels
   for (const message of params.messages) {
     const role = formatRole(message.role);

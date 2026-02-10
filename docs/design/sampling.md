@@ -225,15 +225,19 @@ The shim converts between MCP's sampling protocol and ACP's prompt protocol.
 
 ### MCP to ACP Conversion
 
-| MCP Parameter                    | ACP Representation                      |
-| -------------------------------- | --------------------------------------- |
-| `systemPrompt`                   | `[System]: {text}` text block           |
-| `messages[].role`                | `[User]:` or `[Assistant]:` prefix      |
-| `messages[].content` (text)      | Text content after role prefix          |
-| `messages[].content` (image)     | Native image block (if agent supports)  |
-| `messages[].content` (audio)     | Native audio block (if agent supports)  |
-| `temperature`, `maxTokens`, etc. | `[Sampling parameters: ...]` info block |
-| `includeContext`                 | Not mappable, skipped                   |
+| MCP Parameter                    | ACP Representation                                 |
+| -------------------------------- | -------------------------------------------------- |
+| `systemPrompt`                   | `[System]: {text}` text block                      |
+| `messages[].role`                | `[User]:` or `[Assistant]:` prefix                 |
+| `messages[].content` (text)      | Text content after role prefix                     |
+| `messages[].content` (image)     | Native image block (if agent supports)             |
+| `messages[].content` (audio)     | Native audio block (if agent supports)             |
+| `temperature`, `maxTokens`, etc. | `[Sampling parameters: ...]` info block            |
+| `tools`                          | Exposed via ephemeral MCP sidecar                  |
+| `toolChoice.mode = "none"`       | Tools filtered out (sidecar not spawned)           |
+| `toolChoice.mode = "required"`   | `[IMPORTANT: You MUST use ...]` directive injected |
+| `toolChoice.mode = "auto"`       | Default behavior (no special handling)             |
+| `includeContext`                 | Not mappable, skipped                              |
 
 Example transformation:
 

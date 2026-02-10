@@ -783,6 +783,8 @@ The ACP protocol does not expose LLM inference parameters (temperature, max toke
 | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **`messages`**     | Each message is serialized as a `[Role]: text` content block. Image and audio content is passed through natively when the ACP agent advertises support via `promptCapabilities`; otherwise, it falls back to a text placeholder like `[image: image/png]`. |
 | **`systemPrompt`** | Prepended as a `[System]: {text}` content block before the messages. ACP has no native system prompt field, so this is informational context for the agent.                                                                                                |
+| **`tools`**        | Supported via ephemeral MCP sidecar. Tools are exposed to the ACP agent through a stdio MCP server that proxies tool calls back to the gateway's upstream servers.                                                                                         |
+| **`toolChoice`**   | Supported. `mode: "none"` filters out tools (sidecar not spawned). `mode: "required"` injects a prompt directive instructing the model to use tools. `mode: "auto"` is the default behavior with no special handling.                                      |
 
 #### Included as informational text
 
@@ -797,13 +799,12 @@ These parameters are serialized into a `[Sampling parameters: ...]` text block a
 
 #### Not supported
 
-| Parameter                      | Reason                                                                                                                                                                         |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **`includeContext`**           | No mechanism to inject MCP server context into an ACP session. The spec allows clients to ignore this parameter, and the values `thisServer`/`allServers` are soft-deprecated. |
-| **`metadata`**                 | Provider-specific LLM passthrough. ACP agents are not LLM providers, so there is no target for this data.                                                                      |
-| **`tools`** / **`toolChoice`** | Not yet supported. The gateway does not advertise `sampling.tools` capability, so well-behaved servers will not send these parameters.                                         |
-| **`task`**                     | Task-augmented execution is not supported by the shim.                                                                                                                         |
-| **`_meta.progressToken`**      | The shim does not emit progress notifications.                                                                                                                                 |
+| Parameter                 | Reason                                                                                                                                                                         |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **`includeContext`**      | No mechanism to inject MCP server context into an ACP session. The spec allows clients to ignore this parameter, and the values `thisServer`/`allServers` are soft-deprecated. |
+| **`metadata`**            | Provider-specific LLM passthrough. ACP agents are not LLM providers, so there is no target for this data.                                                                      |
+| **`task`**                | Task-augmented execution is not supported by the shim.                                                                                                                         |
+| **`_meta.progressToken`** | The shim does not emit progress notifications.                                                                                                                                 |
 
 #### Response mapping
 

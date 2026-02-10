@@ -316,6 +316,194 @@ describe("mapMcpToAcpPrompt", () => {
     expect(allText).not.toContain("includeContext");
     expect(allText).not.toContain("allServers");
   });
+
+  describe("toolChoice handling", () => {
+    it("should inject directive when toolChoice.mode === 'required' and tools are present", () => {
+      const params: SamplingParams = {
+        messages: [
+          {
+            role: "user",
+            content: { type: "text", text: "Do something" },
+          },
+        ],
+        maxTokens: 100,
+        tools: [
+          {
+            name: "my_tool",
+            description: "A tool",
+            inputSchema: { type: "object" as const },
+          },
+        ],
+        toolChoice: { mode: "required" },
+      };
+
+      const result = mapMcpToAcpPrompt(params);
+
+      // Should have the directive block before the message
+      expect(result).toHaveLength(2);
+      const directive = result[0] as ContentBlock & {
+        type: "text";
+        text: string;
+      };
+      expect(directive.type).toBe("text");
+      expect(directive.text).toContain("MUST use at least one");
+      expect(directive.text).toContain("provided tools");
+    });
+
+    it("should place directive after system prompt when both are present", () => {
+      const params: SamplingParams = {
+        messages: [
+          {
+            role: "user",
+            content: { type: "text", text: "Do something" },
+          },
+        ],
+        systemPrompt: "You are helpful",
+        maxTokens: 100,
+        tools: [
+          {
+            name: "my_tool",
+            description: "A tool",
+            inputSchema: { type: "object" as const },
+          },
+        ],
+        toolChoice: { mode: "required" },
+      };
+
+      const result = mapMcpToAcpPrompt(params);
+
+      // Should have: system prompt, directive, message
+      expect(result).toHaveLength(3);
+      const systemBlock = result[0] as ContentBlock & {
+        type: "text";
+        text: string;
+      };
+      const directiveBlock = result[1] as ContentBlock & {
+        type: "text";
+        text: string;
+      };
+      expect(systemBlock.text).toContain("[System]:");
+      expect(directiveBlock.text).toContain("MUST use at least one");
+    });
+
+    it("should NOT inject directive when toolChoice.mode === 'auto'", () => {
+      const params: SamplingParams = {
+        messages: [
+          {
+            role: "user",
+            content: { type: "text", text: "Do something" },
+          },
+        ],
+        maxTokens: 100,
+        tools: [
+          {
+            name: "my_tool",
+            description: "A tool",
+            inputSchema: { type: "object" as const },
+          },
+        ],
+        toolChoice: { mode: "auto" },
+      };
+
+      const result = mapMcpToAcpPrompt(params);
+
+      // Should only have the message, no directive
+      expect(result).toHaveLength(1);
+      const allText = result
+        .filter(
+          (r): r is ContentBlock & { type: "text"; text: string } =>
+            r.type === "text",
+        )
+        .map((r) => r.text)
+        .join(" ");
+      expect(allText).not.toContain("MUST use");
+    });
+
+    it("should NOT inject directive when toolChoice is undefined", () => {
+      const params: SamplingParams = {
+        messages: [
+          {
+            role: "user",
+            content: { type: "text", text: "Do something" },
+          },
+        ],
+        maxTokens: 100,
+        tools: [
+          {
+            name: "my_tool",
+            description: "A tool",
+            inputSchema: { type: "object" as const },
+          },
+        ],
+      };
+
+      const result = mapMcpToAcpPrompt(params);
+
+      // Should only have the message, no directive
+      expect(result).toHaveLength(1);
+      const allText = result
+        .filter(
+          (r): r is ContentBlock & { type: "text"; text: string } =>
+            r.type === "text",
+        )
+        .map((r) => r.text)
+        .join(" ");
+      expect(allText).not.toContain("MUST use");
+    });
+
+    it("should NOT inject directive when toolChoice.mode === 'required' but no tools", () => {
+      const params: SamplingParams = {
+        messages: [
+          {
+            role: "user",
+            content: { type: "text", text: "Do something" },
+          },
+        ],
+        maxTokens: 100,
+        toolChoice: { mode: "required" },
+      };
+
+      const result = mapMcpToAcpPrompt(params);
+
+      // Should only have the message, no directive
+      expect(result).toHaveLength(1);
+      const allText = result
+        .filter(
+          (r): r is ContentBlock & { type: "text"; text: string } =>
+            r.type === "text",
+        )
+        .map((r) => r.text)
+        .join(" ");
+      expect(allText).not.toContain("MUST use");
+    });
+
+    it("should NOT inject directive when toolChoice.mode === 'required' but empty tools array", () => {
+      const params: SamplingParams = {
+        messages: [
+          {
+            role: "user",
+            content: { type: "text", text: "Do something" },
+          },
+        ],
+        maxTokens: 100,
+        tools: [],
+        toolChoice: { mode: "required" },
+      };
+
+      const result = mapMcpToAcpPrompt(params);
+
+      // Should only have the message, no directive
+      expect(result).toHaveLength(1);
+      const allText = result
+        .filter(
+          (r): r is ContentBlock & { type: "text"; text: string } =>
+            r.type === "text",
+        )
+        .map((r) => r.text)
+        .join(" ");
+      expect(allText).not.toContain("MUST use");
+    });
+  });
 });
 
 describe("mapAcpToMcpResult", () => {

@@ -100,11 +100,16 @@ export class SamplingShim implements ISamplingShim {
     let mcpServers: McpServerStdio[] = [];
     let toolTag: string | undefined;
 
-    // Set up tool proxy if tools are provided
+    // Determine effective tools based on toolChoice
+    // If toolChoice.mode === "none", the model should not use any tools
+    const effectiveTools =
+      params.toolChoice?.mode === "none" ? undefined : params.tools;
+
+    // Set up tool proxy if we have tools AND toolChoice isn't "none"
     // No capability check needed - stdio MCP is required by ACP spec
-    if (params.tools && params.tools.length > 0) {
+    if (effectiveTools && effectiveTools.length > 0) {
       this.logger.debug(
-        `Setting up tool sidecar for ${params.tools.length} tools`,
+        `Setting up tool sidecar for ${effectiveTools.length} tools`,
       );
 
       callbackServer = new ToolCallbackServer(
@@ -132,7 +137,7 @@ export class SamplingShim implements ISamplingShim {
           args: [sidecarPath],
           env: [
             { name: "CALLBACK_URL", value: callbackUrl },
-            { name: "TOOLS_JSON", value: JSON.stringify(params.tools) },
+            { name: "TOOLS_JSON", value: JSON.stringify(effectiveTools) },
             { name: "TOOL_TAG", value: toolTag },
           ],
         },

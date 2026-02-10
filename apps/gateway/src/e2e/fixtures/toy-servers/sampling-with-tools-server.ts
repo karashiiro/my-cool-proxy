@@ -236,6 +236,201 @@ function createSamplingWithToolsServer(): McpServer {
     },
   );
 
+  // ============================================================
+  // toolChoice mode tests
+  // ============================================================
+
+  // Test toolChoice.mode = "none" - tools should be filtered out
+  server.registerTool(
+    "ask_with_tools_disabled",
+    {
+      description:
+        "Ask a math question with calculator tools provided, but toolChoice.mode='none'. " +
+        "The LLM should NOT be able to use any tools despite them being in the request.",
+      inputSchema: z.object({
+        question: z.string().describe("A math question to ask"),
+      }),
+    },
+    async (args) => {
+      const { question } = args as { question: string };
+
+      const result = await server.server.createMessage({
+        messages: [
+          {
+            role: "user",
+            content: {
+              type: "text",
+              text: `I'm providing calculator tools but they should be disabled. Please answer: ${question}`,
+            },
+          },
+        ],
+        maxTokens: 500,
+        // Tools are provided but should be FILTERED OUT by the shim
+        tools: [
+          {
+            name: "add",
+            description: "Add two numbers together",
+            inputSchema: {
+              type: "object" as const,
+              properties: {
+                a: { type: "number" },
+                b: { type: "number" },
+              },
+              required: ["a", "b"],
+            },
+          },
+          {
+            name: "multiply",
+            description: "Multiply two numbers",
+            inputSchema: {
+              type: "object" as const,
+              properties: {
+                a: { type: "number" },
+                b: { type: "number" },
+              },
+              required: ["a", "b"],
+            },
+          },
+        ],
+        // This should prevent any tools from being available!
+        toolChoice: { mode: "none" },
+      });
+
+      const responseText = extractResponseText(result);
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `LLM (toolChoice=none) responded: ${responseText}`,
+          },
+        ],
+      };
+    },
+  );
+
+  // Test toolChoice.mode = "required" - model MUST use a tool
+  server.registerTool(
+    "ask_must_use_tool",
+    {
+      description:
+        "Ask a question with toolChoice.mode='required'. " +
+        "The LLM MUST use at least one tool before providing a final answer.",
+      inputSchema: z.object({
+        question: z.string().describe("A question that requires tool use"),
+      }),
+    },
+    async (args) => {
+      const { question } = args as { question: string };
+
+      const result = await server.server.createMessage({
+        messages: [
+          {
+            role: "user",
+            content: {
+              type: "text",
+              text: question,
+            },
+          },
+        ],
+        maxTokens: 500,
+        tools: [
+          {
+            name: "add",
+            description: "Add two numbers together",
+            inputSchema: {
+              type: "object" as const,
+              properties: {
+                a: { type: "number", description: "First number" },
+                b: { type: "number", description: "Second number" },
+              },
+              required: ["a", "b"],
+            },
+          },
+          {
+            name: "lookup_fact",
+            description: "Look up a fact about a topic",
+            inputSchema: {
+              type: "object" as const,
+              properties: {
+                topic: { type: "string", description: "Topic to look up" },
+              },
+              required: ["topic"],
+            },
+          },
+        ],
+        // Model MUST use a tool - directive will be injected
+        toolChoice: { mode: "required" },
+      });
+
+      const responseText = extractResponseText(result);
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `LLM (toolChoice=required) responded: ${responseText}`,
+          },
+        ],
+      };
+    },
+  );
+
+  // Test toolChoice.mode = "auto" - explicit auto mode (should behave same as default)
+  server.registerTool(
+    "ask_with_auto_tools",
+    {
+      description:
+        "Ask a question with toolChoice.mode='auto'. " +
+        "The LLM can optionally use tools if helpful.",
+      inputSchema: z.object({
+        question: z.string().describe("A question to ask"),
+      }),
+    },
+    async (args) => {
+      const { question } = args as { question: string };
+
+      const result = await server.server.createMessage({
+        messages: [
+          {
+            role: "user",
+            content: {
+              type: "text",
+              text: question,
+            },
+          },
+        ],
+        maxTokens: 500,
+        tools: [
+          {
+            name: "search",
+            description: "Search for information",
+            inputSchema: {
+              type: "object" as const,
+              properties: {
+                query: { type: "string", description: "Search query" },
+              },
+              required: ["query"],
+            },
+          },
+        ],
+        // Explicit auto mode - should be same as not specifying toolChoice
+        toolChoice: { mode: "auto" },
+      });
+
+      const responseText = extractResponseText(result);
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `LLM (toolChoice=auto) responded: ${responseText}`,
+          },
+        ],
+      };
+    },
+  );
+
   return server;
 }
 
