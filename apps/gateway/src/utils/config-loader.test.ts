@@ -580,6 +580,177 @@ describe("loadConfig", () => {
       );
     });
   });
+
+  describe("logging config validation", () => {
+    it("should accept valid logging config with console level", () => {
+      const validConfig = {
+        port: 3000,
+        host: "localhost",
+        mcpClients: {},
+        logging: {
+          console: { level: "debug" },
+        },
+      };
+
+      writeFileSync(testConfigPath, JSON.stringify(validConfig));
+      process.env.CONFIG_PATH = testConfigPath;
+
+      const config = loadConfig();
+      expect(config.logging?.console?.level).toBe("debug");
+    });
+
+    it("should accept valid logging config with file level", () => {
+      const validConfig = {
+        port: 3000,
+        host: "localhost",
+        mcpClients: {},
+        logging: {
+          file: { level: "warn" },
+        },
+      };
+
+      writeFileSync(testConfigPath, JSON.stringify(validConfig));
+      process.env.CONFIG_PATH = testConfigPath;
+
+      const config = loadConfig();
+      expect(config.logging?.file?.level).toBe("warn");
+    });
+
+    it("should accept valid logging config with both console and file", () => {
+      const validConfig = {
+        port: 3000,
+        host: "localhost",
+        mcpClients: {},
+        logging: {
+          console: { level: "info" },
+          file: { level: "trace" },
+        },
+      };
+
+      writeFileSync(testConfigPath, JSON.stringify(validConfig));
+      process.env.CONFIG_PATH = testConfigPath;
+
+      const config = loadConfig();
+      expect(config.logging?.console?.level).toBe("info");
+      expect(config.logging?.file?.level).toBe("trace");
+    });
+
+    it("should accept empty logging config", () => {
+      const validConfig = {
+        port: 3000,
+        host: "localhost",
+        mcpClients: {},
+        logging: {},
+      };
+
+      writeFileSync(testConfigPath, JSON.stringify(validConfig));
+      process.env.CONFIG_PATH = testConfigPath;
+
+      const config = loadConfig();
+      expect(config.logging).toEqual({});
+    });
+
+    it("should accept all valid log levels", () => {
+      const levels = ["trace", "debug", "info", "warn", "error", "fatal"];
+
+      for (const level of levels) {
+        const validConfig = {
+          port: 3000,
+          host: "localhost",
+          mcpClients: {},
+          logging: {
+            console: { level },
+          },
+        };
+
+        writeFileSync(testConfigPath, JSON.stringify(validConfig));
+        process.env.CONFIG_PATH = testConfigPath;
+
+        const config = loadConfig();
+        expect(config.logging?.console?.level).toBe(level);
+      }
+    });
+
+    it("should throw error if logging is not an object", () => {
+      const invalidConfig = {
+        port: 3000,
+        host: "localhost",
+        mcpClients: {},
+        logging: "invalid",
+      };
+
+      writeFileSync(testConfigPath, JSON.stringify(invalidConfig));
+      process.env.CONFIG_PATH = testConfigPath;
+
+      expect(() => loadConfig()).toThrow(
+        /Config 'logging' must be an object if specified/,
+      );
+    });
+
+    it("should throw error if logging.console is not an object", () => {
+      const invalidConfig = {
+        port: 3000,
+        host: "localhost",
+        mcpClients: {},
+        logging: { console: "invalid" },
+      };
+
+      writeFileSync(testConfigPath, JSON.stringify(invalidConfig));
+      process.env.CONFIG_PATH = testConfigPath;
+
+      expect(() => loadConfig()).toThrow(
+        /Config 'logging.console' must be an object if specified/,
+      );
+    });
+
+    it("should throw error if logging.file is not an object", () => {
+      const invalidConfig = {
+        port: 3000,
+        host: "localhost",
+        mcpClients: {},
+        logging: { file: "invalid" },
+      };
+
+      writeFileSync(testConfigPath, JSON.stringify(invalidConfig));
+      process.env.CONFIG_PATH = testConfigPath;
+
+      expect(() => loadConfig()).toThrow(
+        /Config 'logging.file' must be an object if specified/,
+      );
+    });
+
+    it("should throw error if logging.console.level is invalid", () => {
+      const invalidConfig = {
+        port: 3000,
+        host: "localhost",
+        mcpClients: {},
+        logging: { console: { level: "invalid" } },
+      };
+
+      writeFileSync(testConfigPath, JSON.stringify(invalidConfig));
+      process.env.CONFIG_PATH = testConfigPath;
+
+      expect(() => loadConfig()).toThrow(
+        /Config 'logging.console.level' must be one of: trace, debug, info, warn, error, fatal/,
+      );
+    });
+
+    it("should throw error if logging.file.level is invalid", () => {
+      const invalidConfig = {
+        port: 3000,
+        host: "localhost",
+        mcpClients: {},
+        logging: { file: { level: "verbose" } },
+      };
+
+      writeFileSync(testConfigPath, JSON.stringify(invalidConfig));
+      process.env.CONFIG_PATH = testConfigPath;
+
+      expect(() => loadConfig()).toThrow(
+        /Config 'logging.file.level' must be one of: trace, debug, info, warn, error, fatal/,
+      );
+    });
+  });
 });
 
 describe("mergeEnvConfig", () => {

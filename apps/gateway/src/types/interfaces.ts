@@ -187,6 +187,40 @@ export interface SkillsConfig {
   mutable?: boolean;
 }
 
+/**
+ * Valid log levels supported by the logger.
+ */
+export type LogLevel = "trace" | "debug" | "info" | "warn" | "error" | "fatal";
+
+/**
+ * Configuration for logging output.
+ * Allows independent log level configuration for console and file outputs.
+ */
+export interface LoggingConfig {
+  /**
+   * Console output configuration.
+   * Console always outputs to stderr using human-readable format.
+   */
+  console?: {
+    /**
+     * Log level for console output.
+     * Default: "info"
+     */
+    level?: LogLevel;
+  };
+  /**
+   * File output configuration.
+   * File output is always enabled at the platform-specific log path.
+   */
+  file?: {
+    /**
+     * Log level for file output.
+     * Default: "trace" (captures all logs)
+     */
+    level?: LogLevel;
+  };
+}
+
 export interface ServerConfig {
   port?: number;
   host?: string;
@@ -203,6 +237,15 @@ export interface ServerConfig {
    * client doesn't natively support them.
    */
   acp?: ACPConfig;
+  /**
+   * Logging configuration.
+   * Controls log levels for console and file outputs.
+   *
+   * Default behavior (no config):
+   * - Console: "info" level to stderr
+   * - File: "trace" level to platform log directory
+   */
+  logging?: LoggingConfig;
 }
 
 export type { ILogger } from "@my-cool-proxy/logger";

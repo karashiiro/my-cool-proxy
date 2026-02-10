@@ -9,6 +9,7 @@ import {
   getServerLogDir,
   getServerLogPath,
   ensureServerLogDir,
+  getGatewayLogPath,
 } from "./log-paths.js";
 
 /**
@@ -233,6 +234,26 @@ describe("log-paths", () => {
 
       expect(result).toContain("servers");
       expect(result).toContain("my-cool-proxy");
+    });
+
+    it("getGatewayLogPath should return path inside log directory", () => {
+      const logDir = getLogDir();
+      const gatewayPath = getGatewayLogPath();
+
+      expect(gatewayPath.startsWith(logDir)).toBe(true);
+      expect(gatewayPath).toMatch(/gateway\.log$/);
+    });
+
+    it("getGatewayLogPath should not include servers subdirectory", () => {
+      const gatewayPath = getGatewayLogPath();
+
+      expect(gatewayPath).not.toContain("servers");
+    });
+
+    it("getGatewayLogPath should contain app name", () => {
+      const gatewayPath = getGatewayLogPath();
+
+      expect(gatewayPath).toContain("my-cool-proxy");
     });
   });
 });

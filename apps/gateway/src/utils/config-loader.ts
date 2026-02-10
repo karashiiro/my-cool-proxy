@@ -189,6 +189,58 @@ export function loadConfig(): ServerConfig {
       }
     }
 
+    // Validate logging config if provided
+    const VALID_LOG_LEVELS = [
+      "trace",
+      "debug",
+      "info",
+      "warn",
+      "error",
+      "fatal",
+    ];
+
+    if (config.logging !== undefined) {
+      if (typeof config.logging !== "object" || config.logging === null) {
+        throw new Error("Config 'logging' must be an object if specified");
+      }
+
+      if (config.logging.console !== undefined) {
+        if (
+          typeof config.logging.console !== "object" ||
+          config.logging.console === null
+        ) {
+          throw new Error(
+            "Config 'logging.console' must be an object if specified",
+          );
+        }
+        if (config.logging.console.level !== undefined) {
+          if (!VALID_LOG_LEVELS.includes(config.logging.console.level)) {
+            throw new Error(
+              `Config 'logging.console.level' must be one of: ${VALID_LOG_LEVELS.join(", ")}`,
+            );
+          }
+        }
+      }
+
+      if (config.logging.file !== undefined) {
+        if (
+          typeof config.logging.file !== "object" ||
+          config.logging.file === null
+        ) {
+          throw new Error(
+            "Config 'logging.file' must be an object if specified",
+          );
+        }
+        if (config.logging.file.level !== undefined) {
+          if (!VALID_LOG_LEVELS.includes(config.logging.file.level)) {
+            throw new Error(
+              `Config 'logging.file.level' must be one of: ${VALID_LOG_LEVELS.join(", ")}`,
+            );
+          }
+        }
+      }
+    }
+
     // Validate each MCP client config
     for (const [name, clientConfig] of Object.entries(config.mcpClients)) {
       if (typeof clientConfig !== "object" || clientConfig === null) {

@@ -25,7 +25,8 @@ import {
   type IResourceProvider,
 } from "@my-cool-proxy/mcp-aggregation";
 // Import logger from shared package
-import { ConsoleLogger } from "@my-cool-proxy/logger";
+import { ConsoleLogger, type LoggerConfig } from "@my-cool-proxy/logger";
+import { getGatewayLogPath } from "../utils/log-paths.js";
 import { MCPGatewayServer } from "../mcp/gateway-server.js";
 import { ShutdownHandler } from "../handlers/shutdown-handler.js";
 import { CapabilityStore } from "../services/capability-store.js";
@@ -55,11 +56,24 @@ export function createContainer(
   // Bind configuration
   container.bind<ServerConfig>(TYPES.ServerConfig).toConstantValue(config);
 
+  // Build logger configuration from server config
+  // Defaults: console at "info" (or "warn" in CI), file at "trace" (captures everything)
+  const isCIEnv = process.env.CI !== undefined;
+  const defaultConsoleLevel = isCIEnv ? "warn" : "info";
+
+  const loggerConfig: LoggerConfig = {
+    console: { level: config.logging?.console?.level ?? defaultConsoleLevel },
+    file: {
+      level: config.logging?.file?.level ?? "trace",
+      path: getGatewayLogPath(),
+    },
+  };
+
   // Bind logger (from shared package - use factory binding since ConsoleLogger
   // is DI-framework-agnostic and doesn't have @injectable() decorator)
   container
     .bind<ILogger>(TYPES.Logger)
-    .toDynamicValue(() => new ConsoleLogger())
+    .toDynamicValue(() => new ConsoleLogger(loggerConfig))
     .inSingletonScope();
 
   // Bind Lua runtime (from package - use factory binding)
