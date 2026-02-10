@@ -1,0 +1,426 @@
+# Sampling
+
+This document explains how the MCP Gateway Proxy handles `sampling/createMessage` requests from upstream MCP servers, including the ACP-based sampling shim for clients that lack native sampling support.
+
+## Overview
+
+MCP sampling allows upstream servers to request LLM inference through the client. The gateway supports two modes:
+
+1. **Native Sampling** - Forward requests to a downstream client that supports sampling
+2. **Sampling Shim** - Route requests through an ACP agent when the client doesn't support sampling
+
+Both modes share the same security model: sampling is disabled by default and must be explicitly enabled per-server.
+
+```mermaid
+flowchart TB
+    subgraph Upstream["Upstream MCP Servers"]
+        Server1["trusted-server<br/>(sampling enabled)"]
+        Server2["untrusted-server<br/>(sampling disabled)"]
+    end
+
+    subgraph Gateway["MCP Gateway"]
+        Handler["Request Handler"]
+        Check{"Client supports<br/>sampling?"}
+        Native["Forward to<br/>Client"]
+        Shim["Route through<br/>ACP Shim"]
+    end
+
+    subgraph Downstream["Downstream"]
+        Client["MCP Client<br/>(with sampling)"]
+        ACP["ACP Agent"]
+    end
+
+    Server1 -->|"sampling/createMessage"| Handler
+    Server2 -.->|"❌ No handler<br/>registered"| Handler
+    Handler --> Check
+    Check -->|Yes| Native
+    Check -->|No| Shim
+    Native --> Client
+    Shim --> ACP
+```
+
+## Security Model
+
+Sampling is a powerful capability that lets MCP servers request LLM inference. This creates significant security risk: a malicious server could use sampling to exfiltrate data, execute prompts, or abuse your AI credits.
+
+### Defense-in-Depth
+
+The gateway implements multiple security layers:
+
+```mermaid
+flowchart TB
+    subgraph Layer1["Layer 1: Configuration"]
+        Config["dangerouslyEnableSampling<br/>per-server setting"]
+    end
+
+    subgraph Layer2["Layer 2: Capability Filtering"]
+        Advertise["Only advertise sampling<br/>to trusted servers"]
+    end
+
+    subgraph Layer3["Layer 3: Handler Registration"]
+        Register["Only register handlers<br/>for trusted servers"]
+    end
+
+    Config --> Layer2
+    Layer2 --> Layer3
+
+    Untrusted["Untrusted Server"] -.->|"Can't see sampling exists"| Layer2
+    Malicious["Malicious Server<br/>(guesses sampling)"| -.->|"No handler to process"| Layer3
+```
+
+| Layer                | Protection                           | Implementation                                   |
+| -------------------- | ------------------------------------ | ------------------------------------------------ |
+| Configuration        | Opt-in per server                    | `dangerouslyEnableSampling: true` in config      |
+| Capability Filtering | Hide sampling from untrusted servers | `buildClientCapabilities()` in client-manager.ts |
+| Handler Registration | No processing for untrusted servers  | `registerProxyHandlers()` in proxy-handlers.ts   |
+
+### Trust Decision Flow
+
+```mermaid
+flowchart TB
+    Start["Upstream server<br/>connects"] --> ConfigCheck{"dangerouslyEnableSampling<br/>= true?"}
+    ConfigCheck -->|No| NoAdvertise["Don't advertise<br/>sampling capability"]
+    ConfigCheck -->|Yes| Advertise["Advertise sampling<br/>to server"]
+
+    NoAdvertise --> NoHandler["Don't register<br/>sampling handler"]
+    Advertise --> ClientCheck{"Client supports<br/>sampling OR<br/>shim configured?"}
+
+    ClientCheck -->|No| NoHandler
+    ClientCheck -->|Yes| RegisterHandler["Register sampling<br/>handler"]
+
+    NoHandler --> Blocked["Server can't use sampling"]
+    RegisterHandler --> Enabled["Server can use sampling"]
+```
+
+## Native Sampling
+
+When the downstream MCP client advertises sampling support, requests are forwarded directly:
+
+```mermaid
+sequenceDiagram
+    participant Upstream as Upstream Server
+    participant Gateway as Gateway
+    participant Client as MCP Client
+
+    Note over Upstream,Client: Initialization
+    Client->>Gateway: Connect with sampling capability
+    Gateway->>Gateway: Store capabilities
+    Gateway->>Upstream: Advertise sampling (if trusted)
+
+    Note over Upstream,Client: Sampling Request
+    Upstream->>Gateway: sampling/createMessage
+    Gateway->>Client: Forward request
+    Client->>Client: LLM inference
+    Client-->>Gateway: CreateMessageResult
+    Gateway-->>Upstream: Return result
+```
+
+The gateway acts as a transparent proxy, preserving all request parameters:
+
+- `messages` - Conversation history
+- `systemPrompt` - System instructions
+- `maxTokens` - Token limit
+- `temperature` - Sampling temperature
+- `modelPreferences` - Model selection hints
+- `includeContext` - Context inclusion preference
+
+## Sampling Shim
+
+The sampling shim enables sampling support when the downstream client doesn't natively support it. It routes requests through an ACP (Agent Control Protocol) agent.
+
+### Architecture
+
+```mermaid
+flowchart TB
+    subgraph Gateway["MCP Gateway"]
+        Shim["SamplingShim"]
+        Mapper["MCP ↔ ACP Mappers"]
+        CapStore["CapabilityStore"]
+    end
+
+    subgraph ACP["ACP Layer"]
+        ACPClient["ACPClient<br/>(long-lived)"]
+        ACPSession["ACPClientSession<br/>(per-request)"]
+    end
+
+    subgraph Agent["ACP Agent Process"]
+        AgentProc["Agent Process<br/>(e.g., Claude Code)"]
+    end
+
+    Shim --> Mapper
+    Shim --> ACPClient
+    Shim --> CapStore
+    ACPClient --> ACPSession
+    ACPSession --> AgentProc
+```
+
+### Component Responsibilities
+
+| Component             | Purpose                                           |
+| --------------------- | ------------------------------------------------- |
+| `SamplingShim`        | Thin orchestrator; lifecycle management           |
+| `mapMcpToAcpPrompt()` | Convert MCP sampling params to ACP content blocks |
+| `mapAcpToMcpResult()` | Convert ACP response to MCP CreateMessageResult   |
+| `CapabilityStore`     | Track working directories per session             |
+| `ACPClient`           | Long-lived connection to agent process            |
+| `ACPClientSession`    | Short-lived session per sampling request          |
+
+### Request Flow
+
+```mermaid
+sequenceDiagram
+    participant Upstream as Upstream Server
+    participant Gateway as Gateway
+    participant Shim as SamplingShim
+    participant Mapper as MCP↔ACP Mappers
+    participant ACP as ACP Client
+    participant Agent as ACP Agent
+
+    Upstream->>Gateway: sampling/createMessage
+    Gateway->>Shim: handleSamplingRequest()
+
+    Shim->>Mapper: mapMcpToAcpPrompt(params)
+    Mapper-->>Shim: ContentBlock[]
+
+    Shim->>ACP: createSession(cwd)
+    ACP-->>Shim: ACPClientSession
+
+    Shim->>ACP: session.prompt(content)
+    ACP->>Agent: Send prompt
+    Agent-->>ACP: Response + stopReason
+    ACP-->>Shim: PromptResult
+
+    Shim->>Mapper: mapAcpToMcpResult(content, stopReason)
+    Mapper-->>Shim: CreateMessageResult
+
+    Shim-->>Gateway: CreateMessageResult
+    Gateway-->>Upstream: Return result
+```
+
+### Lifecycle Management
+
+```mermaid
+stateDiagram-v2
+    [*] --> Uninitialized
+
+    Uninitialized --> Initialized: initialize(sessionId)
+    note right of Initialized: ACPClient spawns agent process
+
+    Initialized --> Initialized: handleSamplingRequest()
+    note right of Initialized: Creates short-lived ACPClientSession
+
+    Initialized --> Closed: close(sessionId)
+    note right of Closed: Agent process terminated
+
+    Closed --> [*]
+```
+
+- **One ACPClient per gateway session** - Long-lived agent process
+- **One ACPClientSession per sampling request** - Short-lived, isolated
+- **Working directory** - Stored in CapabilityStore (client root or tempdir)
+
+## MCP ↔ ACP Mapping
+
+The shim converts between MCP's sampling protocol and ACP's prompt protocol.
+
+### MCP to ACP Conversion
+
+| MCP Parameter                    | ACP Representation                      |
+| -------------------------------- | --------------------------------------- |
+| `systemPrompt`                   | `[System]: {text}` text block           |
+| `messages[].role`                | `[User]:` or `[Assistant]:` prefix      |
+| `messages[].content` (text)      | Text content after role prefix          |
+| `messages[].content` (image)     | Native image block (if agent supports)  |
+| `messages[].content` (audio)     | Native audio block (if agent supports)  |
+| `temperature`, `maxTokens`, etc. | `[Sampling parameters: ...]` info block |
+| `includeContext`                 | Not mappable, skipped                   |
+
+Example transformation:
+
+```
+MCP Request:
+{
+  systemPrompt: "You are helpful",
+  messages: [
+    { role: "user", content: { type: "text", text: "Hello" } },
+    { role: "assistant", content: { type: "text", text: "Hi!" } }
+  ],
+  temperature: 0.7
+}
+
+ACP Content Blocks:
+[
+  { type: "text", text: "[System]: You are helpful" },
+  { type: "text", text: "[User]: Hello" },
+  { type: "text", text: "[Assistant]: Hi!" },
+  { type: "text", text: "[Sampling parameters: temperature=0.7]" }
+]
+```
+
+### ACP to MCP Conversion
+
+| ACP Response       | MCP Result                                   |
+| ------------------ | -------------------------------------------- |
+| Text blocks        | Concatenated into single TextContent         |
+| Image/audio blocks | First non-text block becomes primary content |
+| `end_turn`         | `endTurn` stopReason                         |
+| `max_tokens`       | `maxTokens` stopReason                       |
+| `stop_sequence`    | `stopSequence` stopReason                    |
+| Model info         | Always `"acp-agent"`                         |
+| Role               | Always `"assistant"`                         |
+
+## Tool Support
+
+When an upstream server sends `tools` in the sampling request, the shim sets up a tool proxy so the ACP agent can call those tools.
+
+### Tool Proxy Architecture
+
+```mermaid
+flowchart TB
+    subgraph Gateway["MCP Gateway"]
+        Shim["SamplingShim"]
+        Callback["ToolCallbackServer<br/>(ephemeral HTTP)"]
+        ClientMgr["MCPClientManager"]
+    end
+
+    subgraph Sidecar["MCP Sampling Sidecar"]
+        SidecarProc["Node.js process<br/>(stdio MCP server)"]
+    end
+
+    subgraph Agent["ACP Agent"]
+        AgentProc["Agent Process"]
+    end
+
+    subgraph Upstream["Upstream MCP Servers"]
+        Server1["Server 1"]
+        Server2["Server 2"]
+    end
+
+    Shim -->|"spawn with tools"| SidecarProc
+    AgentProc -->|"MCP tool call"| SidecarProc
+    SidecarProc -->|"HTTP callback"| Callback
+    Callback -->|"route to server"| ClientMgr
+    ClientMgr --> Server1
+    ClientMgr --> Server2
+```
+
+### Tool Call Flow
+
+```mermaid
+sequenceDiagram
+    participant Agent as ACP Agent
+    participant Sidecar as MCP Sidecar
+    participant Callback as Callback Server
+    participant ClientMgr as Client Manager
+    participant Upstream as Upstream Server
+
+    Note over Agent,Upstream: Tool invocation during prompt
+    Agent->>Sidecar: call_tool (tagged name)
+    Sidecar->>Callback: POST /execute (original name)
+    Callback->>ClientMgr: Find tool in connected servers
+    ClientMgr->>Upstream: callTool()
+    Upstream-->>ClientMgr: CallToolResult
+    ClientMgr-->>Callback: Result
+    Callback-->>Sidecar: Result
+    Sidecar-->>Agent: Result
+```
+
+### Component Details
+
+| Component              | Purpose                                       | Lifecycle            |
+| ---------------------- | --------------------------------------------- | -------------------- |
+| `ToolCallbackServer`   | HTTP server receiving tool calls from sidecar | Per-sampling-request |
+| `mcp-sampling-sidecar` | Stdio MCP server exposing tools to agent      | Per-sampling-request |
+| Tool tag               | UUID suffix for permission matching           | Per-sampling-request |
+
+### Tool Name Tagging
+
+Tools are suffixed with a unique tag to enable permission matching:
+
+```
+Original tool: "search"
+Tagged tool:   "search-a1b2c3d4"
+```
+
+The sidecar translates back to the original name when calling the gateway.
+
+## Configuration
+
+### Enabling Sampling Per-Server
+
+```json
+{
+  "mcpClients": {
+    "trusted-server": {
+      "type": "http",
+      "url": "http://localhost:3000/mcp",
+      "dangerouslyEnableSampling": true
+    },
+    "untrusted-server": {
+      "type": "http",
+      "url": "http://localhost:3001/mcp"
+    }
+  }
+}
+```
+
+Without `dangerouslyEnableSampling: true`, sampling is disabled by default.
+
+### Configuring the ACP Shim
+
+```json
+{
+  "acp": {
+    "agent": {
+      "command": "npx",
+      "args": ["@zed-industries/claude-code-acp"]
+    }
+  }
+}
+```
+
+The configured command must be an ACP-compliant agent. Note that Claude Code does not natively implement ACP — use a wrapper package like `@zed-industries/claude-code-acp` to expose it as an ACP agent. See the [ACP agents directory](https://agentclientprotocol.com/get-started/agents) for other options.
+
+### Behavior Matrix
+
+| Client has sampling? | ACP agent configured? | Result                      |
+| -------------------- | --------------------- | --------------------------- |
+| Yes                  | Don't care            | Native sampling (preferred) |
+| No                   | Yes                   | ACP agent handles sampling  |
+| No                   | No                    | Sampling unavailable        |
+
+Native client sampling always takes priority over the shim.
+
+## Implementation Files
+
+| File                                                | Purpose                                  |
+| --------------------------------------------------- | ---------------------------------------- |
+| `apps/gateway/src/services/sampling-shim.ts`        | Shim orchestrator                        |
+| `apps/gateway/src/utils/mcp-acp-mappers.ts`         | MCP ↔ ACP conversion                     |
+| `apps/gateway/src/services/tool-callback-server.ts` | Ephemeral HTTP server for tool callbacks |
+| `apps/gateway/src/services/capability-store.ts`     | Session capability and cwd tracking      |
+| `apps/gateway/src/handlers/proxy-handlers.ts`       | Handler registration logic               |
+| `packages/mcp-client/src/client-manager.ts`         | Capability advertising                   |
+| `packages/mcp-sampling-sidecar/src/index.ts`        | Tool proxy sidecar                       |
+
+## Best Practices
+
+### For Contributors
+
+1. **Never bypass security layers** - Always check `dangerouslyEnableSampling`
+2. **Handle shim cleanup** - Close callback servers in finally blocks
+3. **Test both paths** - Cover native sampling and shim modes
+4. **Respect capability negotiation** - Check agent's `promptCapabilities`
+
+### For Operators
+
+1. **Minimize trusted servers** - Only enable sampling where necessary
+2. **Use tool filtering** - Combine with `allowedTools` for defense-in-depth
+3. **Monitor sampling usage** - Track which servers make sampling requests
+4. **Choose appropriate ACP agent** - Balance capability vs. security
+
+## Related Documentation
+
+- [Session Management](./session-management.md) - Session isolation for sampling handlers
+- [Configuration Guide](../configuration.md) - Full sampling configuration reference
+- [Index](./index.md) - High-level architecture overview

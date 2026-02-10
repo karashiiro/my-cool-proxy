@@ -186,4 +186,5 @@ See the [Configuration Guide](../configuration.md) for the full configuration re
 - [Lua Runtime](./lua-runtime.md) - Script execution system
 - [Session Management](./session-management.md) - Session isolation and client management
 - [Resource Namespacing](./resource-namespacing.md) - Resource and prompt aggregation
+- [Sampling](./sampling.md) - Sampling support, security model, and ACP shim
 - [Skills](./skills.md) - Reusable process documents for agents
