@@ -653,6 +653,202 @@ function createSamplingWithToolsServer(): McpServer {
     },
   );
 
+  // ============================================================
+  // Filesystem capability tests
+  // ============================================================
+
+  // Test reading a file in the working directory
+  server.registerTool(
+    "ask_to_read_file",
+    {
+      description:
+        "Ask the LLM to read a file using the ACP client's filesystem capabilities. " +
+        "The ACP agent must support fs/read_text_file and the gateway must have " +
+        "acp.filesystem.readTextFile enabled.",
+      inputSchema: z.object({
+        filename: z
+          .string()
+          .describe("Filename to read (relative to working directory)"),
+      }),
+    },
+    async (args) => {
+      const { filename } = args as { filename: string };
+
+      const result = await server.server.createMessage({
+        messages: [
+          {
+            role: "user",
+            content: {
+              type: "text",
+              text:
+                `Please read the file "${filename}" from the current working directory ` +
+                `and tell me what it contains. Use the filesystem read capability.`,
+            },
+          },
+        ],
+        maxTokens: 1000,
+      });
+
+      const responseText = extractResponseText(result);
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `LLM (fs read test) responded: ${responseText}`,
+          },
+        ],
+      };
+    },
+  );
+
+  // Test writing a file in the working directory
+  server.registerTool(
+    "ask_to_write_file",
+    {
+      description:
+        "Ask the LLM to write content to a file using the ACP client's filesystem capabilities. " +
+        "The ACP agent must support fs/write_text_file and the gateway must have " +
+        "acp.filesystem.writeTextFile enabled.",
+      inputSchema: z.object({
+        filename: z
+          .string()
+          .describe("Filename to write (relative to working directory)"),
+        content: z.string().describe("Content to write to the file"),
+      }),
+    },
+    async (args) => {
+      const { filename, content } = args as {
+        filename: string;
+        content: string;
+      };
+
+      const result = await server.server.createMessage({
+        messages: [
+          {
+            role: "user",
+            content: {
+              type: "text",
+              text:
+                `Please write the following content to a file named "${filename}" ` +
+                `in the current working directory:\n\n${content}\n\n` +
+                `Use the filesystem write capability.`,
+            },
+          },
+        ],
+        maxTokens: 500,
+      });
+
+      const responseText = extractResponseText(result);
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `LLM (fs write test) responded: ${responseText}`,
+          },
+        ],
+      };
+    },
+  );
+
+  // Test write then read in the SAME session (same working directory)
+  server.registerTool(
+    "ask_to_write_then_read",
+    {
+      description:
+        "Ask the LLM to write content to a file, then read it back in the SAME session. " +
+        "This tests that the filesystem capabilities work correctly within a single session's working directory.",
+      inputSchema: z.object({
+        filename: z
+          .string()
+          .describe(
+            "Filename to write and read (relative to working directory)",
+          ),
+        content: z.string().describe("Content to write to the file"),
+      }),
+    },
+    async (args) => {
+      const { filename, content } = args as {
+        filename: string;
+        content: string;
+      };
+
+      const result = await server.server.createMessage({
+        messages: [
+          {
+            role: "user",
+            content: {
+              type: "text",
+              text:
+                `Please do the following in order:\n` +
+                `1. Write this content to a file named "${filename}": "${content}"\n` +
+                `2. Read the file back and tell me what it contains\n` +
+                `3. Confirm the content matches what was written\n\n` +
+                `Use the filesystem read and write capabilities for both operations.`,
+            },
+          },
+        ],
+        maxTokens: 1000,
+      });
+
+      const responseText = extractResponseText(result);
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `LLM (fs write+read test) responded: ${responseText}`,
+          },
+        ],
+      };
+    },
+  );
+
+  // Test attempting to read outside sandbox (should fail)
+  server.registerTool(
+    "ask_to_read_outside_sandbox",
+    {
+      description:
+        "Ask the LLM to read a file outside the sandbox (like /etc/passwd). " +
+        "This should FAIL with a sandbox violation error if security is working correctly.",
+      inputSchema: z.object({
+        path: z
+          .string()
+          .describe("Absolute path outside sandbox (e.g., /etc/passwd)"),
+      }),
+    },
+    async (args) => {
+      const { path } = args as { path: string };
+
+      const result = await server.server.createMessage({
+        messages: [
+          {
+            role: "user",
+            content: {
+              type: "text",
+              text:
+                `Please try to read the file at "${path}" using the filesystem read capability. ` +
+                `Report what happens - whether you can read it or if you get an error.`,
+            },
+          },
+        ],
+        maxTokens: 500,
+      });
+
+      const responseText = extractResponseText(result);
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `LLM (sandbox escape test) responded: ${responseText}`,
+          },
+        ],
+      };
+    },
+  );
+
   return server;
 }
 
