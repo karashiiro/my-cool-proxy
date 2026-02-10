@@ -273,18 +273,30 @@ ACP Content Blocks:
 | Model info         | Always `"acp-agent"`                         |
 | Role               | Always `"assistant"`                         |
 
-## Tool Support
+## Tool Support (Spec-Compliant)
 
-When an upstream server sends `tools` in the sampling request, the shim sets up a tool proxy so the ACP agent can call those tools.
+When an upstream server sends `tools` in the sampling request, the shim exposes them to the ACP agent via an MCP sidecar. Per the [MCP Sampling-with-Tools spec](https://modelcontextprotocol.io/specification/draft/client/sampling), tool execution is the **server's responsibility**, not the gateway's.
 
-### Tool Proxy Architecture
+### Key Insight: Tool Capture, Not Execution
+
+Instead of executing tools when the agent calls them, the gateway **captures** the tool call and returns it to the server:
+
+1. Server sends `sampling/createMessage` with `tools` array
+2. Agent attempts to call a tool
+3. Gateway captures the call (not executes) and terminates the session
+4. Gateway returns `tool_use` response with `stopReason: "toolUse"`
+5. **Server executes the tool itself**
+6. Server sends follow-up request with `tool_result`
+7. Repeat until `stopReason !== "toolUse"`
+
+### Architecture
 
 ```mermaid
 flowchart TB
     subgraph Gateway["MCP Gateway"]
         Shim["SamplingShim"]
-        Callback["ToolCallbackServer<br/>(ephemeral HTTP)"]
-        ClientMgr["MCPClientManager"]
+        Handler["ACPClientHandler<br/>(1st capture point)"]
+        Callback["ToolCallbackServer<br/>(2nd capture point)"]
     end
 
     subgraph Sidecar["MCP Sampling Sidecar"]
@@ -295,58 +307,76 @@ flowchart TB
         AgentProc["Agent Process"]
     end
 
-    subgraph Upstream["Upstream MCP Servers"]
-        Server1["Server 1"]
-        Server2["Server 2"]
+    subgraph Upstream["Upstream MCP Server"]
+        Server["Server<br/>(executes tools)"]
     end
 
-    Shim -->|"spawn with tools"| SidecarProc
-    AgentProc -->|"MCP tool call"| SidecarProc
-    SidecarProc -->|"HTTP callback"| Callback
-    Callback -->|"route to server"| ClientMgr
-    ClientMgr --> Server1
-    ClientMgr --> Server2
+    Server -->|"1. createMessage with tools"| Shim
+    Shim -->|"2. spawn sidecar"| SidecarProc
+    AgentProc -->|"3. permission request"| Handler
+    Handler -->|"4. capture & deny"| AgentProc
+    Shim -->|"5. return tool_use"| Server
+    Server -->|"6. execute tool"| Server
+    Server -->|"7. follow-up with tool_result"| Shim
 ```
 
-### Tool Call Flow
+### Multi-Turn Tool Flow
 
 ```mermaid
 sequenceDiagram
+    participant Server as Upstream Server
+    participant Gateway as Gateway/Shim
     participant Agent as ACP Agent
-    participant Sidecar as MCP Sidecar
-    participant Callback as Callback Server
-    participant ClientMgr as Client Manager
-    participant Upstream as Upstream Server
+    participant Sidecar as Sidecar
 
-    Note over Agent,Upstream: Tool invocation during prompt
-    Agent->>Sidecar: call_tool (tagged name)
-    Sidecar->>Callback: POST /execute (original name)
-    Callback->>ClientMgr: Find tool in connected servers
-    ClientMgr->>Upstream: callTool()
-    Upstream-->>ClientMgr: CallToolResult
-    ClientMgr-->>Callback: Result
-    Callback-->>Sidecar: Result
-    Sidecar-->>Agent: Result
+    Server->>Gateway: createMessage({tools: [...]})
+    Gateway->>Agent: prompt (tools exposed via Sidecar)
+    Agent->>Sidecar: call_tool("search-abc123")
+    Note over Gateway: Permission handler captures call
+    Gateway-->>Server: {stopReason: "toolUse", content: tool_use}
+
+    Note over Server: Server executes tool locally
+    Server->>Gateway: createMessage({messages: [..., tool_result]})
+    Gateway->>Agent: prompt (with tool result in context)
+    Agent-->>Gateway: text response
+    Gateway-->>Server: {stopReason: "endTurn", content: text}
 ```
+
+### Defense in Depth: Two Capture Points
+
+Tool calls are captured at two points to ensure spec compliance:
+
+1. **Permission Handler (primary)**: Most ACP agents request permission before calling tools. The handler captures the call details and denies execution.
+
+2. **Callback Server (fallback)**: If an agent bypasses the permission system and calls the sidecar directly, the callback server captures the call instead of executing it.
 
 ### Component Details
 
-| Component              | Purpose                                       | Lifecycle            |
-| ---------------------- | --------------------------------------------- | -------------------- |
-| `ToolCallbackServer`   | HTTP server receiving tool calls from sidecar | Per-sampling-request |
-| `mcp-sampling-sidecar` | Stdio MCP server exposing tools to agent      | Per-sampling-request |
-| Tool tag               | UUID suffix for permission matching           | Per-sampling-request |
+| Component              | Purpose                                     | Lifecycle            |
+| ---------------------- | ------------------------------------------- | -------------------- |
+| `ACPClientHandler`     | Captures tool calls via permission requests | Per-gateway-session  |
+| `ToolCallbackServer`   | Fallback capture for permissive agents      | Per-sampling-request |
+| `mcp-sampling-sidecar` | Exposes tools to agent via MCP              | Per-sampling-request |
+| Tool tag               | UUID suffix for identifying sidecar tools   | Per-sampling-request |
 
 ### Tool Name Tagging
 
-Tools are suffixed with a unique tag to enable permission matching:
+Tools are suffixed with a unique tag so the permission handler can identify sidecar tools:
 
 ```
 Original tool: "search"
 Tagged tool:   "search-a1b2c3d4"
 ```
 
-The sidecar translates back to the original name when calling the gateway.
+The original name is extracted when capturing, and that's what's returned in the `tool_use` response.
+
+### Spec References
+
+| Concept                           | Specification                                                                                             |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| Multi-turn tool loop              | [Sampling with Tools](https://modelcontextprotocol.io/specification/draft/client/sampling)                |
+| CreateMessageResult with tool_use | [Schema: CreateMessageResult](https://modelcontextprotocol.io/specification/2025-11-25/schema)            |
+| Server executes tools             | [SEP-1577: Sampling With Tools](https://modelcontextprotocol.io/community/seps/1577--sampling-with-tools) |
 
 ## Configuration
 
@@ -397,15 +427,17 @@ Native client sampling always takes priority over the shim.
 
 ## Implementation Files
 
-| File                                                | Purpose                                  |
-| --------------------------------------------------- | ---------------------------------------- |
-| `apps/gateway/src/services/sampling-shim.ts`        | Shim orchestrator                        |
-| `apps/gateway/src/utils/mcp-acp-mappers.ts`         | MCP ↔ ACP conversion                     |
-| `apps/gateway/src/services/tool-callback-server.ts` | Ephemeral HTTP server for tool callbacks |
-| `apps/gateway/src/services/capability-store.ts`     | Session capability and cwd tracking      |
-| `apps/gateway/src/handlers/proxy-handlers.ts`       | Handler registration logic               |
-| `packages/mcp-client/src/client-manager.ts`         | Capability advertising                   |
-| `packages/mcp-sampling-sidecar/src/index.ts`        | Tool proxy sidecar                       |
+| File                                                | Purpose                                       |
+| --------------------------------------------------- | --------------------------------------------- |
+| `apps/gateway/src/services/sampling-shim.ts`        | Shim orchestrator, checks both capture points |
+| `apps/gateway/src/utils/mcp-acp-mappers.ts`         | MCP ↔ ACP conversion                          |
+| `apps/gateway/src/services/tool-callback-server.ts` | Fallback capture server for tool calls        |
+| `apps/gateway/src/services/capability-store.ts`     | Session capability and cwd tracking           |
+| `apps/gateway/src/handlers/proxy-handlers.ts`       | Handler registration logic                    |
+| `packages/acp-client/src/acp-client.ts`             | Permission handler with tool call capture     |
+| `packages/acp-client/src/acp-client-session.ts`     | Exposes getCapturedToolCall() to shim         |
+| `packages/mcp-client/src/client-manager.ts`         | Capability advertising                        |
+| `packages/mcp-sampling-sidecar/src/index.ts`        | Exposes tools to agent, handles capture       |
 
 ## Best Practices
 
@@ -415,6 +447,7 @@ Native client sampling always takes priority over the shim.
 2. **Handle shim cleanup** - Close callback servers in finally blocks
 3. **Test both paths** - Cover native sampling and shim modes
 4. **Respect capability negotiation** - Check agent's `promptCapabilities`
+5. **Capture, don't execute** - Tool calls from sampling requests are captured and returned to the server
 
 ### For Operators
 
@@ -422,6 +455,15 @@ Native client sampling always takes priority over the shim.
 2. **Use tool filtering** - Combine with `allowedTools` for defense-in-depth
 3. **Monitor sampling usage** - Track which servers make sampling requests
 4. **Choose appropriate ACP agent** - Balance capability vs. security
+
+### For Server Implementers
+
+When sending sampling requests with tools, be prepared to handle the multi-turn flow:
+
+1. Check `stopReason` in the response
+2. If `stopReason === "toolUse"`, execute the tool locally
+3. Send a follow-up request with the `tool_result` appended to messages
+4. Continue until `stopReason !== "toolUse"`
 
 ## Related Documentation
 

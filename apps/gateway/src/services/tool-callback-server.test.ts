@@ -2,22 +2,6 @@ import { describe, it, expect, vi } from "vitest";
 import type { ILogger } from "@my-cool-proxy/logger";
 import { ToolCallbackServer } from "./tool-callback-server.js";
 
-// Mock client manager and session
-const createMockClientManager = (
-  mockClients: Map<string, unknown> = new Map(),
-) => ({
-  addHttpClient: vi.fn(),
-  addStdioClient: vi.fn(),
-  getClient: vi.fn(),
-  getClientsBySession: vi.fn().mockReturnValue(mockClients),
-  getFailedServers: vi.fn().mockReturnValue(new Map()),
-  closeSession: vi.fn(),
-  setResourceListChangedHandler: vi.fn(),
-  setPromptListChangedHandler: vi.fn(),
-  setToolListChangedHandler: vi.fn(),
-  close: vi.fn(),
-});
-
 const createMockLogger = (): ILogger => ({
   info: vi.fn(),
   warn: vi.fn(),
@@ -28,12 +12,7 @@ const createMockLogger = (): ILogger => ({
 describe("ToolCallbackServer", () => {
   describe("start/stop lifecycle", () => {
     it("should start on an available port and return a valid callback URL", async () => {
-      const clientManager = createMockClientManager();
-      const server = new ToolCallbackServer(
-        clientManager as never,
-        "session-1",
-        createMockLogger(),
-      );
+      const server = new ToolCallbackServer(createMockLogger());
 
       const callbackUrl = await server.start();
 
@@ -45,12 +24,7 @@ describe("ToolCallbackServer", () => {
     });
 
     it("should stop cleanly without throwing when called twice", async () => {
-      const clientManager = createMockClientManager();
-      const server = new ToolCallbackServer(
-        clientManager as never,
-        "session-1",
-        createMockLogger(),
-      );
+      const server = new ToolCallbackServer(createMockLogger());
 
       await server.start();
       await server.stop();
@@ -60,132 +34,128 @@ describe("ToolCallbackServer", () => {
     });
   });
 
-  describe("tool execution routing", () => {
-    it("should route tool calls to the correct MCP server", async () => {
-      const mockSession = {
-        listTools: vi
-          .fn()
-          .mockResolvedValue([
-            { name: "test-tool", description: "A test tool" },
-          ]),
-        callTool: vi.fn().mockResolvedValue({
-          content: [{ type: "text", text: "Tool result!" }],
-        }),
-      };
-
-      const mockClients = new Map([["test-server", mockSession]]);
-      const clientManager = createMockClientManager(mockClients);
-      const server = new ToolCallbackServer(
-        clientManager as never,
-        "session-1",
-        createMockLogger(),
-      );
+  describe("tool call capture (spec-compliant)", () => {
+    it("should capture tool calls and return captured response", async () => {
+      const server = new ToolCallbackServer(createMockLogger());
       const callbackUrl = await server.start();
 
       try {
+        // Initially no captured tool call
+        expect(server.getCapturedToolCall()).toBeNull();
+
         const response = await fetch(`${callbackUrl}/execute`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            tool: "test-tool",
-            args: { input: "hello" },
+            tool: "calculator-add",
+            args: { a: 5, b: 3 },
           }),
         });
 
         expect(response.ok).toBe(true);
-        const result = await response.json();
-        expect(result).toEqual({
-          content: [{ type: "text", text: "Tool result!" }],
-        });
-        expect(mockSession.callTool).toHaveBeenCalledWith({
-          name: "test-tool",
-          arguments: { input: "hello" },
-        });
+        const result = (await response.json()) as { status: string };
+        expect(result.status).toBe("captured");
+
+        // Tool call should be captured
+        const captured = server.getCapturedToolCall();
+        expect(captured).not.toBeNull();
+        expect(captured!.name).toBe("calculator-add");
+        expect(captured!.input).toEqual({ a: 5, b: 3 });
+        expect(captured!.id).toBeDefined();
       } finally {
         await server.stop();
       }
     });
 
-    it("should return 404 when tool is not found", async () => {
-      const mockSession = {
-        listTools: vi.fn().mockResolvedValue([]),
-        callTool: vi.fn(),
-      };
-
-      const mockClients = new Map([["test-server", mockSession]]);
-      const clientManager = createMockClientManager(mockClients);
-      const server = new ToolCallbackServer(
-        clientManager as never,
-        "session-1",
-        createMockLogger(),
-      );
+    it("should capture only the most recent tool call", async () => {
+      const server = new ToolCallbackServer(createMockLogger());
       const callbackUrl = await server.start();
 
       try {
-        const response = await fetch(`${callbackUrl}/execute`, {
+        // First tool call
+        await fetch(`${callbackUrl}/execute`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            tool: "nonexistent-tool",
-            args: {},
+            tool: "first-tool",
+            args: { x: 1 },
           }),
         });
 
-        expect(response.status).toBe(404);
-        const result = (await response.json()) as {
-          isError: boolean;
-          content: { text: string }[];
-        };
-        expect(result.isError).toBe(true);
-        expect(result.content[0]?.text).toContain("not found");
+        // Second tool call (overwrites first)
+        await fetch(`${callbackUrl}/execute`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            tool: "second-tool",
+            args: { y: 2 },
+          }),
+        });
+
+        // Should only have the second tool call
+        const captured = server.getCapturedToolCall();
+        expect(captured!.name).toBe("second-tool");
+        expect(captured!.input).toEqual({ y: 2 });
       } finally {
         await server.stop();
       }
     });
 
-    it("should continue to next server when one fails", async () => {
-      const failingSession = {
-        listTools: vi.fn().mockRejectedValue(new Error("Connection failed")),
-        callTool: vi.fn(),
-      };
-      const workingSession = {
-        listTools: vi
-          .fn()
-          .mockResolvedValue([
-            { name: "tool-on-second-server", description: "Test" },
-          ]),
-        callTool: vi.fn().mockResolvedValue({
-          content: [{ type: "text", text: "Success from second server" }],
-        }),
-      };
+    it("should generate unique IDs for captured tool calls", async () => {
+      const server1 = new ToolCallbackServer(createMockLogger());
+      const server2 = new ToolCallbackServer(createMockLogger());
 
-      const mockClients = new Map([
-        ["failing-server", failingSession],
-        ["working-server", workingSession],
-      ]);
-      const clientManager = createMockClientManager(mockClients);
-      const server = new ToolCallbackServer(
-        clientManager as never,
-        "session-1",
-        createMockLogger(),
-      );
+      const callbackUrl1 = await server1.start();
+      const callbackUrl2 = await server2.start();
+
+      try {
+        await fetch(`${callbackUrl1}/execute`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            tool: "tool-1",
+            args: {},
+          }),
+        });
+
+        await fetch(`${callbackUrl2}/execute`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            tool: "tool-2",
+            args: {},
+          }),
+        });
+
+        const captured1 = server1.getCapturedToolCall();
+        const captured2 = server2.getCapturedToolCall();
+
+        expect(captured1!.id).not.toBe(captured2!.id);
+      } finally {
+        await server1.stop();
+        await server2.stop();
+      }
+    });
+
+    it("should return captured response even with malformed body", async () => {
+      const logger = createMockLogger();
+      const server = new ToolCallbackServer(logger);
       const callbackUrl = await server.start();
 
       try {
         const response = await fetch(`${callbackUrl}/execute`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            tool: "tool-on-second-server",
-            args: {},
-          }),
+          body: "not valid json",
         });
 
+        // Should still return captured to stop the flow
         expect(response.ok).toBe(true);
-        const result = (await response.json()) as {
-          content: { text: string }[];
-        };
-        expect(result.content[0]?.text).toBe("Success from second server");
+        const result = (await response.json()) as { status: string };
+        expect(result.status).toBe("captured");
+
+        // Error should be logged
+        expect(logger.error).toHaveBeenCalled();
       } finally {
         await server.stop();
       }

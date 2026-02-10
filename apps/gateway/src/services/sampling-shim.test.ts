@@ -36,19 +36,6 @@ const createMockCapabilityStore = () => ({
   getWorkingDirectory: vi.fn().mockReturnValue("/tmp/test-session-1"),
 });
 
-const createMockClientManager = () => ({
-  addHttpClient: vi.fn(),
-  addStdioClient: vi.fn(),
-  getClient: vi.fn(),
-  getClientsBySession: vi.fn().mockReturnValue(new Map()),
-  getFailedServers: vi.fn().mockReturnValue(new Map()),
-  closeSession: vi.fn(),
-  setResourceListChangedHandler: vi.fn(),
-  setPromptListChangedHandler: vi.fn(),
-  setToolListChangedHandler: vi.fn(),
-  close: vi.fn(),
-});
-
 describe("SamplingShim", () => {
   let mockAcpClient: {
     connect: ReturnType<typeof vi.fn>;
@@ -105,7 +92,6 @@ describe("SamplingShim", () => {
         agentConfig,
         createMockLogger(),
         createMockCapabilityStore() as never,
-        createMockClientManager() as never,
       );
       await shim.initialize("session-1");
 
@@ -118,7 +104,6 @@ describe("SamplingShim", () => {
         agentConfig,
         createMockLogger(),
         createMockCapabilityStore() as never,
-        createMockClientManager() as never,
       );
       await shim.initialize("session-1");
 
@@ -132,7 +117,6 @@ describe("SamplingShim", () => {
         agentConfig,
         createMockLogger(),
         createMockCapabilityStore() as never,
-        createMockClientManager() as never,
       );
       await shim.initialize("session-1");
 
@@ -153,7 +137,6 @@ describe("SamplingShim", () => {
         agentConfig,
         createMockLogger(),
         createMockCapabilityStore() as never,
-        createMockClientManager() as never,
       );
       await shim.initialize("session-1");
 
@@ -203,7 +186,6 @@ describe("SamplingShim", () => {
         agentConfig,
         createMockLogger(),
         createMockCapabilityStore() as never,
-        createMockClientManager() as never,
       );
 
       const params: CreateMessageRequest["params"] = {
@@ -223,7 +205,6 @@ describe("SamplingShim", () => {
         agentConfig,
         createMockLogger(),
         createMockCapabilityStore() as never,
-        createMockClientManager() as never,
       );
       await shim.initialize("session-1");
       await shim.close("session-1");
@@ -236,7 +217,6 @@ describe("SamplingShim", () => {
         agentConfig,
         createMockLogger(),
         createMockCapabilityStore() as never,
-        createMockClientManager() as never,
       );
       await shim.initialize("session-1");
       await shim.close("session-1");
@@ -256,7 +236,6 @@ describe("SamplingShim", () => {
         agentConfig,
         createMockLogger(),
         createMockCapabilityStore() as never,
-        createMockClientManager() as never,
       );
 
       // Should not throw
@@ -288,7 +267,6 @@ describe("SamplingShim", () => {
         agentConfig,
         createMockLogger(),
         createMockCapabilityStore() as never,
-        createMockClientManager() as never,
       );
       await shim.initialize("session-1");
       await shim.initialize("session-2");
@@ -304,7 +282,6 @@ describe("SamplingShim", () => {
         agentConfig,
         createMockLogger(),
         createMockCapabilityStore() as never,
-        createMockClientManager() as never,
       );
       await shim.initialize("session-1");
 

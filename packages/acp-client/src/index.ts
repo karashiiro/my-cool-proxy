@@ -3,6 +3,7 @@ export { ACPClientSession } from "./acp-client-session.js";
 export type {
   ACPAgentConfig,
   ACPPromptResult,
+  CapturedToolCall,
   ContentBlock,
   EnvVariable,
   ILogger,

@@ -15,7 +15,7 @@ type SamplingParams = CreateMessageRequest["params"];
  * Map an MCP content block to an ACP ContentBlock.
  *
  * Text, image, and audio map 1:1 between MCP and ACP.
- * Other types (tool_use, tool_result) are serialized as text placeholders.
+ * Tool-related types are serialized as human-readable text.
  */
 function mapMcpBlockToAcp(
   block: Exclude<SamplingMessage["content"], unknown[]>,
@@ -40,8 +40,60 @@ function mapMcpBlockToAcp(
     } as ContentBlock;
   }
 
-  // Fallback for unmappable types (tool_use, tool_result)
-  return { type: "text", text: `[${block.type}]` } as ContentBlock;
+  // Handle tool_use blocks - serialize with tool name and input
+  if (block.type === "tool_use") {
+    const toolUse = block as {
+      type: "tool_use";
+      id: string;
+      name: string;
+      input: unknown;
+    };
+    const inputStr = JSON.stringify(toolUse.input);
+    return {
+      type: "text",
+      text: `[Tool call: ${toolUse.name}(${inputStr})]`,
+    } as ContentBlock;
+  }
+
+  // Handle tool_result blocks - serialize with the result content
+  if (block.type === "tool_result") {
+    const toolResult = block as {
+      type: "tool_result";
+      toolUseId: string;
+      content: unknown;
+    };
+    let resultText = "";
+    if (Array.isArray(toolResult.content)) {
+      resultText = toolResult.content
+        .map((c) => {
+          if (
+            typeof c === "object" &&
+            c !== null &&
+            "type" in c &&
+            c.type === "text" &&
+            "text" in c
+          ) {
+            return String(c.text);
+          }
+          return JSON.stringify(c);
+        })
+        .join(" ");
+    } else if (typeof toolResult.content === "string") {
+      resultText = toolResult.content;
+    } else {
+      resultText = JSON.stringify(toolResult.content);
+    }
+    return {
+      type: "text",
+      text: `[Tool result: ${resultText}]`,
+    } as ContentBlock;
+  }
+
+  // Fallback for other unmappable types
+  return {
+    type: "text",
+    text: `[${(block as { type: string }).type}]`,
+  } as ContentBlock;
 }
 
 /**
@@ -161,8 +213,11 @@ export function mapMcpToAcpPrompt(
         // Agent doesn't support this content type - fall back to placeholder
         textParts.push(`[${block.type}: ${block.mimeType}]`);
       } else {
-        // tool_use, tool_result, etc. - serialize as text
-        textParts.push(`[${block.type}]`);
+        // tool_use, tool_result, etc. - serialize properly using the mapper
+        const mapped = mapMcpBlockToAcp(block);
+        if (mapped.type === "text") {
+          textParts.push(mapped.text);
+        }
       }
     }
 

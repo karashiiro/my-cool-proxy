@@ -1,11 +1,35 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
-import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
+import {
+  isInitializeRequest,
+  type CreateMessageRequest,
+  type CreateMessageResult,
+  type SamplingMessage,
+  type Tool,
+  type TextContent,
+  type ToolResultContent,
+  type ToolUseContent,
+} from "@modelcontextprotocol/sdk/types.js";
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import * as z from "zod";
 import { randomUUID } from "node:crypto";
+
+// Maximum number of tool call rounds to prevent infinite loops
+const MAX_TOOL_ROUNDS = 10;
+
+/**
+ * Type guard for tool_use content blocks.
+ */
+function isToolUseContent(content: unknown): content is ToolUseContent {
+  return (
+    typeof content === "object" &&
+    content !== null &&
+    "type" in content &&
+    content.type === "tool_use"
+  );
+}
 
 /**
  * Extract text from a createMessage result, handling various content formats.
@@ -34,6 +58,178 @@ function extractResponseText(result: { content: unknown }): string {
 }
 
 /**
+ * Tool executor function type.
+ * Takes tool name and input, returns the result as a string.
+ */
+type ToolExecutor = (
+  toolName: string,
+  input: Record<string, unknown>,
+) => string;
+
+/**
+ * Execute a multi-turn sampling request with tools.
+ *
+ * SPEC-COMPLIANT: Per the MCP sampling-with-tools spec, when the gateway returns
+ * a tool_use response (stopReason === "toolUse"), the SERVER is responsible for:
+ * 1. Executing the tool locally
+ * 2. Sending a follow-up sampling request with the tool_result appended
+ * 3. Continuing until stopReason !== "toolUse"
+ *
+ * @param server The MCP server instance
+ * @param initialMessages Initial conversation messages
+ * @param tools Tools to provide in the sampling request
+ * @param executeToolLocally Function to execute tools locally
+ * @param maxTokens Maximum tokens for the response
+ * @param toolChoice Optional tool choice configuration
+ * @returns The final text response from the LLM
+ */
+async function executeMultiTurnSampling(
+  server: McpServer,
+  initialMessages: SamplingMessage[],
+  tools: Tool[],
+  executeToolLocally: ToolExecutor,
+  maxTokens: number = 500,
+  toolChoice?: CreateMessageRequest["params"]["toolChoice"],
+): Promise<string> {
+  const messages = [...initialMessages];
+  let rounds = 0;
+
+  while (rounds < MAX_TOOL_ROUNDS) {
+    rounds++;
+
+    // Send sampling request
+    const result = (await server.server.createMessage({
+      messages,
+      maxTokens,
+      tools,
+      toolChoice,
+    })) as CreateMessageResult & { stopReason?: string };
+
+    // Check if we got a tool_use response
+    if (result.stopReason === "toolUse") {
+      // Find the tool_use content block
+      const contentArray = Array.isArray(result.content)
+        ? result.content
+        : [result.content];
+
+      const toolUseBlock = contentArray.find(isToolUseContent);
+
+      if (!toolUseBlock) {
+        // stopReason is toolUse but no tool_use block found - shouldn't happen
+        return `Error: stopReason is toolUse but no tool_use content found. Content: ${JSON.stringify(result.content)}`;
+      }
+
+      // Execute the tool locally
+      const toolResult = executeToolLocally(
+        toolUseBlock.name,
+        toolUseBlock.input as Record<string, unknown>,
+      );
+
+      // Append assistant message with tool_use
+      messages.push({
+        role: "assistant",
+        content: toolUseBlock,
+      });
+
+      // Append user message with tool_result
+      const toolResultContent: ToolResultContent = {
+        type: "tool_result",
+        toolUseId: toolUseBlock.id,
+        content: [{ type: "text", text: toolResult }],
+      };
+
+      messages.push({
+        role: "user",
+        content: toolResultContent,
+      });
+
+      // Continue the loop for the next round
+      continue;
+    }
+
+    // Not a tool_use - we have the final response
+    return extractResponseText(result);
+  }
+
+  return `Error: Exceeded maximum tool rounds (${MAX_TOOL_ROUNDS})`;
+}
+
+/**
+ * Calculator tool executor.
+ * Implements add, subtract, multiply, divide operations.
+ */
+function executeCalculatorTool(
+  toolName: string,
+  input: Record<string, unknown>,
+): string {
+  const a = Number(input.a);
+  const b = Number(input.b);
+
+  switch (toolName) {
+    case "add":
+      return String(a + b);
+    case "subtract":
+      return String(a - b);
+    case "multiply":
+      return String(a * b);
+    case "divide":
+      if (b === 0) return "Error: Division by zero";
+      return String(a / b);
+    default:
+      return `Unknown calculator tool: ${toolName}`;
+  }
+}
+
+/**
+ * Weather tool executor.
+ * Returns mock weather data.
+ */
+function executeWeatherTool(
+  toolName: string,
+  input: Record<string, unknown>,
+): string {
+  const city = String(input.city || "Unknown");
+
+  switch (toolName) {
+    case "get_weather":
+      return `Current weather in ${city}: Sunny, 72°F (22°C), humidity 45%`;
+    case "get_forecast": {
+      const days = Number(input.days || 3);
+      return `${days}-day forecast for ${city}: Day 1: Sunny 75°F, Day 2: Partly cloudy 70°F, Day 3: Rain 65°F`;
+    }
+    default:
+      return `Unknown weather tool: ${toolName}`;
+  }
+}
+
+/**
+ * Generic tool executor for testing.
+ * Handles add, lookup_fact, search tools.
+ */
+function executeGenericTool(
+  toolName: string,
+  input: Record<string, unknown>,
+): string {
+  switch (toolName) {
+    case "add": {
+      const a = Number(input.a);
+      const b = Number(input.b);
+      return String(a + b);
+    }
+    case "lookup_fact": {
+      const topic = String(input.topic || "unknown");
+      return `Fact about ${topic}: This is a mock fact for testing purposes.`;
+    }
+    case "search": {
+      const query = String(input.query || "");
+      return `Search results for "${query}": Found 3 relevant results about ${query}.`;
+    }
+    default:
+      return `Unknown tool: ${toolName}`;
+  }
+}
+
+/**
  * Creates an MCP server that sends sampling requests WITH tools.
  * This tests the dynamic tool sidecar functionality where tools
  * are injected into ACP sessions on-the-fly.
@@ -51,7 +247,60 @@ function createSamplingWithToolsServer(): McpServer {
     },
   );
 
+  // Calculator tools definition (reused across multiple tool handlers)
+  const calculatorTools: Tool[] = [
+    {
+      name: "add",
+      description: "Add two numbers together",
+      inputSchema: {
+        type: "object" as const,
+        properties: {
+          a: { type: "number", description: "First number" },
+          b: { type: "number", description: "Second number" },
+        },
+        required: ["a", "b"],
+      },
+    },
+    {
+      name: "subtract",
+      description: "Subtract second number from first",
+      inputSchema: {
+        type: "object" as const,
+        properties: {
+          a: { type: "number", description: "First number" },
+          b: { type: "number", description: "Second number" },
+        },
+        required: ["a", "b"],
+      },
+    },
+    {
+      name: "multiply",
+      description: "Multiply two numbers",
+      inputSchema: {
+        type: "object" as const,
+        properties: {
+          a: { type: "number", description: "First number" },
+          b: { type: "number", description: "Second number" },
+        },
+        required: ["a", "b"],
+      },
+    },
+    {
+      name: "divide",
+      description: "Divide first number by second",
+      inputSchema: {
+        type: "object" as const,
+        properties: {
+          a: { type: "number", description: "Dividend" },
+          b: { type: "number", description: "Divisor" },
+        },
+        required: ["a", "b"],
+      },
+    },
+  ];
+
   // Tool that triggers a sampling request with calculator tools available
+  // Uses SPEC-COMPLIANT multi-turn flow
   server.registerTool(
     "ask_with_calculator",
     {
@@ -65,73 +314,24 @@ function createSamplingWithToolsServer(): McpServer {
     async (args) => {
       const { question } = args as { question: string };
 
-      // Send sampling request WITH tools
-      const result = await server.server.createMessage({
-        messages: [
-          {
-            role: "user",
-            content: {
-              type: "text",
-              text: `You have access to calculator tools. Please solve: ${question}`,
-            },
-          },
-        ],
-        maxTokens: 500,
-        // Include tools in the sampling request!
-        // These will be exposed to the ACP agent via the sidecar
-        tools: [
-          {
-            name: "add",
-            description: "Add two numbers together",
-            inputSchema: {
-              type: "object" as const,
-              properties: {
-                a: { type: "number", description: "First number" },
-                b: { type: "number", description: "Second number" },
-              },
-              required: ["a", "b"],
-            },
-          },
-          {
-            name: "subtract",
-            description: "Subtract second number from first",
-            inputSchema: {
-              type: "object" as const,
-              properties: {
-                a: { type: "number", description: "First number" },
-                b: { type: "number", description: "Second number" },
-              },
-              required: ["a", "b"],
-            },
-          },
-          {
-            name: "multiply",
-            description: "Multiply two numbers",
-            inputSchema: {
-              type: "object" as const,
-              properties: {
-                a: { type: "number", description: "First number" },
-                b: { type: "number", description: "Second number" },
-              },
-              required: ["a", "b"],
-            },
-          },
-          {
-            name: "divide",
-            description: "Divide first number by second",
-            inputSchema: {
-              type: "object" as const,
-              properties: {
-                a: { type: "number", description: "Dividend" },
-                b: { type: "number", description: "Divisor" },
-              },
-              required: ["a", "b"],
-            },
-          },
-        ],
-      });
+      const initialMessages: SamplingMessage[] = [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text: `You have access to calculator tools. Please solve: ${question}`,
+          } as TextContent,
+        },
+      ];
 
-      const responseText = extractResponseText(result);
+      // SPEC-COMPLIANT: Use multi-turn flow
+      // Gateway returns tool_use, we execute locally, send follow-up with result
+      const responseText = await executeMultiTurnSampling(
+        server,
+        initialMessages,
+        calculatorTools,
+        executeCalculatorTool,
+      );
 
       return {
         content: [
@@ -144,7 +344,38 @@ function createSamplingWithToolsServer(): McpServer {
     },
   );
 
+  // Weather tools definition
+  const weatherTools: Tool[] = [
+    {
+      name: "get_weather",
+      description: "Get current weather for a city",
+      inputSchema: {
+        type: "object" as const,
+        properties: {
+          city: { type: "string", description: "City name" },
+        },
+        required: ["city"],
+      },
+    },
+    {
+      name: "get_forecast",
+      description: "Get weather forecast for the next N days",
+      inputSchema: {
+        type: "object" as const,
+        properties: {
+          city: { type: "string", description: "City name" },
+          days: {
+            type: "number",
+            description: "Number of days to forecast",
+          },
+        },
+        required: ["city", "days"],
+      },
+    },
+  ];
+
   // Tool that asks with weather tools
+  // Uses SPEC-COMPLIANT multi-turn flow
   server.registerTool(
     "ask_with_weather",
     {
@@ -160,48 +391,23 @@ function createSamplingWithToolsServer(): McpServer {
     async (args) => {
       const { question } = args as { question: string };
 
-      const result = await server.server.createMessage({
-        messages: [
-          {
-            role: "user",
-            content: {
-              type: "text",
-              text: `You have weather tools available. ${question}`,
-            },
-          },
-        ],
-        maxTokens: 500,
-        tools: [
-          {
-            name: "get_weather",
-            description: "Get current weather for a city",
-            inputSchema: {
-              type: "object" as const,
-              properties: {
-                city: { type: "string", description: "City name" },
-              },
-              required: ["city"],
-            },
-          },
-          {
-            name: "get_forecast",
-            description: "Get weather forecast for the next N days",
-            inputSchema: {
-              type: "object" as const,
-              properties: {
-                city: { type: "string", description: "City name" },
-                days: {
-                  type: "number",
-                  description: "Number of days to forecast",
-                },
-              },
-              required: ["city", "days"],
-            },
-          },
-        ],
-      });
+      const initialMessages: SamplingMessage[] = [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text: `You have weather tools available. ${question}`,
+          } as TextContent,
+        },
+      ];
 
-      const responseText = extractResponseText(result);
+      // SPEC-COMPLIANT: Use multi-turn flow
+      const responseText = await executeMultiTurnSampling(
+        server,
+        initialMessages,
+        weatherTools,
+        executeWeatherTool,
+      );
 
       return {
         content: [
@@ -241,6 +447,7 @@ function createSamplingWithToolsServer(): McpServer {
   // ============================================================
 
   // Test toolChoice.mode = "none" - tools should be filtered out
+  // This does NOT use multi-turn because tools are disabled
   server.registerTool(
     "ask_with_tools_disabled",
     {
@@ -254,6 +461,9 @@ function createSamplingWithToolsServer(): McpServer {
     async (args) => {
       const { question } = args as { question: string };
 
+      // toolChoice.mode = "none" means tools are disabled
+      // The shim should filter them out and NOT return tool_use
+      // So we use single-turn (no multi-turn loop needed)
       const result = await server.server.createMessage({
         messages: [
           {
@@ -309,7 +519,35 @@ function createSamplingWithToolsServer(): McpServer {
     },
   );
 
+  // Tools for "required" mode test
+  const requiredModeTools: Tool[] = [
+    {
+      name: "add",
+      description: "Add two numbers together",
+      inputSchema: {
+        type: "object" as const,
+        properties: {
+          a: { type: "number", description: "First number" },
+          b: { type: "number", description: "Second number" },
+        },
+        required: ["a", "b"],
+      },
+    },
+    {
+      name: "lookup_fact",
+      description: "Look up a fact about a topic",
+      inputSchema: {
+        type: "object" as const,
+        properties: {
+          topic: { type: "string", description: "Topic to look up" },
+        },
+        required: ["topic"],
+      },
+    },
+  ];
+
   // Test toolChoice.mode = "required" - model MUST use a tool
+  // Uses SPEC-COMPLIANT multi-turn flow
   server.registerTool(
     "ask_must_use_tool",
     {
@@ -323,47 +561,25 @@ function createSamplingWithToolsServer(): McpServer {
     async (args) => {
       const { question } = args as { question: string };
 
-      const result = await server.server.createMessage({
-        messages: [
-          {
-            role: "user",
-            content: {
-              type: "text",
-              text: question,
-            },
-          },
-        ],
-        maxTokens: 500,
-        tools: [
-          {
-            name: "add",
-            description: "Add two numbers together",
-            inputSchema: {
-              type: "object" as const,
-              properties: {
-                a: { type: "number", description: "First number" },
-                b: { type: "number", description: "Second number" },
-              },
-              required: ["a", "b"],
-            },
-          },
-          {
-            name: "lookup_fact",
-            description: "Look up a fact about a topic",
-            inputSchema: {
-              type: "object" as const,
-              properties: {
-                topic: { type: "string", description: "Topic to look up" },
-              },
-              required: ["topic"],
-            },
-          },
-        ],
-        // Model MUST use a tool - directive will be injected
-        toolChoice: { mode: "required" },
-      });
+      const initialMessages: SamplingMessage[] = [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text: question,
+          } as TextContent,
+        },
+      ];
 
-      const responseText = extractResponseText(result);
+      // SPEC-COMPLIANT: Use multi-turn flow with required tool choice
+      const responseText = await executeMultiTurnSampling(
+        server,
+        initialMessages,
+        requiredModeTools,
+        executeGenericTool,
+        500,
+        { mode: "required" },
+      );
 
       return {
         content: [
@@ -376,7 +592,23 @@ function createSamplingWithToolsServer(): McpServer {
     },
   );
 
+  // Tools for "auto" mode test
+  const autoModeTools: Tool[] = [
+    {
+      name: "search",
+      description: "Search for information",
+      inputSchema: {
+        type: "object" as const,
+        properties: {
+          query: { type: "string", description: "Search query" },
+        },
+        required: ["query"],
+      },
+    },
+  ];
+
   // Test toolChoice.mode = "auto" - explicit auto mode (should behave same as default)
+  // Uses SPEC-COMPLIANT multi-turn flow
   server.registerTool(
     "ask_with_auto_tools",
     {
@@ -390,35 +622,25 @@ function createSamplingWithToolsServer(): McpServer {
     async (args) => {
       const { question } = args as { question: string };
 
-      const result = await server.server.createMessage({
-        messages: [
-          {
-            role: "user",
-            content: {
-              type: "text",
-              text: question,
-            },
-          },
-        ],
-        maxTokens: 500,
-        tools: [
-          {
-            name: "search",
-            description: "Search for information",
-            inputSchema: {
-              type: "object" as const,
-              properties: {
-                query: { type: "string", description: "Search query" },
-              },
-              required: ["query"],
-            },
-          },
-        ],
-        // Explicit auto mode - should be same as not specifying toolChoice
-        toolChoice: { mode: "auto" },
-      });
+      const initialMessages: SamplingMessage[] = [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text: question,
+          } as TextContent,
+        },
+      ];
 
-      const responseText = extractResponseText(result);
+      // SPEC-COMPLIANT: Use multi-turn flow with auto tool choice
+      const responseText = await executeMultiTurnSampling(
+        server,
+        initialMessages,
+        autoModeTools,
+        executeGenericTool,
+        500,
+        { mode: "auto" },
+      );
 
       return {
         content: [

@@ -26,6 +26,14 @@ interface ToolCallbackRequest {
 }
 
 /**
+ * Response from the callback server when a tool call is captured.
+ * This is part of the spec-compliant sampling-with-tools flow.
+ */
+interface CapturedResponse {
+  status: "captured";
+}
+
+/**
  * Main entry point: reads config from env, sets up MCP server, and proxies tool calls.
  */
 async function main(): Promise<void> {
@@ -125,8 +133,26 @@ async function main(): Promise<void> {
             };
           }
 
-          const result = (await response.json()) as CallToolResult;
-          return result;
+          const result = (await response.json()) as
+            | CallToolResult
+            | CapturedResponse;
+
+          // SPEC-COMPLIANT: Handle captured response
+          // When the callback server captures a tool call (instead of executing),
+          // it returns { status: "captured" }. We return an error to stop the agent.
+          if ("status" in result && result.status === "captured") {
+            return {
+              isError: true,
+              content: [
+                {
+                  type: "text",
+                  text: `Tool call captured for delegation to MCP server. The tool "${tool.name}" will be executed by the server.`,
+                },
+              ],
+            };
+          }
+
+          return result as CallToolResult;
         } catch (error) {
           const message =
             error instanceof Error ? error.message : String(error);

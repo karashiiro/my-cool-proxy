@@ -4,18 +4,19 @@ import { randomUUID } from "node:crypto";
 import {
   ACPClient,
   type ACPAgentConfig,
+  type CapturedToolCall,
   type McpServerStdio,
 } from "@my-cool-proxy/acp-client";
 import type {
   CreateMessageRequest,
   CreateMessageResult,
   CreateMessageResultWithTools,
+  ToolUseContent,
 } from "@modelcontextprotocol/sdk/types.js";
 import type {
   ISamplingShim,
   ILogger,
   ICapabilityStore,
-  IMCPClientManager,
 } from "../types/interfaces.js";
 import { mapMcpToAcpPrompt, mapAcpToMcpResult } from "../utils/index.js";
 import { $inject } from "../container/decorators.js";
@@ -46,8 +47,6 @@ export class SamplingShim implements ISamplingShim {
     @$inject(TYPES.Logger) private readonly logger: ILogger,
     @$inject(TYPES.CapabilityStore)
     private readonly capabilityStore: ICapabilityStore,
-    @$inject(TYPES.MCPClientManager)
-    private readonly clientManager: IMCPClientManager,
   ) {}
 
   /**
@@ -76,8 +75,14 @@ export class SamplingShim implements ISamplingShim {
    * Creates a new ACP session for each request (short-lived, isolated).
    * Uses the working directory stored in CapabilityStore (client root or tempdir).
    *
-   * If the request includes tools, sets up an ephemeral MCP sidecar to proxy
-   * tool calls back to the gateway's upstream MCP servers.
+   * SPEC-COMPLIANT SAMPLING-WITH-TOOLS:
+   * When tools are provided, the agent may attempt to call them. Instead of
+   * executing the tool, we capture the call and return a tool_use response
+   * to the MCP server, which is responsible for tool execution per the spec.
+   *
+   * Two capture points (defense in depth):
+   * 1. Permission handler - most agents request permission before calling tools
+   * 2. Callback server - captures if agent bypasses permissions and calls sidecar directly
    */
   async handleSamplingRequest(
     sessionId: string,
@@ -105,18 +110,16 @@ export class SamplingShim implements ISamplingShim {
     const effectiveTools =
       params.toolChoice?.mode === "none" ? undefined : params.tools;
 
-    // Set up tool proxy if we have tools AND toolChoice isn't "none"
+    // Set up tool sidecar if we have tools AND toolChoice isn't "none"
+    // The sidecar exposes tools to the ACP agent via MCP
     // No capability check needed - stdio MCP is required by ACP spec
     if (effectiveTools && effectiveTools.length > 0) {
       this.logger.debug(
         `Setting up tool sidecar for ${effectiveTools.length} tools`,
       );
 
-      callbackServer = new ToolCallbackServer(
-        this.clientManager,
-        sessionId,
-        this.logger,
-      );
+      // Callback server is second line of defense for capturing tool calls
+      callbackServer = new ToolCallbackServer(this.logger);
       const callbackUrl = await callbackServer.start();
 
       // Generate a unique tag for this session's tools
@@ -142,6 +145,10 @@ export class SamplingShim implements ISamplingShim {
           ],
         },
       ];
+
+      this.logger.debug(
+        `Tool sidecar configured: toolTag=${toolTag}, tools=${effectiveTools.map((t) => t.name).join(", ")}`,
+      );
     }
 
     try {
@@ -156,7 +163,37 @@ export class SamplingShim implements ISamplingShim {
       // Send the prompt and get the result
       const acpResult = await session.prompt(acpContent);
 
-      // Map ACP result back to MCP format
+      // SPEC-COMPLIANT: Check BOTH capture points for tool call
+      // 1. Permission handler - now approves sidecar tools so agent can call them
+      // 2. Callback server - captures the actual tool call WITH ARGUMENTS
+      // Note: sessionCapture is no longer used since we approve instead of capture+deny
+      const callbackCapture = callbackServer?.getCapturedToolCall() ?? null;
+
+      const capturedToolCall: CapturedToolCall | null = callbackCapture;
+
+      if (capturedToolCall) {
+        this.logger.debug(
+          `Tool call captured: ${capturedToolCall.name} - returning tool_use to MCP server`,
+        );
+
+        // Return tool_use to MCP server (ignore agent's actual response)
+        // The server is responsible for executing the tool per the spec
+        const toolUseContent: ToolUseContent = {
+          type: "tool_use",
+          id: capturedToolCall.id,
+          name: capturedToolCall.name,
+          input: capturedToolCall.input,
+        };
+
+        return {
+          role: "assistant",
+          content: [toolUseContent],
+          model: "acp-agent",
+          stopReason: "toolUse",
+        } as CreateMessageResultWithTools;
+      }
+
+      // No tool call captured - return normal text result
       return mapAcpToMcpResult(acpResult.content, acpResult.stopReason);
     } finally {
       // Always clean up the callback server

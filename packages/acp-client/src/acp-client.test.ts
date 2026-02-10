@@ -43,11 +43,19 @@ describe("ACPClient", () => {
     vi.clearAllMocks();
 
     // Set up mock process
+    const mockOnce = vi.fn((event: string, callback: () => void) => {
+      // Immediately call exit callback to simulate process exiting
+      if (event === "exit") {
+        setImmediate(callback);
+      }
+    });
+
     mockProcess = {
       stdin: { write: vi.fn() } as unknown as ChildProcess["stdin"],
       stdout: { read: vi.fn() } as unknown as ChildProcess["stdout"],
       kill: vi.fn(),
       on: vi.fn(),
+      once: mockOnce as unknown as ChildProcess["once"],
     };
 
     // Set up mock connection

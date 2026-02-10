@@ -17,10 +17,15 @@ type ContentBlockHandler = (block: ContentBlock) => void;
 /**
  * Internal ACP Client handler that implements the acp.Client interface.
  *
- * - Allows permission requests for tools that contain a registered session tag
+ * - APPROVES permission requests for sidecar tools (identified by session tag)
  * - Denies all other permission requests (secure default)
  * - Dispatches sessionUpdate content blocks to registered per-session handlers
  * - Reports minimal client capabilities (no fs/terminal)
+ *
+ * For spec-compliant sampling-with-tools:
+ * When an agent requests permission for a sidecar tool, we approve it so the agent
+ * can call the tool. The tool call is then captured by the callback server (which
+ * receives the full arguments), not the permission handler (which lacks args).
  */
 class ACPClientHandler implements acp.Client {
   private contentHandlers = new Map<string, ContentBlockHandler>();
@@ -41,19 +46,25 @@ class ACPClientHandler implements acp.Client {
     // If we have a tool tag, check if the tool title contains it
     // This is robust to any prefixing scheme the agent uses
     if (toolTag && toolCall.title && toolCall.title.includes(toolTag)) {
-      // Find an "allow" option from the available options
-      // Prefer allow_always over allow_once for session consistency
+      // APPROVE the permission request so the agent can call the sidecar.
+      // The sidecar will POST to the callback server, which captures the
+      // tool call WITH ARGUMENTS (the permission request doesn't include args).
+      // The callback server returns "captured" status, causing the sidecar
+      // to return an error to the agent, which stops execution.
+
+      // Look for an option that allows execution (kind: "allow_once" or "allow_always")
       const allowOption = options.find(
-        (opt) => opt.kind === "allow_always" || opt.kind === "allow_once",
+        (o) => o.kind === "allow_once" || o.kind === "allow_always",
       );
+
       if (allowOption) {
         return {
-          outcome: {
-            outcome: "selected",
-            optionId: allowOption.optionId,
-          },
+          outcome: { outcome: "selected", optionId: allowOption.optionId },
         };
       }
+
+      // If no allow option, fall back to denying
+      return { outcome: { outcome: "cancelled" } };
     }
 
     // Deny all other permission requests. The shim agent is only used for
@@ -255,8 +266,24 @@ export class ACPClient {
   async close(): Promise<void> {
     if (this.process) {
       this.logger.debug("Closing ACP agent process");
-      this.process.kill();
+      const proc = this.process;
       this.process = null;
+
+      // Wait for process to exit with timeout
+      await new Promise<void>((resolve) => {
+        const timeout = setTimeout(() => {
+          // Force kill if SIGTERM didn't work
+          proc.kill("SIGKILL");
+          resolve();
+        }, 2000);
+
+        proc.once("exit", () => {
+          clearTimeout(timeout);
+          resolve();
+        });
+
+        proc.kill("SIGTERM");
+      });
     }
 
     this.connection = null;
