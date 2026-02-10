@@ -46,3 +46,20 @@ export interface CapturedToolCall {
   /** Tool arguments/input. */
   input: Record<string, unknown>;
 }
+
+/**
+ * Configuration for filesystem capabilities exposed to ACP agents.
+ * Both options default to false for security.
+ */
+export interface FilesystemConfig {
+  /** Enable reading text files within the session's working directory. */
+  readTextFile: boolean;
+  /** Enable writing text files within the session's working directory. */
+  writeTextFile: boolean;
+}
+
+/**
+ * Function type for looking up a session's working directory.
+ * Returns the working directory path, or undefined if the session is unknown.
+ */
+export type WorkingDirectoryLookup = (sessionId: string) => string | undefined;

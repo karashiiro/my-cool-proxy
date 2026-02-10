@@ -1,13 +1,28 @@
 import { spawn, type ChildProcess } from "child_process";
 import { Readable, Writable } from "stream";
+import { readFile, writeFile } from "fs/promises";
 import * as acp from "@agentclientprotocol/sdk";
 import type {
   ContentBlock,
   McpServer,
   PromptCapabilities,
+  ReadTextFileRequest,
+  ReadTextFileResponse,
+  WriteTextFileRequest,
+  WriteTextFileResponse,
 } from "@agentclientprotocol/sdk";
 import { ACPClientSession } from "./acp-client-session.js";
-import type { ACPAgentConfig, ILogger } from "./types.js";
+import {
+  sandboxPathForRead,
+  sandboxPathForWrite,
+  PathSandboxError,
+} from "./path-sandbox.js";
+import type {
+  ACPAgentConfig,
+  FilesystemConfig,
+  ILogger,
+  WorkingDirectoryLookup,
+} from "./types.js";
 
 /**
  * Content block handler function type.
@@ -15,12 +30,24 @@ import type { ACPAgentConfig, ILogger } from "./types.js";
 type ContentBlockHandler = (block: ContentBlock) => void;
 
 /**
+ * Options for configuring the ACPClientHandler.
+ */
+interface ACPClientHandlerOptions {
+  /** Filesystem capabilities configuration. */
+  filesystem?: FilesystemConfig;
+  /** Function to look up working directory for a session. */
+  getWorkingDirectory?: WorkingDirectoryLookup;
+  /** Logger for sandbox violations and errors. */
+  logger: ILogger;
+}
+
+/**
  * Internal ACP Client handler that implements the acp.Client interface.
  *
  * - APPROVES permission requests for sidecar tools (identified by session tag)
  * - Denies all other permission requests (secure default)
  * - Dispatches sessionUpdate content blocks to registered per-session handlers
- * - Reports minimal client capabilities (no fs/terminal)
+ * - Handles filesystem requests when enabled (sandboxed to session working directory)
  *
  * For spec-compliant sampling-with-tools:
  * When an agent requests permission for a sidecar tool, we approve it so the agent
@@ -30,8 +57,37 @@ type ContentBlockHandler = (block: ContentBlock) => void;
 class ACPClientHandler implements acp.Client {
   private contentHandlers = new Map<string, ContentBlockHandler>();
   private sessionToolTags = new Map<string, string>();
+  private readonly fsConfig: FilesystemConfig;
+  private readonly getWorkingDirectory: WorkingDirectoryLookup;
+  private readonly logger: ILogger;
+
+  constructor(options: ACPClientHandlerOptions) {
+    this.fsConfig = options.filesystem ?? {
+      readTextFile: false,
+      writeTextFile: false,
+    };
+    this.getWorkingDirectory = options.getWorkingDirectory ?? (() => undefined);
+    this.logger = options.logger;
+
+    this.logger.debug(
+      `ACPClientHandler initialized with fs capabilities: read=${this.fsConfig.readTextFile}, write=${this.fsConfig.writeTextFile}`,
+    );
+  }
 
   get clientCapabilities(): acp.ClientCapabilities {
+    // Only advertise fs capabilities if at least one is enabled
+    if (this.fsConfig.readTextFile || this.fsConfig.writeTextFile) {
+      const caps = {
+        fs: {
+          readTextFile: this.fsConfig.readTextFile,
+          writeTextFile: this.fsConfig.writeTextFile,
+        },
+      };
+      this.logger.debug(
+        `Advertising ACP client capabilities: ${JSON.stringify(caps)}`,
+      );
+      return caps;
+    }
     return {};
   }
 
@@ -40,8 +96,28 @@ class ACPClientHandler implements acp.Client {
   ): Promise<acp.RequestPermissionResponse> {
     const { sessionId, toolCall, options } = params;
 
+    this.logger.debug(
+      `Permission request: tool="${toolCall.title}" session=${sessionId}`,
+    );
+
     // Check if this session has a tool tag registered
     const toolTag = this.sessionToolTags.get(sessionId);
+
+    // Helper to find and select an allow option
+    const selectAllowOption = (): acp.RequestPermissionResponse | undefined => {
+      const allowOption = options.find(
+        (o) => o.kind === "allow_once" || o.kind === "allow_always",
+      );
+      if (allowOption) {
+        this.logger.info(
+          `Permission APPROVED for tool "${toolCall.title}" (session=${sessionId})`,
+        );
+        return {
+          outcome: { outcome: "selected", optionId: allowOption.optionId },
+        };
+      }
+      return undefined;
+    };
 
     // If we have a tool tag, check if the tool title contains it
     // This is robust to any prefixing scheme the agent uses
@@ -51,25 +127,22 @@ class ACPClientHandler implements acp.Client {
       // tool call WITH ARGUMENTS (the permission request doesn't include args).
       // The callback server returns "captured" status, causing the sidecar
       // to return an error to the agent, which stops execution.
-
-      // Look for an option that allows execution (kind: "allow_once" or "allow_always")
-      const allowOption = options.find(
-        (o) => o.kind === "allow_once" || o.kind === "allow_always",
-      );
-
-      if (allowOption) {
-        return {
-          outcome: { outcome: "selected", optionId: allowOption.optionId },
-        };
-      }
+      const result = selectAllowOption();
+      if (result) return result;
 
       // If no allow option, fall back to denying
+      this.logger.warn(
+        `Permission DENIED for sidecar tool "${toolCall.title}" - no allow option available`,
+      );
       return { outcome: { outcome: "cancelled" } };
     }
 
     // Deny all other permission requests. The shim agent is only used for
     // text generation (sampling), so it should not need to perform
     // privileged operations like file I/O or shell execution.
+    this.logger.info(
+      `Permission DENIED for tool "${toolCall.title}" (session=${sessionId})`,
+    );
     return { outcome: { outcome: "cancelled" } };
   }
 
@@ -117,6 +190,158 @@ class ACPClientHandler implements acp.Client {
   extNotification: acp.Client["extNotification"] = async () => {
     // Silently ignore - we don't need to handle custom agent notifications
   };
+
+  /**
+   * Read a text file from the session's working directory.
+   * Only available when `fs.readTextFile` capability is enabled.
+   *
+   * Security: All paths are sandboxed to the session's working directory.
+   * Symlinks are resolved and validated to prevent escape attacks.
+   */
+  async readTextFile(
+    params: ReadTextFileRequest,
+  ): Promise<ReadTextFileResponse> {
+    this.logger.info(
+      `fs/read_text_file called: path="${params.path}" session=${params.sessionId}`,
+    );
+
+    // Check if capability is enabled
+    if (!this.fsConfig.readTextFile) {
+      this.logger.warn(`fs/read_text_file rejected: capability not enabled`);
+      throw acp.RequestError.methodNotFound("fs/read_text_file");
+    }
+
+    // Get the working directory for this session
+    const sandbox = this.getWorkingDirectory(params.sessionId);
+    if (!sandbox) {
+      this.logger.warn(
+        `fs/read_text_file rejected: no working directory for session ${params.sessionId}`,
+      );
+      throw acp.RequestError.invalidParams(
+        undefined,
+        "Unknown session or working directory not initialized",
+      );
+    }
+
+    this.logger.debug(`fs/read_text_file sandbox: ${sandbox}`);
+
+    // Validate and sandbox the path
+    let resolvedPath: string;
+    try {
+      resolvedPath = await sandboxPathForRead(params.path, sandbox);
+    } catch (error) {
+      if (error instanceof PathSandboxError) {
+        this.logger.warn(
+          `Sandbox violation in readTextFile: ${error.message} (session=${params.sessionId})`,
+        );
+        throw acp.RequestError.invalidParams(undefined, error.message);
+      }
+      throw error;
+    }
+
+    this.logger.debug(`fs/read_text_file resolved path: ${resolvedPath}`);
+
+    // Read the file
+    try {
+      let content = await readFile(resolvedPath, "utf-8");
+
+      // Handle line/limit parameters
+      if (params.line !== undefined || params.limit !== undefined) {
+        const lines = content.split("\n");
+        const startLine = params.line ? params.line - 1 : 0; // Convert to 0-based
+        const endLine = params.limit ? startLine + params.limit : lines.length;
+        content = lines.slice(startLine, endLine).join("\n");
+      }
+
+      this.logger.info(
+        `fs/read_text_file success: read ${content.length} chars from ${params.path}`,
+      );
+      return { content };
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        "code" in error &&
+        error.code === "ENOENT"
+      ) {
+        this.logger.warn(`fs/read_text_file: file not found: ${params.path}`);
+        throw acp.RequestError.resourceNotFound(params.path);
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Write a text file to the session's working directory.
+   * Only available when `fs.writeTextFile` capability is enabled.
+   *
+   * Security: All paths are sandboxed to the session's working directory.
+   * Parent directory must exist and be within the sandbox.
+   */
+  async writeTextFile(
+    params: WriteTextFileRequest,
+  ): Promise<WriteTextFileResponse> {
+    this.logger.info(
+      `fs/write_text_file called: path="${params.path}" session=${params.sessionId} (${params.content.length} chars)`,
+    );
+
+    // Check if capability is enabled
+    if (!this.fsConfig.writeTextFile) {
+      this.logger.warn(`fs/write_text_file rejected: capability not enabled`);
+      throw acp.RequestError.methodNotFound("fs/write_text_file");
+    }
+
+    // Get the working directory for this session
+    const sandbox = this.getWorkingDirectory(params.sessionId);
+    if (!sandbox) {
+      this.logger.warn(
+        `fs/write_text_file rejected: no working directory for session ${params.sessionId}`,
+      );
+      throw acp.RequestError.invalidParams(
+        undefined,
+        "Unknown session or working directory not initialized",
+      );
+    }
+
+    this.logger.debug(`fs/write_text_file sandbox: ${sandbox}`);
+
+    // Validate and sandbox the path
+    let resolvedPath: string;
+    try {
+      resolvedPath = await sandboxPathForWrite(params.path, sandbox);
+    } catch (error) {
+      if (error instanceof PathSandboxError) {
+        this.logger.warn(
+          `Sandbox violation in writeTextFile: ${error.message} (session=${params.sessionId})`,
+        );
+        throw acp.RequestError.invalidParams(undefined, error.message);
+      }
+      throw error;
+    }
+
+    this.logger.debug(`fs/write_text_file resolved path: ${resolvedPath}`);
+
+    // Write the file
+    await writeFile(resolvedPath, params.content, "utf-8");
+
+    this.logger.info(
+      `fs/write_text_file success: wrote ${params.content.length} chars to ${params.path}`,
+    );
+    return {};
+  }
+}
+
+/**
+ * Options for creating an ACPClient.
+ */
+export interface ACPClientOptions {
+  /** ACP agent configuration (command, args, env). */
+  config: ACPAgentConfig;
+  /** Logger instance. */
+  logger: ILogger;
+  /** Optional filesystem capabilities configuration. */
+  filesystem?: FilesystemConfig;
+  /** Optional function to look up working directory for a session. */
+  getWorkingDirectory?: WorkingDirectoryLookup;
 }
 
 /**
@@ -135,11 +360,17 @@ export class ACPClient {
   private connection: acp.ClientSideConnection | null = null;
   private handler: ACPClientHandler | null = null;
   private _promptCapabilities: PromptCapabilities = {};
+  private readonly config: ACPAgentConfig;
+  private readonly logger: ILogger;
+  private readonly filesystemConfig?: FilesystemConfig;
+  private readonly getWorkingDirectory?: WorkingDirectoryLookup;
 
-  constructor(
-    private readonly config: ACPAgentConfig,
-    private readonly logger: ILogger,
-  ) {}
+  constructor(options: ACPClientOptions) {
+    this.config = options.config;
+    this.logger = options.logger;
+    this.filesystemConfig = options.filesystem;
+    this.getWorkingDirectory = options.getWorkingDirectory;
+  }
 
   /**
    * The prompt capabilities advertised by the connected ACP agent.
@@ -188,7 +419,11 @@ export class ACPClient {
     const stream = acp.ndJsonStream(input, output);
 
     // Create the handler and connection
-    this.handler = new ACPClientHandler();
+    this.handler = new ACPClientHandler({
+      filesystem: this.filesystemConfig,
+      getWorkingDirectory: this.getWorkingDirectory,
+      logger: this.logger,
+    });
     this.connection = new acp.ClientSideConnection(() => this.handler!, stream);
 
     // Perform the initialization handshake

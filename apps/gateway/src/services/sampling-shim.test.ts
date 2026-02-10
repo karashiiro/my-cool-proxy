@@ -95,7 +95,12 @@ describe("SamplingShim", () => {
       );
       await shim.initialize("session-1");
 
-      expect(ACPClient).toHaveBeenCalledWith(agentConfig, expect.anything());
+      expect(ACPClient).toHaveBeenCalledWith(
+        expect.objectContaining({
+          config: agentConfig,
+          logger: expect.anything(),
+        }),
+      );
       expect(mockAcpClient.connect).toHaveBeenCalled();
     });
 

@@ -823,3 +823,70 @@ The gateway connects to the ACP agent with minimal permissions:
 - **Permission requests**: All denied -- any tool permission requests from the agent are cancelled
 
 This means the ACP agent is sandboxed to pure text/content generation through the shim. The agent may still use its own internal tools and capabilities, but cannot leverage the gateway as a proxy for privileged operations.
+
+### ACP Filesystem Capabilities
+
+By default, ACP agents cannot access the filesystem through the gateway. You can optionally enable sandboxed filesystem access to allow agents to read and write text files within their session's working directory.
+
+**Configuration:**
+
+```json
+{
+  "acp": {
+    "agent": {
+      "command": "node",
+      "args": ["path/to/acp-agent.js"]
+    },
+    "filesystem": {
+      "readTextFile": true,
+      "writeTextFile": true
+    }
+  }
+}
+```
+
+#### Fields
+
+- **filesystem** (object, optional): Filesystem capabilities for ACP agents
+  - **readTextFile** (boolean, optional): Enable reading text files. Default: `false`
+  - **writeTextFile** (boolean, optional): Enable writing text files. Default: `false`
+
+Both capabilities are disabled by default (secure by default). They can be enabled independently.
+
+#### Security Model
+
+When filesystem capabilities are enabled, the gateway enforces strict sandboxing:
+
+| Security Control              | Implementation                                                                               |
+| ----------------------------- | -------------------------------------------------------------------------------------------- |
+| **Session isolation**         | Each session has its own working directory (either from client's roots, or a temp directory) |
+| **Path validation**           | All paths are canonicalized, normalized, and validated against an allowlist                  |
+| **Path traversal prevention** | `..` and other escape attempts are blocked after canonicalization                            |
+| **Symlink attack prevention** | For reads, symlinks are resolved to their real target and re-validated                       |
+| **Parent directory check**    | For writes, the parent directory must exist and be within the sandbox                        |
+| **Audit logging**             | Sandbox violations are logged at `warn` level                                                |
+
+#### Example Sandbox Behavior
+
+| Requested Path    | Working Directory | Result                                    |
+| ----------------- | ----------------- | ----------------------------------------- |
+| `file.txt`        | `/tmp/session-1/` | Allowed: `/tmp/session-1/file.txt`        |
+| `subdir/file.txt` | `/tmp/session-1/` | Allowed: `/tmp/session-1/subdir/file.txt` |
+| `../etc/passwd`   | `/tmp/session-1/` | Rejected: Path traversal attempt          |
+| `/etc/passwd`     | `/tmp/session-1/` | Rejected: Absolute path outside sandbox   |
+| `symlink-to-root` | `/tmp/session-1/` | Rejected: Symlink target outside sandbox  |
+| `file.txt\0.jpg`  | `/tmp/session-1/` | Rejected: Null byte in path               |
+
+#### Use Cases
+
+Enable filesystem capabilities when:
+
+- Running code editing agents that need to modify source files
+- File generation tasks (creating templates, configs, etc.)
+- Document processing within a controlled workspace
+
+Keep filesystem disabled (default) when:
+
+- Using agents for pure text generation or Q&A
+- Running untrusted or experimental agents
+- Minimizing attack surface

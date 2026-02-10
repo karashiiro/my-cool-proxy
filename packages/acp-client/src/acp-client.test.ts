@@ -91,10 +91,10 @@ describe("ACPClient", () => {
 
   describe("connect", () => {
     it("should spawn process with correct command and args", async () => {
-      const client = new ACPClient(
-        { command: "node", args: ["agent.js"] },
-        createMockLogger(),
-      );
+      const client = new ACPClient({
+        config: { command: "node", args: ["agent.js"] },
+        logger: createMockLogger(),
+      });
 
       await client.connect();
 
@@ -106,10 +106,14 @@ describe("ACPClient", () => {
     });
 
     it("should pass environment variables to spawned process", async () => {
-      const client = new ACPClient(
-        { command: "node", args: ["agent.js"], env: { MODEL: "gpt-4" } },
-        createMockLogger(),
-      );
+      const client = new ACPClient({
+        config: {
+          command: "node",
+          args: ["agent.js"],
+          env: { MODEL: "gpt-4" },
+        },
+        logger: createMockLogger(),
+      });
 
       await client.connect();
 
@@ -121,10 +125,10 @@ describe("ACPClient", () => {
     });
 
     it("should initialize the ACP connection with protocol version", async () => {
-      const client = new ACPClient(
-        { command: "node", args: ["agent.js"] },
-        createMockLogger(),
-      );
+      const client = new ACPClient({
+        config: { command: "node", args: ["agent.js"] },
+        logger: createMockLogger(),
+      });
 
       await client.connect();
 
@@ -143,10 +147,10 @@ describe("ACPClient", () => {
         on: vi.fn(),
       } as unknown as ChildProcess);
 
-      const client = new ACPClient(
-        { command: "node", args: ["agent.js"] },
-        createMockLogger(),
-      );
+      const client = new ACPClient({
+        config: { command: "node", args: ["agent.js"] },
+        logger: createMockLogger(),
+      });
 
       await expect(client.connect()).rejects.toThrow(
         /Failed to create stdio streams/,
@@ -154,7 +158,10 @@ describe("ACPClient", () => {
     });
 
     it("should use default empty args when none provided", async () => {
-      const client = new ACPClient({ command: "my-agent" }, createMockLogger());
+      const client = new ACPClient({
+        config: { command: "my-agent" },
+        logger: createMockLogger(),
+      });
 
       await client.connect();
 
@@ -169,10 +176,10 @@ describe("ACPClient", () => {
         },
       });
 
-      const client = new ACPClient(
-        { command: "node", args: ["agent.js"] },
-        createMockLogger(),
-      );
+      const client = new ACPClient({
+        config: { command: "node", args: ["agent.js"] },
+        logger: createMockLogger(),
+      });
 
       await client.connect();
 
@@ -188,10 +195,10 @@ describe("ACPClient", () => {
         // No agentCapabilities at all
       });
 
-      const client = new ACPClient(
-        { command: "node", args: ["agent.js"] },
-        createMockLogger(),
-      );
+      const client = new ACPClient({
+        config: { command: "node", args: ["agent.js"] },
+        logger: createMockLogger(),
+      });
 
       await client.connect();
 
@@ -201,10 +208,10 @@ describe("ACPClient", () => {
 
   describe("createSession", () => {
     it("should create a new ACP session via the connection", async () => {
-      const client = new ACPClient(
-        { command: "node", args: ["agent.js"] },
-        createMockLogger(),
-      );
+      const client = new ACPClient({
+        config: { command: "node", args: ["agent.js"] },
+        logger: createMockLogger(),
+      });
 
       await client.connect();
       const session = await client.createSession();
@@ -217,19 +224,19 @@ describe("ACPClient", () => {
     });
 
     it("should throw if not connected", async () => {
-      const client = new ACPClient(
-        { command: "node", args: ["agent.js"] },
-        createMockLogger(),
-      );
+      const client = new ACPClient({
+        config: { command: "node", args: ["agent.js"] },
+        logger: createMockLogger(),
+      });
 
       await expect(client.createSession()).rejects.toThrow(/not connected/);
     });
 
     it("should return an ACPClientSession that can prompt", async () => {
-      const client = new ACPClient(
-        { command: "node", args: ["agent.js"] },
-        createMockLogger(),
-      );
+      const client = new ACPClient({
+        config: { command: "node", args: ["agent.js"] },
+        logger: createMockLogger(),
+      });
 
       await client.connect();
       const session = await client.createSession();
@@ -248,10 +255,10 @@ describe("ACPClient", () => {
 
   describe("close", () => {
     it("should kill the spawned process", async () => {
-      const client = new ACPClient(
-        { command: "node", args: ["agent.js"] },
-        createMockLogger(),
-      );
+      const client = new ACPClient({
+        config: { command: "node", args: ["agent.js"] },
+        logger: createMockLogger(),
+      });
 
       await client.connect();
       await client.close();
@@ -260,20 +267,20 @@ describe("ACPClient", () => {
     });
 
     it("should be safe to call when not connected", async () => {
-      const client = new ACPClient(
-        { command: "node", args: ["agent.js"] },
-        createMockLogger(),
-      );
+      const client = new ACPClient({
+        config: { command: "node", args: ["agent.js"] },
+        logger: createMockLogger(),
+      });
 
       // Should not throw
       await client.close();
     });
 
     it("should prevent createSession after close", async () => {
-      const client = new ACPClient(
-        { command: "node", args: ["agent.js"] },
-        createMockLogger(),
-      );
+      const client = new ACPClient({
+        config: { command: "node", args: ["agent.js"] },
+        logger: createMockLogger(),
+      });
 
       await client.connect();
       await client.close();

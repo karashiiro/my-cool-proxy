@@ -189,7 +189,12 @@ export function createContainer(
         const capabilityStore = container.get<ICapabilityStore>(
           TYPES.CapabilityStore,
         );
-        return new SamplingShim(config.acp!.agent!, logger, capabilityStore);
+        return new SamplingShim(
+          config.acp!.agent!,
+          logger,
+          capabilityStore,
+          config.acp!.filesystem,
+        );
       })
       .inSingletonScope();
   }

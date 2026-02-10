@@ -187,6 +187,36 @@ export function loadConfig(): ServerConfig {
           }
         }
       }
+
+      // Validate filesystem config if provided
+      if (config.acp.filesystem !== undefined) {
+        if (
+          typeof config.acp.filesystem !== "object" ||
+          config.acp.filesystem === null
+        ) {
+          throw new Error(
+            "Config 'acp.filesystem' must be an object if specified",
+          );
+        }
+
+        if (
+          config.acp.filesystem.readTextFile !== undefined &&
+          typeof config.acp.filesystem.readTextFile !== "boolean"
+        ) {
+          throw new Error(
+            "Config 'acp.filesystem.readTextFile' must be a boolean if specified",
+          );
+        }
+
+        if (
+          config.acp.filesystem.writeTextFile !== undefined &&
+          typeof config.acp.filesystem.writeTextFile !== "boolean"
+        ) {
+          throw new Error(
+            "Config 'acp.filesystem.writeTextFile' must be a boolean if specified",
+          );
+        }
+      }
     }
 
     // Validate logging config if provided

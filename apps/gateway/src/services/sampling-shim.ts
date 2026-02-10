@@ -17,6 +17,7 @@ import type {
   ISamplingShim,
   ILogger,
   ICapabilityStore,
+  ACPFilesystemConfig,
 } from "../types/interfaces.js";
 import { mapMcpToAcpPrompt, mapAcpToMcpResult } from "../utils/index.js";
 import { $inject } from "../container/decorators.js";
@@ -47,6 +48,7 @@ export class SamplingShim implements ISamplingShim {
     @$inject(TYPES.Logger) private readonly logger: ILogger,
     @$inject(TYPES.CapabilityStore)
     private readonly capabilityStore: ICapabilityStore,
+    private readonly filesystemConfig?: ACPFilesystemConfig,
   ) {}
 
   /**
@@ -63,7 +65,18 @@ export class SamplingShim implements ISamplingShim {
 
     this.logger.debug(`Initializing sampling shim for session ${sessionId}`);
 
-    const client = new ACPClient(this.agentConfig, this.logger);
+    const client = new ACPClient({
+      config: this.agentConfig,
+      logger: this.logger,
+      filesystem: this.filesystemConfig
+        ? {
+            readTextFile: this.filesystemConfig.readTextFile ?? false,
+            writeTextFile: this.filesystemConfig.writeTextFile ?? false,
+          }
+        : undefined,
+      getWorkingDirectory: (sid) =>
+        this.capabilityStore.getWorkingDirectory(sid),
+    });
     await client.connect();
     this.clients.set(sessionId, client);
 

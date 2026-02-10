@@ -119,11 +119,39 @@ export interface MCPClientConfigStdio extends MCPClientConfigBase {
 export type MCPClientConfig = MCPClientConfigHTTP | MCPClientConfigStdio;
 
 /**
+ * Configuration for ACP filesystem capabilities.
+ * Controls what filesystem operations ACP agents can perform.
+ * Both options default to false (secure by default).
+ */
+export interface ACPFilesystemConfig {
+  /**
+   * Enable reading text files within the session's working directory.
+   * When enabled, agents can read files but only within their sandbox.
+   * Default: false
+   */
+  readTextFile?: boolean;
+
+  /**
+   * Enable writing text files within the session's working directory.
+   * When enabled, agents can write files but only within their sandbox.
+   * Default: false
+   */
+  writeTextFile?: boolean;
+}
+
+/**
  * Configuration for ACP (Agent Client Protocol) features.
  * Currently supports configuring an ACP agent for sampling shim.
  */
 export interface ACPConfig {
   agent?: ACPAgentConfig;
+
+  /**
+   * Filesystem capabilities for ACP agents.
+   * Controls whether agents can read/write files within their session sandbox.
+   * Default: undefined (no filesystem access)
+   */
+  filesystem?: ACPFilesystemConfig;
 }
 
 /**
