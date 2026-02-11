@@ -1,5 +1,10 @@
 import { normalize, resolve, dirname, isAbsolute, sep } from "path";
-import { realpath, access, constants } from "fs/promises";
+import { access, constants } from "fs/promises";
+import { realpath as realpathCallback } from "fs";
+import { promisify } from "util";
+
+// Use native realpath for consistent behavior with realpathSync on Windows
+const realpath = promisify(realpathCallback.native);
 
 /**
  * Error thrown when a path operation violates sandbox constraints.
