@@ -126,7 +126,7 @@ describe("path-sandbox", () => {
 
       const result = await sandboxPathForRead("test.txt", sandbox);
       // Returns the real path (handles macOS /var -> /private/var)
-      expect(result).toBe(join(realSandbox, "test.txt"));
+      expect(result).toBe(realpathSync(join(realSandbox, "test.txt")));
     });
 
     it("allows reading files in subdirectories", async () => {
@@ -137,7 +137,7 @@ describe("path-sandbox", () => {
 
       const result = await sandboxPathForRead("subdir/test.txt", sandbox);
       // Returns the real path (handles macOS /var -> /private/var)
-      expect(result).toBe(join(realSandbox, "subdir/test.txt"));
+      expect(result).toBe(realpathSync(join(realSandbox, "subdir/test.txt")));
     });
 
     it("throws for non-existent files", async () => {
@@ -172,7 +172,7 @@ describe("path-sandbox", () => {
 
       const result = await sandboxPathForRead("link.txt", sandbox);
       // Returns the real path (handles macOS /var -> /private/var)
-      expect(result).toBe(join(realSandbox, "real.txt"));
+      expect(result).toBe(realpathSync(join(realSandbox, "real.txt")));
     });
 
     it("rejects path traversal before checking existence", async () => {
