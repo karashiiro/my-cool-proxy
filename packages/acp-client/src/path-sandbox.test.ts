@@ -7,7 +7,7 @@ import {
   realpathSync,
 } from "fs";
 import { tmpdir } from "os";
-import { join } from "path";
+import { join, normalize } from "path";
 import {
   sandboxPath,
   sandboxPathForRead,
@@ -133,9 +133,15 @@ describe("path-sandbox", () => {
       writeFileSync(filePath, "test content");
 
       const result = await sandboxPathForRead("test.txt", sandbox);
-      // Returns the real path (handles macOS /var -> /private/var and Windows short/long paths)
-      // Normalize both sides to ensure consistent comparison on Windows (short vs long names)
-      expect(realpathSync(result)).toBe(realpathSync(filePath));
+      // Verify the result points to the same file by comparing normalized real paths
+      // On Windows, realpathSync can return either short or long names inconsistently,
+      // so we compare after normalizing both to canonical form
+      const expectedReal = realpathSync(filePath);
+      const actualReal = realpathSync(result);
+      // Compare case-insensitively and with normalized separators (Windows is case-insensitive)
+      expect(normalize(actualReal).toLowerCase()).toBe(
+        normalize(expectedReal).toLowerCase(),
+      );
     });
 
     it("allows reading files in subdirectories", async () => {
@@ -145,9 +151,15 @@ describe("path-sandbox", () => {
       writeFileSync(filePath, "test content");
 
       const result = await sandboxPathForRead("subdir/test.txt", sandbox);
-      // Returns the real path (handles macOS /var -> /private/var and Windows short/long paths)
-      // Normalize both sides to ensure consistent comparison on Windows (short vs long names)
-      expect(realpathSync(result)).toBe(realpathSync(filePath));
+      // Verify the result points to the same file by comparing normalized real paths
+      // On Windows, realpathSync can return either short or long names inconsistently,
+      // so we compare after normalizing both to canonical form
+      const expectedReal = realpathSync(filePath);
+      const actualReal = realpathSync(result);
+      // Compare case-insensitively and with normalized separators (Windows is case-insensitive)
+      expect(normalize(actualReal).toLowerCase()).toBe(
+        normalize(expectedReal).toLowerCase(),
+      );
     });
 
     it("throws for non-existent files", async () => {
@@ -181,9 +193,15 @@ describe("path-sandbox", () => {
       symlinkSync(realFile, symlinkPath);
 
       const result = await sandboxPathForRead("link.txt", sandbox);
-      // Returns the real path (handles macOS /var -> /private/var and Windows short/long paths)
-      // Normalize both sides to ensure consistent comparison on Windows (short vs long names)
-      expect(realpathSync(result)).toBe(realpathSync(realFile));
+      // Verify the result points to the same file by comparing normalized real paths
+      // On Windows, realpathSync can return either short or long names inconsistently,
+      // so we compare after normalizing both to canonical form
+      const expectedReal = realpathSync(realFile);
+      const actualReal = realpathSync(result);
+      // Compare case-insensitively and with normalized separators (Windows is case-insensitive)
+      expect(normalize(actualReal).toLowerCase()).toBe(
+        normalize(expectedReal).toLowerCase(),
+      );
     });
 
     it("rejects path traversal before checking existence", async () => {
