@@ -60,15 +60,6 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.25.2
         version: 1.25.3(hono@4.11.7)(zod@4.3.6)
-      '@my-cool-proxy/acp-client':
-        specifier: workspace:*
-        version: link:../../packages/acp-client
-      '@my-cool-proxy/logger':
-        specifier: workspace:*
-        version: link:../../packages/logger
-      '@my-cool-proxy/mcp-sampling-sidecar':
-        specifier: workspace:*
-        version: link:../../packages/mcp-sampling-sidecar
       env-paths:
         specifier: ^3.0.0
         version: 3.0.0
@@ -94,6 +85,12 @@ importers:
       '@agentclientprotocol/sdk':
         specifier: ^0.14.1
         version: 0.14.1(zod@4.3.6)
+      '@my-cool-proxy/acp-client':
+        specifier: workspace:*
+        version: link:../../packages/acp-client
+      '@my-cool-proxy/logger':
+        specifier: workspace:*
+        version: link:../../packages/logger
       '@my-cool-proxy/lua-runtime':
         specifier: workspace:*
         version: link:../../packages/lua-runtime
@@ -103,6 +100,9 @@ importers:
       '@my-cool-proxy/mcp-client':
         specifier: workspace:*
         version: link:../../packages/mcp-client
+      '@my-cool-proxy/mcp-sampling-sidecar':
+        specifier: workspace:*
+        version: link:../../packages/mcp-sampling-sidecar
       '@my-cool-proxy/mcp-utilities':
         specifier: workspace:*
         version: link:../../packages/mcp-utilities

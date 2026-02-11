@@ -62,6 +62,9 @@ web_modules/
 # Output of 'npm pack'
 *.tgz
 
+# Pack test install directory (CI)
+pack-test-install/
+
 # Yarn Integrity file
 .yarn-integrity
 

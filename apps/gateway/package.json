@@ -26,9 +26,12 @@
     "url": "https://github.com/karashiiro/my-cool-proxy.git"
   },
   "devDependencies": {
+    "@my-cool-proxy/acp-client": "workspace:*",
+    "@my-cool-proxy/logger": "workspace:*",
     "@my-cool-proxy/lua-runtime": "workspace:*",
     "@my-cool-proxy/mcp-aggregation": "workspace:*",
     "@my-cool-proxy/mcp-client": "workspace:*",
+    "@my-cool-proxy/mcp-sampling-sidecar": "workspace:*",
     "@my-cool-proxy/mcp-utilities": "workspace:*",
     "@suites/di.inversify": "4.0.0-alpha.0",
     "@suites/doubles.vitest": "4.0.0-beta.0",
@@ -41,9 +44,6 @@
     "@agentclientprotocol/sdk": "^0.14.1"
   },
   "dependencies": {
-    "@my-cool-proxy/acp-client": "workspace:*",
-    "@my-cool-proxy/logger": "workspace:*",
-    "@my-cool-proxy/mcp-sampling-sidecar": "workspace:*",
     "@hono/node-server": "^1.19.9",
     "@inversifyjs/strongly-typed": "^2.2.0",
     "@karashiiro/mcp": "0.5.0",

@@ -1,40 +1,32 @@
-name: Publish to npm
+name: Pack Test
 
 on:
-  release:
-    types: [published]
-  workflow_dispatch:
-
-permissions:
-  contents: read
-  id-token: write
+  push:
+  pull_request:
+  workflow_call:
 
 jobs:
-  publish:
+  pack-test:
+    name: Test package installation
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "22.x"
-          registry-url: "https://registry.npmjs.org"
-
-      - name: Update npm
-        run: npm install -g npm
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+          cache: "pnpm"
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Build
         run: pnpm build
-
-      - name: Validate (lint, typecheck, test)
-        run: pnpm check
 
       - name: Pack package
         working-directory: apps/gateway
@@ -61,7 +53,3 @@ jobs:
       - name: Test CLI invocation
         working-directory: pack-test-install
         run: npx my-cool-proxy --help
-
-      - name: Publish to npm
-        run: pnpm publish --access public --no-git-checks
-        working-directory: apps/gateway
