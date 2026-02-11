@@ -21,8 +21,14 @@ describe("path-sandbox", () => {
 
   beforeEach(() => {
     // Create a temp sandbox directory
-    const tempSandbox = join(tmpdir(), `sandbox-test-${Date.now()}-${Math.random()}`);
-    const tempOutside = join(tmpdir(), `outside-test-${Date.now()}-${Math.random()}`);
+    const tempSandbox = join(
+      tmpdir(),
+      `sandbox-test-${Date.now()}-${Math.random()}`,
+    );
+    const tempOutside = join(
+      tmpdir(),
+      `outside-test-${Date.now()}-${Math.random()}`,
+    );
     mkdirSync(tempSandbox, { recursive: true });
     mkdirSync(tempOutside, { recursive: true });
     // Normalize paths to handle Windows short/long paths and macOS symlinks
