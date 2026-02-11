@@ -94,6 +94,11 @@ export async function sandboxPathForRead(
   let realSandbox: string;
   try {
     realSandbox = await realpath(sandbox);
+    // DEBUG: Log to see what forms we're getting
+    if (process.platform === "win32") {
+      console.error("[DEBUG] sandbox input:", sandbox);
+      console.error("[DEBUG] realSandbox output:", realSandbox);
+    }
   } catch {
     // If sandbox doesn't exist or can't be resolved, use normalized version
     realSandbox = normalize(sandbox);
@@ -107,6 +112,10 @@ export async function sandboxPathForRead(
   let realPath: string;
   try {
     realPath = await realpath(validatedPath);
+    if (process.platform === "win32") {
+      console.error("[DEBUG] validatedPath input:", validatedPath);
+      console.error("[DEBUG] realPath output:", realPath);
+    }
   } catch (error) {
     if (error instanceof Error && "code" in error && error.code === "ENOENT") {
       throw new PathSandboxError("Path does not exist");
@@ -143,8 +152,21 @@ export async function sandboxPathForRead(
   const realSegments = realPath.split(sep);
   const sandboxSegments = realSandbox.split(sep);
 
+  if (process.platform === "win32") {
+    console.error("[DEBUG] realSegments:", realSegments);
+    console.error("[DEBUG] sandboxSegments:", sandboxSegments);
+    console.error(
+      "[DEBUG] sandboxSegments.length:",
+      sandboxSegments.length,
+    );
+  }
+
   // Extract the suffix (file-specific segments after the sandbox path)
   const suffixSegments = realSegments.slice(sandboxSegments.length);
+
+  if (process.platform === "win32") {
+    console.error("[DEBUG] suffixSegments:", suffixSegments);
+  }
 
   // If no suffix, the path is exactly the sandbox
   if (suffixSegments.length === 0) {
@@ -152,7 +174,13 @@ export async function sandboxPathForRead(
   }
 
   // Reconstruct by appending suffix to realSandbox (preserves its form)
-  return realSandbox + sep + suffixSegments.join(sep);
+  const result = realSandbox + sep + suffixSegments.join(sep);
+
+  if (process.platform === "win32") {
+    console.error("[DEBUG] final result:", result);
+  }
+
+  return result;
 }
 
 /**
