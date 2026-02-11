@@ -110,12 +110,12 @@ export async function sandboxPathForRead(
   }
 
   // Re-validate the real path after symlink resolution
-  const normalizedRealPath = normalize(realPath);
-  const normalizedSandbox = normalize(realSandbox);
+  // Note: Both realPath and realSandbox come from realpath() which already
+  // returns canonical paths, so we don't need normalize()
 
   // On Windows, paths are case-insensitive, so use lowercase for comparison
-  const lowerRealPath = normalizedRealPath.toLowerCase();
-  const lowerSandbox = normalizedSandbox.toLowerCase();
+  const lowerRealPath = realPath.toLowerCase();
+  const lowerSandbox = realSandbox.toLowerCase();
 
   // Check if it's exactly the sandbox itself
   if (lowerRealPath === lowerSandbox) {
@@ -135,8 +135,8 @@ export async function sandboxPathForRead(
   // e.g., C:\Users\RUNNER~1\... vs C:\Users\runneradmin\...
   // path.relative() doesn't work across different forms, so we reconstruct
   // the path by combining sandbox's form with the file-specific suffix
-  const realSegments = normalizedRealPath.split(sep);
-  const sandboxSegments = normalizedSandbox.split(sep);
+  const realSegments = realPath.split(sep);
+  const sandboxSegments = realSandbox.split(sep);
 
   // Extract the suffix (file-specific segments after the sandbox path)
   const suffixSegments = realSegments.slice(sandboxSegments.length);
