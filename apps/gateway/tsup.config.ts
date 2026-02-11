@@ -9,9 +9,12 @@ export default defineConfig({
   bundle: true,
   // Bundle all workspace packages into the output
   noExternal: [
+    "@my-cool-proxy/acp-client",
+    "@my-cool-proxy/logger",
     "@my-cool-proxy/lua-runtime",
     "@my-cool-proxy/mcp-aggregation",
     "@my-cool-proxy/mcp-client",
+    "@my-cool-proxy/mcp-sampling-sidecar",
     "@my-cool-proxy/mcp-utilities",
   ],
   // Keep external dependencies external
