@@ -303,9 +303,11 @@ async function startHttpMode(
       port: config.port,
       host: config.host,
       sessions: {
+        // Session expires after 5 minutes of inactivity (default is 30 minutes)
+        sessionTtlMs: 5 * 60 * 1000,
         // Clean up session-scoped state when sessions are closed
         onSessionClosed: async (sessionId) => {
-          logger.debug(`Session ${sessionId} closed, cleaning up...`);
+          logger.info(`Session ${sessionId} closed, cleaning up...`);
           try {
             await clientManager.closeSession(sessionId);
 
@@ -314,7 +316,7 @@ async function startHttpMode(
             if (workingDir && workingDir.includes("mcp-gateway-")) {
               // Only clean up if it's one of our tempdirs (contains our prefix)
               cleanupSessionTempDir(workingDir);
-              logger.debug(
+              logger.info(
                 `Cleaned up tempdir for session ${sessionId}: ${workingDir}`,
               );
             }

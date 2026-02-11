@@ -328,7 +328,7 @@ export class MCPClientManager implements IMCPClientManager {
       }
     }
 
-    this.logger.debug(`Cleaned up session ${sessionId}`);
+    this.logger.info(`Cleaned up session ${sessionId}`);
   }
 
   /**
