@@ -395,6 +395,7 @@ export interface PreloadedServerInfo {
   description?: string;
   version?: string;
   instructions?: string;
+  toolNames?: string[];
 }
 
 /**

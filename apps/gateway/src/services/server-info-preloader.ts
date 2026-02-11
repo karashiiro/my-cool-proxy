@@ -13,6 +13,7 @@ import { $inject } from "../container/decorators.js";
 import { TYPES } from "../types/index.js";
 
 const MAX_INSTRUCTION_EXCERPT_LENGTH = 200;
+const MAX_TOOLS_IN_INSTRUCTIONS = 40;
 
 @injectable()
 export class ServerInfoPreloader implements IServerInfoPreloader {
@@ -60,11 +61,22 @@ export class ServerInfoPreloader implements IServerInfoPreloader {
           const serverVersion = sdkClient.getServerVersion();
           const instructions = sdkClient.getInstructions();
 
+          // Get tool names
+          let toolNames: string[] = [];
+          try {
+            const toolsResponse = await sdkClient.listTools();
+            toolNames = toolsResponse.tools.map((t) => t.name);
+          } catch (error) {
+            this.logger.warn(
+              `Failed to list tools for server '${name}': ${error instanceof Error ? error.message : String(error)}`,
+            );
+          }
+
           // Close the probe connection
           await sdkClient.close();
 
           this.logger.info(
-            `Preloaded info for server '${name}': ${serverVersion?.name || "unnamed"} v${serverVersion?.version || "unknown"}`,
+            `Preloaded info for server '${name}': ${serverVersion?.name || "unnamed"} v${serverVersion?.version || "unknown"} (${toolNames.length} tools)`,
           );
 
           return {
@@ -73,6 +85,7 @@ export class ServerInfoPreloader implements IServerInfoPreloader {
             description: serverVersion?.description,
             version: serverVersion?.version,
             instructions,
+            toolNames,
           };
         } catch (error) {
           const errorMessage =
@@ -120,6 +133,14 @@ export class ServerInfoPreloader implements IServerInfoPreloader {
 
       if (server.description) {
         lines.push(`Description: ${server.description}`);
+      }
+
+      if (server.toolNames && server.toolNames.length > 0) {
+        const toolsLine = this.formatToolNames(
+          server.toolNames,
+          MAX_TOOLS_IN_INSTRUCTIONS,
+        );
+        lines.push(`Tools: ${toolsLine}`);
       }
 
       if (server.instructions) {
@@ -200,6 +221,20 @@ STRONGLY consider if there are relevant skills that may assist you in the curren
     }
 
     return truncated + "...";
+  }
+
+  /**
+   * Format tool names for display in instructions.
+   * Limits to maxTools and adds "(and X more)" suffix if needed.
+   */
+  private formatToolNames(toolNames: string[], maxTools: number): string {
+    if (toolNames.length <= maxTools) {
+      return toolNames.join(", ");
+    }
+
+    const displayed = toolNames.slice(0, maxTools);
+    const remaining = toolNames.length - maxTools;
+    return `${displayed.join(", ")} (and ${remaining} more)`;
   }
 
   /**
