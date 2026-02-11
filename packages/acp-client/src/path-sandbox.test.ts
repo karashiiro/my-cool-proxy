@@ -17,7 +17,6 @@ import {
 
 describe("path-sandbox", () => {
   let sandbox: string;
-  let realSandbox: string;
   let outsideDir: string;
 
   beforeEach(() => {
@@ -26,8 +25,6 @@ describe("path-sandbox", () => {
     outsideDir = join(tmpdir(), `outside-test-${Date.now()}-${Math.random()}`);
     mkdirSync(sandbox, { recursive: true });
     mkdirSync(outsideDir, { recursive: true });
-    // Get the real path (handles macOS /var -> /private/var symlinks)
-    realSandbox = realpathSync(sandbox);
   });
 
   afterEach(() => {
