@@ -185,5 +185,73 @@ describe("ServerInfoPreloader", () => {
         longInstructions.length + 200, // some buffer for headers
       );
     });
+
+    it("should include tool names in output", () => {
+      const servers = [
+        {
+          name: "test-server",
+          serverName: "Test Server",
+          description: "A test server",
+          toolNames: ["tool_a", "tool_b", "tool_c"],
+        },
+      ];
+
+      const result = preloader.buildAggregatedInstructions(servers);
+
+      expect(result).toContain("## test-server");
+      expect(result).toContain("Tools: tool_a, tool_b, tool_c");
+    });
+
+    it("should truncate tool list when exceeding limit", () => {
+      // Create array of 25 tools
+      const toolNames = Array.from({ length: 25 }, (_, i) => `tool_${i + 1}`);
+      const servers = [
+        {
+          name: "many-tools-server",
+          toolNames,
+        },
+      ];
+
+      const result = preloader.buildAggregatedInstructions(servers);
+
+      expect(result).toContain("Tools:");
+      expect(result).toContain("(and 5 more)");
+      // Should contain first 20 tools
+      expect(result).toContain("tool_1");
+      expect(result).toContain("tool_20");
+      // Should NOT contain tool_21 through tool_25 as individual items
+      expect(result).not.toContain("tool_21,");
+      expect(result).not.toContain(", tool_25");
+    });
+
+    it("should omit tools line when server has no tools", () => {
+      const servers = [
+        {
+          name: "no-tools-server",
+          serverName: "No Tools Server",
+          toolNames: [],
+        },
+      ];
+
+      const result = preloader.buildAggregatedInstructions(servers);
+
+      expect(result).toContain("## no-tools-server");
+      expect(result).not.toContain("Tools:");
+    });
+
+    it("should handle undefined toolNames gracefully", () => {
+      const servers = [
+        {
+          name: "legacy-server",
+          serverName: "Legacy Server",
+          // toolNames not provided (simulating failed tool fetch)
+        },
+      ];
+
+      const result = preloader.buildAggregatedInstructions(servers);
+
+      expect(result).toContain("## legacy-server");
+      expect(result).not.toContain("Tools:");
+    });
   });
 });
