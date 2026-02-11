@@ -1,4 +1,4 @@
-import { normalize, resolve, dirname, isAbsolute } from "path";
+import { normalize, resolve, dirname, isAbsolute, sep } from "path";
 import { realpath, access, constants } from "fs/promises";
 
 /**
@@ -49,9 +49,9 @@ export function sandboxPath(requestedPath: string, sandbox: string): string {
 
   // Step 4: Validate - ensure the resolved path is within the sandbox
   // Use trailing separator to prevent "/sandbox" matching "/sandbox-other"
-  const sandboxPrefix = normalizedSandbox.endsWith("/")
+  const sandboxPrefix = normalizedSandbox.endsWith(sep)
     ? normalizedSandbox
-    : normalizedSandbox + "/";
+    : normalizedSandbox + sep;
 
   // Allow exact match (sandbox itself) or paths under it
   if (
@@ -111,9 +111,9 @@ export async function sandboxPathForRead(
   // Re-validate the real path after symlink resolution
   const normalizedRealPath = normalize(realPath);
   const normalizedSandbox = normalize(realSandbox);
-  const sandboxPrefix = normalizedSandbox.endsWith("/")
+  const sandboxPrefix = normalizedSandbox.endsWith(sep)
     ? normalizedSandbox
-    : normalizedSandbox + "/";
+    : normalizedSandbox + sep;
 
   if (
     normalizedRealPath !== normalizedSandbox &&
