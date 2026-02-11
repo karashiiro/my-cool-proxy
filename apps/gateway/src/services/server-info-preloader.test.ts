@@ -203,8 +203,8 @@ describe("ServerInfoPreloader", () => {
     });
 
     it("should truncate tool list when exceeding limit", () => {
-      // Create array of 25 tools
-      const toolNames = Array.from({ length: 25 }, (_, i) => `tool_${i + 1}`);
+      // Create array of 50 tools (limit is 40)
+      const toolNames = Array.from({ length: 50 }, (_, i) => `tool_${i + 1}`);
       const servers = [
         {
           name: "many-tools-server",
@@ -215,13 +215,13 @@ describe("ServerInfoPreloader", () => {
       const result = preloader.buildAggregatedInstructions(servers);
 
       expect(result).toContain("Tools:");
-      expect(result).toContain("(and 5 more)");
-      // Should contain first 20 tools
+      expect(result).toContain("(and 10 more)");
+      // Should contain first 40 tools
       expect(result).toContain("tool_1");
-      expect(result).toContain("tool_20");
-      // Should NOT contain tool_21 through tool_25 as individual items
-      expect(result).not.toContain("tool_21,");
-      expect(result).not.toContain(", tool_25");
+      expect(result).toContain("tool_40");
+      // Should NOT contain tool_41 through tool_50 as individual items
+      expect(result).not.toContain("tool_41,");
+      expect(result).not.toContain(", tool_50");
     });
 
     it("should omit tools line when server has no tools", () => {

@@ -13,7 +13,7 @@ import { $inject } from "../container/decorators.js";
 import { TYPES } from "../types/index.js";
 
 const MAX_INSTRUCTION_EXCERPT_LENGTH = 200;
-const MAX_TOOLS_IN_INSTRUCTIONS = 20;
+const MAX_TOOLS_IN_INSTRUCTIONS = 40;
 
 @injectable()
 export class ServerInfoPreloader implements IServerInfoPreloader {
