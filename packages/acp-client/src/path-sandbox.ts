@@ -1,12 +1,4 @@
-import {
-  normalize,
-  resolve,
-  dirname,
-  isAbsolute,
-  sep,
-  relative,
-  join,
-} from "path";
+import { normalize, resolve, dirname, isAbsolute, sep } from "path";
 import { realpath, access, constants } from "fs/promises";
 
 /**
@@ -120,28 +112,40 @@ export async function sandboxPathForRead(
   // Re-validate the real path after symlink resolution
   const normalizedRealPath = normalize(realPath);
   const normalizedSandbox = normalize(realSandbox);
-  const sandboxPrefix = normalizedSandbox.endsWith(sep)
-    ? normalizedSandbox
-    : normalizedSandbox + sep;
 
-  if (
-    normalizedRealPath !== normalizedSandbox &&
-    !normalizedRealPath.startsWith(sandboxPrefix)
-  ) {
+  // On Windows, paths are case-insensitive, so use lowercase for comparison
+  const lowerRealPath = normalizedRealPath.toLowerCase();
+  const lowerSandbox = normalizedSandbox.toLowerCase();
+
+  // Check if it's exactly the sandbox itself
+  if (lowerRealPath === lowerSandbox) {
+    return realSandbox;
+  }
+
+  // Check if it's within the sandbox (case-insensitive)
+  const sandboxPrefix = lowerSandbox.endsWith(sep)
+    ? lowerSandbox
+    : lowerSandbox + sep;
+
+  if (!lowerRealPath.startsWith(sandboxPrefix)) {
     throw new PathSandboxError("Path is outside the allowed directory");
   }
 
   // On Windows, realpath can return inconsistent forms (8.3 short vs long names)
-  // To ensure consistency, reconstruct the path using the realSandbox form
-  // by extracting the relative portion from the resolved path
-  if (normalizedRealPath === normalizedSandbox) {
-    return realSandbox;
-  }
+  // e.g., C:\Users\RUNNER~1\... vs C:\Users\runneradmin\...
+  // path.relative() doesn't work across different forms, so we reconstruct
+  // the path by combining sandbox segments with the file-specific segments
+  const realSegments = normalizedRealPath.split(sep);
+  const sandboxSegments = normalizedSandbox.split(sep);
 
-  // Get the relative path from the normalized sandbox to the normalized real path
-  // This works even when the paths use different forms (8.3 short vs long names)
-  const relativePath = relative(normalizedSandbox, normalizedRealPath);
-  return join(realSandbox, relativePath);
+  // Reconstruct using sandbox's form for the common prefix
+  // and real path's segments for the file-specific suffix
+  const resultSegments = [
+    ...sandboxSegments,
+    ...realSegments.slice(sandboxSegments.length),
+  ];
+
+  return resultSegments.join(sep);
 }
 
 /**
