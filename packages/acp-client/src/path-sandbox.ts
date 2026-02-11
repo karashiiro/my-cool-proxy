@@ -83,11 +83,9 @@ export async function sandboxPathForRead(
   requestedPath: string,
   sandbox: string,
 ): Promise<string> {
-  // First, validate the path syntactically
-  const validatedPath = sandboxPath(requestedPath, sandbox);
-
-  // Resolve the sandbox's real path as well
+  // First, resolve the sandbox's real path
   // This handles cases like macOS /var -> /private/var symlinks
+  // and Windows 8.3 short names vs long names
   let realSandbox: string;
   try {
     realSandbox = await realpath(sandbox);
@@ -95,6 +93,9 @@ export async function sandboxPathForRead(
     // If sandbox doesn't exist or can't be resolved, use normalized version
     realSandbox = normalize(sandbox);
   }
+
+  // Validate the path syntactically using the real sandbox path
+  const validatedPath = sandboxPath(requestedPath, realSandbox);
 
   // Then resolve symlinks and re-validate
   // realpath() throws ENOENT if the file doesn't exist
