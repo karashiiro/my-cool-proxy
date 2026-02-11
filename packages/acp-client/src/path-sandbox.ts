@@ -123,7 +123,16 @@ export async function sandboxPathForRead(
     throw new PathSandboxError("Path is outside the allowed directory");
   }
 
-  return normalizedRealPath;
+  // On Windows, realpath can return inconsistent forms (8.3 short vs long names)
+  // To ensure consistency, reconstruct the path using the realSandbox form
+  // by extracting the relative portion from the resolved path
+  if (normalizedRealPath === normalizedSandbox) {
+    return realSandbox;
+  }
+
+  // Get the relative path from sandbox to the resolved path
+  const relativePath = normalizedRealPath.slice(sandboxPrefix.length);
+  return resolve(realSandbox, relativePath);
 }
 
 /**
