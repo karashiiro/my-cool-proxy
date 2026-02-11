@@ -20,18 +20,20 @@ describe("path-sandbox", () => {
   let outsideDir: string;
 
   beforeEach(() => {
+    // Normalize temp directory first (handles Windows short/long paths and macOS symlinks)
+    const normalizedTmpDir = realpathSync(tmpdir());
     // Create a temp sandbox directory
     const tempSandbox = join(
-      tmpdir(),
+      normalizedTmpDir,
       `sandbox-test-${Date.now()}-${Math.random()}`,
     );
     const tempOutside = join(
-      tmpdir(),
+      normalizedTmpDir,
       `outside-test-${Date.now()}-${Math.random()}`,
     );
     mkdirSync(tempSandbox, { recursive: true });
     mkdirSync(tempOutside, { recursive: true });
-    // Normalize paths to handle Windows short/long paths and macOS symlinks
+    // Normalize paths to handle any remaining symlinks
     sandbox = realpathSync(tempSandbox);
     outsideDir = realpathSync(tempOutside);
   });
@@ -132,7 +134,8 @@ describe("path-sandbox", () => {
 
       const result = await sandboxPathForRead("test.txt", sandbox);
       // Returns the real path (handles macOS /var -> /private/var and Windows short/long paths)
-      expect(result).toBe(realpathSync(filePath));
+      // Normalize both sides to ensure consistent comparison on Windows (short vs long names)
+      expect(realpathSync(result)).toBe(realpathSync(filePath));
     });
 
     it("allows reading files in subdirectories", async () => {
@@ -143,7 +146,8 @@ describe("path-sandbox", () => {
 
       const result = await sandboxPathForRead("subdir/test.txt", sandbox);
       // Returns the real path (handles macOS /var -> /private/var and Windows short/long paths)
-      expect(result).toBe(realpathSync(filePath));
+      // Normalize both sides to ensure consistent comparison on Windows (short vs long names)
+      expect(realpathSync(result)).toBe(realpathSync(filePath));
     });
 
     it("throws for non-existent files", async () => {
@@ -178,7 +182,8 @@ describe("path-sandbox", () => {
 
       const result = await sandboxPathForRead("link.txt", sandbox);
       // Returns the real path (handles macOS /var -> /private/var and Windows short/long paths)
-      expect(result).toBe(realpathSync(realFile));
+      // Normalize both sides to ensure consistent comparison on Windows (short vs long names)
+      expect(realpathSync(result)).toBe(realpathSync(realFile));
     });
 
     it("rejects path traversal before checking existence", async () => {
