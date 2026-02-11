@@ -134,18 +134,20 @@ export async function sandboxPathForRead(
   // On Windows, realpath can return inconsistent forms (8.3 short vs long names)
   // e.g., C:\Users\RUNNER~1\... vs C:\Users\runneradmin\...
   // path.relative() doesn't work across different forms, so we reconstruct
-  // the path by combining sandbox segments with the file-specific segments
+  // the path by combining sandbox's form with the file-specific suffix
   const realSegments = normalizedRealPath.split(sep);
   const sandboxSegments = normalizedSandbox.split(sep);
 
-  // Reconstruct using sandbox's form for the common prefix
-  // and real path's segments for the file-specific suffix
-  const resultSegments = [
-    ...sandboxSegments,
-    ...realSegments.slice(sandboxSegments.length),
-  ];
+  // Extract the suffix (file-specific segments after the sandbox path)
+  const suffixSegments = realSegments.slice(sandboxSegments.length);
 
-  return resultSegments.join(sep);
+  // If no suffix, the path is exactly the sandbox
+  if (suffixSegments.length === 0) {
+    return realSandbox;
+  }
+
+  // Reconstruct by appending suffix to realSandbox (preserves its form)
+  return realSandbox + sep + suffixSegments.join(sep);
 }
 
 /**
