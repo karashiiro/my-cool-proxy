@@ -1,4 +1,12 @@
-import { normalize, resolve, dirname, isAbsolute, sep } from "path";
+import {
+  normalize,
+  resolve,
+  dirname,
+  isAbsolute,
+  sep,
+  relative,
+  join,
+} from "path";
 import { realpath, access, constants } from "fs/promises";
 
 /**
@@ -130,9 +138,10 @@ export async function sandboxPathForRead(
     return realSandbox;
   }
 
-  // Get the relative path from sandbox to the resolved path
-  const relativePath = normalizedRealPath.slice(sandboxPrefix.length);
-  return resolve(realSandbox, relativePath);
+  // Get the relative path from the normalized sandbox to the normalized real path
+  // This works even when the paths use different forms (8.3 short vs long names)
+  const relativePath = relative(normalizedSandbox, normalizedRealPath);
+  return join(realSandbox, relativePath);
 }
 
 /**
