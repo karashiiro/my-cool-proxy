@@ -217,6 +217,60 @@ export function loadConfig(): ServerConfig {
           );
         }
       }
+
+      // Validate allowOwnTools config if provided
+      const VALID_TOOL_KINDS = [
+        "read",
+        "edit",
+        "delete",
+        "move",
+        "search",
+        "execute",
+        "think",
+        "fetch",
+        "switch_mode",
+        "other",
+      ];
+
+      if (config.acp.allowOwnTools !== undefined) {
+        if (
+          typeof config.acp.allowOwnTools !== "object" ||
+          config.acp.allowOwnTools === null
+        ) {
+          throw new Error(
+            "Config 'acp.allowOwnTools' must be an object if specified",
+          );
+        }
+
+        if (
+          config.acp.allowOwnTools.dangerouslyAllowAll !== undefined &&
+          typeof config.acp.allowOwnTools.dangerouslyAllowAll !== "boolean"
+        ) {
+          throw new Error(
+            "Config 'acp.allowOwnTools.dangerouslyAllowAll' must be a boolean if specified",
+          );
+        }
+
+        if (config.acp.allowOwnTools.toolKinds !== undefined) {
+          if (!Array.isArray(config.acp.allowOwnTools.toolKinds)) {
+            throw new Error(
+              "Config 'acp.allowOwnTools.toolKinds' must be an array if specified",
+            );
+          }
+          for (const kind of config.acp.allowOwnTools.toolKinds) {
+            if (typeof kind !== "string") {
+              throw new Error(
+                "Config 'acp.allowOwnTools.toolKinds' must contain only strings",
+              );
+            }
+            if (!VALID_TOOL_KINDS.includes(kind)) {
+              throw new Error(
+                `Config 'acp.allowOwnTools.toolKinds' contains invalid value '${kind}'. Valid: ${VALID_TOOL_KINDS.join(", ")}`,
+              );
+            }
+          }
+        }
+      }
     }
 
     // Validate logging config if provided

@@ -194,6 +194,7 @@ export function createContainer(
           logger,
           capabilityStore,
           config.acp!.filesystem,
+          config.acp!.allowOwnTools,
         );
       })
       .inSingletonScope();

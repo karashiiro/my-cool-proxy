@@ -140,6 +140,26 @@ export interface ACPFilesystemConfig {
 }
 
 /**
+ * Configuration for auto-approving ACP agent tool calls based on tool kind.
+ * Allows fine-grained control over which tool categories are auto-approved.
+ */
+export interface ACPAllowOwnToolsConfig {
+  /**
+   * DANGEROUS: Auto-approve ALL permission requests regardless of tool kind.
+   * Supersedes toolKinds if set to true.
+   * Default: false
+   */
+  dangerouslyAllowAll?: boolean;
+
+  /**
+   * List of tool kinds to auto-approve (e.g., ["read", "search", "think"]).
+   * Valid values: read, edit, delete, move, search, execute, think, fetch, switch_mode, other
+   * Default: [] (no auto-approval by kind)
+   */
+  toolKinds?: string[];
+}
+
+/**
  * Configuration for ACP (Agent Client Protocol) features.
  * Currently supports configuring an ACP agent for sampling shim.
  */
@@ -152,6 +172,13 @@ export interface ACPConfig {
    * Default: undefined (no filesystem access)
    */
   filesystem?: ACPFilesystemConfig;
+
+  /**
+   * Auto-approval settings for ACP agent tool calls.
+   * Allows safe tool kinds to be auto-approved without user intervention.
+   * Default: undefined (no auto-approval)
+   */
+  allowOwnTools?: ACPAllowOwnToolsConfig;
 }
 
 /**

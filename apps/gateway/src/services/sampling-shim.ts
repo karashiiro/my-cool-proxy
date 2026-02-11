@@ -18,6 +18,7 @@ import type {
   ILogger,
   ICapabilityStore,
   ACPFilesystemConfig,
+  ACPAllowOwnToolsConfig,
 } from "../types/interfaces.js";
 import { mapMcpToAcpPrompt, mapAcpToMcpResult } from "../utils/index.js";
 import { $inject } from "../container/decorators.js";
@@ -49,6 +50,7 @@ export class SamplingShim implements ISamplingShim {
     @$inject(TYPES.CapabilityStore)
     private readonly capabilityStore: ICapabilityStore,
     private readonly filesystemConfig?: ACPFilesystemConfig,
+    private readonly allowOwnToolsConfig?: ACPAllowOwnToolsConfig,
   ) {}
 
   /**
@@ -76,6 +78,15 @@ export class SamplingShim implements ISamplingShim {
         : undefined,
       getWorkingDirectory: (sid) =>
         this.capabilityStore.getWorkingDirectory(sid),
+      allowOwnTools: this.allowOwnToolsConfig
+        ? {
+            dangerouslyAllowAll:
+              this.allowOwnToolsConfig.dangerouslyAllowAll ?? false,
+            toolKinds: this.allowOwnToolsConfig.toolKinds as
+              | import("@my-cool-proxy/acp-client").ToolKind[]
+              | undefined,
+          }
+        : undefined,
     });
     await client.connect();
     this.clients.set(sessionId, client);

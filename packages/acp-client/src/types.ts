@@ -7,7 +7,28 @@ export type {
   McpServerStdio,
   EnvVariable,
   PromptCapabilities,
+  ToolKind,
 } from "@agentclientprotocol/sdk";
+
+/**
+ * Configuration for auto-approving ACP agent tool calls based on tool kind.
+ * Allows fine-grained control over which tool categories are auto-approved.
+ */
+export interface AllowOwnToolsConfig {
+  /**
+   * DANGEROUS: Auto-approve ALL permission requests regardless of tool kind.
+   * Supersedes toolKinds if set to true.
+   * Default: false
+   */
+  dangerouslyAllowAll?: boolean;
+
+  /**
+   * List of tool kinds to auto-approve (e.g., ["read", "search", "think"]).
+   * Valid values: read, edit, delete, move, search, execute, think, fetch, switch_mode, other
+   * Default: [] (no auto-approval by kind)
+   */
+  toolKinds?: import("@agentclientprotocol/sdk").ToolKind[];
+}
 
 export type { ILogger } from "@my-cool-proxy/logger";
 

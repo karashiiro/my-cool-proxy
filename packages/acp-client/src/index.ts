@@ -9,6 +9,7 @@ export {
 export type {
   ACPAgentConfig,
   ACPPromptResult,
+  AllowOwnToolsConfig,
   CapturedToolCall,
   ContentBlock,
   EnvVariable,
@@ -17,5 +18,6 @@ export type {
   McpServer,
   McpServerStdio,
   PromptCapabilities,
+  ToolKind,
   WorkingDirectoryLookup,
 } from "./types.js";

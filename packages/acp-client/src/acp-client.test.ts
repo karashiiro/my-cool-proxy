@@ -1,11 +1,19 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { spawn, type ChildProcess } from "child_process";
-import { ACPClient, type ILogger } from "@my-cool-proxy/acp-client";
+import {
+  ACPClient,
+  type ILogger,
+  type AllowOwnToolsConfig,
+} from "@my-cool-proxy/acp-client";
+import type * as acp from "@agentclientprotocol/sdk";
 
 // Mock child_process
 vi.mock("child_process", () => ({
   spawn: vi.fn(),
 }));
+
+// Variable to capture the handler passed to ClientSideConnection
+let capturedHandler: acp.Client | null = null;
 
 // Mock @agentclientprotocol/sdk
 vi.mock("@agentclientprotocol/sdk", () => ({
@@ -41,6 +49,7 @@ describe("ACPClient", () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    capturedHandler = null;
 
     // Set up mock process
     const mockOnce = vi.fn((event: string, callback: () => void) => {
@@ -76,13 +85,18 @@ describe("ACPClient", () => {
     const { spawn } = await import("child_process");
     vi.mocked(spawn).mockReturnValue(mockProcess as ChildProcess);
 
-    // Configure ClientSideConnection mock
-    const acp = await import("@agentclientprotocol/sdk");
-    vi.mocked(acp.ClientSideConnection).mockImplementation(function () {
-      return mockConnection as unknown as InstanceType<
-        typeof acp.ClientSideConnection
-      >;
-    });
+    // Configure ClientSideConnection mock - capture the handler for permission testing
+    const acpSdk = await import("@agentclientprotocol/sdk");
+    vi.mocked(acpSdk.ClientSideConnection).mockImplementation(
+      function (getClient) {
+        // The getClient function receives an Agent instance, but we can pass a mock
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        capturedHandler = getClient(mockConnection as any);
+        return mockConnection as unknown as InstanceType<
+          typeof acpSdk.ClientSideConnection
+        >;
+      },
+    );
   });
 
   afterEach(() => {
@@ -286,6 +300,243 @@ describe("ACPClient", () => {
       await client.close();
 
       await expect(client.createSession()).rejects.toThrow(/not connected/);
+    });
+  });
+
+  describe("permission handling (allowOwnTools)", () => {
+    // Helper to create a permission request with proper ACP SDK types
+    const createPermissionRequest = (
+      title: string,
+      kind?: string,
+    ): acp.RequestPermissionRequest => ({
+      sessionId: "test-session",
+      toolCall: {
+        toolCallId: "test-tool-call-id",
+        title,
+        kind: kind as acp.ToolKind | undefined,
+      },
+      options: [
+        { optionId: "allow-once", name: "Allow Once", kind: "allow_once" },
+        { optionId: "reject", name: "Reject", kind: "reject_once" },
+      ],
+    });
+
+    it("should approve all permissions when dangerouslyAllowAll is true", async () => {
+      const logger = createMockLogger();
+      const allowOwnTools: AllowOwnToolsConfig = {
+        dangerouslyAllowAll: true,
+      };
+
+      const client = new ACPClient({
+        config: { command: "node", args: ["agent.js"] },
+        logger,
+        allowOwnTools,
+      });
+
+      await client.connect();
+
+      // Handler should be captured
+      expect(capturedHandler).not.toBeNull();
+
+      // Test permission request for an "execute" kind tool (normally dangerous)
+      const result = await capturedHandler!.requestPermission(
+        createPermissionRequest("Run Shell Command", "execute"),
+      );
+
+      expect(result.outcome).toEqual({
+        outcome: "selected",
+        optionId: "allow-once",
+      });
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining("dangerouslyAllowAll"),
+      );
+    });
+
+    it("should approve tools with matching toolKind", async () => {
+      const logger = createMockLogger();
+      const allowOwnTools: AllowOwnToolsConfig = {
+        toolKinds: ["read", "search", "think"],
+      };
+
+      const client = new ACPClient({
+        config: { command: "node", args: ["agent.js"] },
+        logger,
+        allowOwnTools,
+      });
+
+      await client.connect();
+
+      // Test "read" kind - should be approved
+      const readResult = await capturedHandler!.requestPermission(
+        createPermissionRequest("Read File", "read"),
+      );
+      expect(readResult.outcome).toEqual({
+        outcome: "selected",
+        optionId: "allow-once",
+      });
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.stringContaining("toolKind=read"),
+      );
+
+      // Test "search" kind - should be approved
+      const searchResult = await capturedHandler!.requestPermission(
+        createPermissionRequest("Search Code", "search"),
+      );
+      expect(searchResult.outcome).toEqual({
+        outcome: "selected",
+        optionId: "allow-once",
+      });
+
+      // Test "think" kind - should be approved
+      const thinkResult = await capturedHandler!.requestPermission(
+        createPermissionRequest("Think", "think"),
+      );
+      expect(thinkResult.outcome).toEqual({
+        outcome: "selected",
+        optionId: "allow-once",
+      });
+    });
+
+    it("should deny tools with non-matching toolKind", async () => {
+      const logger = createMockLogger();
+      const allowOwnTools: AllowOwnToolsConfig = {
+        toolKinds: ["read", "search"],
+      };
+
+      const client = new ACPClient({
+        config: { command: "node", args: ["agent.js"] },
+        logger,
+        allowOwnTools,
+      });
+
+      await client.connect();
+
+      // Test "execute" kind - should be denied (not in allowed list)
+      const executeResult = await capturedHandler!.requestPermission(
+        createPermissionRequest("Run Shell", "execute"),
+      );
+      expect(executeResult.outcome).toEqual({ outcome: "cancelled" });
+
+      // Test "edit" kind - should be denied
+      const editResult = await capturedHandler!.requestPermission(
+        createPermissionRequest("Edit File", "edit"),
+      );
+      expect(editResult.outcome).toEqual({ outcome: "cancelled" });
+
+      // Test "delete" kind - should be denied
+      const deleteResult = await capturedHandler!.requestPermission(
+        createPermissionRequest("Delete File", "delete"),
+      );
+      expect(deleteResult.outcome).toEqual({ outcome: "cancelled" });
+    });
+
+    it("should deny tools with no kind when toolKinds is set", async () => {
+      const logger = createMockLogger();
+      const allowOwnTools: AllowOwnToolsConfig = {
+        toolKinds: ["read"],
+      };
+
+      const client = new ACPClient({
+        config: { command: "node", args: ["agent.js"] },
+        logger,
+        allowOwnTools,
+      });
+
+      await client.connect();
+
+      // Tool with no kind property - should be denied
+      const result = await capturedHandler!.requestPermission(
+        createPermissionRequest("Unknown Tool", undefined),
+      );
+      expect(result.outcome).toEqual({ outcome: "cancelled" });
+    });
+
+    it("should still approve sidecar tools via toolTag even without allowOwnTools", async () => {
+      const logger = createMockLogger();
+
+      const client = new ACPClient({
+        config: { command: "node", args: ["agent.js"] },
+        logger,
+        // No allowOwnTools config
+      });
+
+      await client.connect();
+
+      // Create a session with a toolTag
+      await client.createSession(undefined, undefined, "sidecar-abc123");
+
+      // Tool with matching tag in title - should be approved
+      const result = await capturedHandler!.requestPermission({
+        sessionId: "acp-session-123",
+        toolCall: {
+          toolCallId: "sidecar-tool-call",
+          title: "calculator [sidecar-abc123]",
+          kind: undefined,
+        },
+        options: [
+          { optionId: "allow-once", name: "Allow Once", kind: "allow_once" },
+          { optionId: "reject", name: "Reject", kind: "reject_once" },
+        ],
+      });
+
+      expect(result.outcome).toEqual({
+        outcome: "selected",
+        optionId: "allow-once",
+      });
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.stringContaining("toolTag"),
+      );
+    });
+
+    it("should prioritize dangerouslyAllowAll over toolKinds", async () => {
+      const logger = createMockLogger();
+      const allowOwnTools: AllowOwnToolsConfig = {
+        dangerouslyAllowAll: true,
+        toolKinds: [], // Empty list would normally deny everything
+      };
+
+      const client = new ACPClient({
+        config: { command: "node", args: ["agent.js"] },
+        logger,
+        allowOwnTools,
+      });
+
+      await client.connect();
+
+      // Should be approved via dangerouslyAllowAll, not denied by empty toolKinds
+      const result = await capturedHandler!.requestPermission(
+        createPermissionRequest("Execute Something", "execute"),
+      );
+
+      expect(result.outcome).toEqual({
+        outcome: "selected",
+        optionId: "allow-once",
+      });
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining("dangerouslyAllowAll"),
+      );
+    });
+
+    it("should deny by default when no allowOwnTools config and no toolTag match", async () => {
+      const logger = createMockLogger();
+
+      const client = new ACPClient({
+        config: { command: "node", args: ["agent.js"] },
+        logger,
+        // No allowOwnTools config
+      });
+
+      await client.connect();
+
+      // Any tool without a matching tag should be denied
+      const result = await capturedHandler!.requestPermission(
+        createPermissionRequest("Random Tool", "execute"),
+      );
+
+      expect(result.outcome).toEqual({ outcome: "cancelled" });
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.stringContaining("DENIED"),
+      );
     });
   });
 });

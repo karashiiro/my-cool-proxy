@@ -19,6 +19,7 @@ import {
 } from "./path-sandbox.js";
 import type {
   ACPAgentConfig,
+  AllowOwnToolsConfig,
   FilesystemConfig,
   ILogger,
   WorkingDirectoryLookup,
@@ -39,6 +40,8 @@ interface ACPClientHandlerOptions {
   getWorkingDirectory?: WorkingDirectoryLookup;
   /** Logger for sandbox violations and errors. */
   logger: ILogger;
+  /** Configuration for auto-approving tool calls by kind. */
+  allowOwnTools?: AllowOwnToolsConfig;
 }
 
 /**
@@ -60,6 +63,7 @@ class ACPClientHandler implements acp.Client {
   private readonly fsConfig: FilesystemConfig;
   private readonly getWorkingDirectory: WorkingDirectoryLookup;
   private readonly logger: ILogger;
+  private readonly allowOwnTools?: AllowOwnToolsConfig;
 
   constructor(options: ACPClientHandlerOptions) {
     this.fsConfig = options.filesystem ?? {
@@ -68,6 +72,7 @@ class ACPClientHandler implements acp.Client {
     };
     this.getWorkingDirectory = options.getWorkingDirectory ?? (() => undefined);
     this.logger = options.logger;
+    this.allowOwnTools = options.allowOwnTools;
 
     this.logger.debug(
       `ACPClientHandler initialized with fs capabilities: read=${this.fsConfig.readTextFile}, write=${this.fsConfig.writeTextFile}`,
@@ -97,7 +102,7 @@ class ACPClientHandler implements acp.Client {
     const { sessionId, toolCall, options } = params;
 
     this.logger.debug(
-      `Permission request: tool="${toolCall.title}" session=${sessionId}`,
+      `Permission request: tool="${toolCall.title}" kind=${toolCall.kind ?? "undefined"} session=${sessionId}`,
     );
 
     // Check if this session has a tool tag registered
@@ -109,9 +114,6 @@ class ACPClientHandler implements acp.Client {
         (o) => o.kind === "allow_once" || o.kind === "allow_always",
       );
       if (allowOption) {
-        this.logger.info(
-          `Permission APPROVED for tool "${toolCall.title}" (session=${sessionId})`,
-        );
         return {
           outcome: { outcome: "selected", optionId: allowOption.optionId },
         };
@@ -119,7 +121,30 @@ class ACPClientHandler implements acp.Client {
       return undefined;
     };
 
-    // If we have a tool tag, check if the tool title contains it
+    // 1. Check dangerouslyAllowAll first (supersedes everything)
+    if (this.allowOwnTools?.dangerouslyAllowAll) {
+      this.logger.warn(
+        `Permission AUTO-APPROVED (dangerouslyAllowAll) for "${toolCall.title}" (session=${sessionId})`,
+      );
+      const result = selectAllowOption();
+      if (result) return result;
+      // Fall through if no allow option available
+    }
+
+    // 2. Check toolKinds match
+    if (
+      toolCall.kind &&
+      this.allowOwnTools?.toolKinds?.includes(toolCall.kind)
+    ) {
+      this.logger.info(
+        `Permission APPROVED (toolKind=${toolCall.kind}) for "${toolCall.title}" (session=${sessionId})`,
+      );
+      const result = selectAllowOption();
+      if (result) return result;
+      // Fall through if no allow option available
+    }
+
+    // 3. Existing toolTag matching - If we have a tool tag, check if the tool title contains it
     // This is robust to any prefixing scheme the agent uses
     if (toolTag && toolCall.title && toolCall.title.includes(toolTag)) {
       // APPROVE the permission request so the agent can call the sidecar.
@@ -128,7 +153,12 @@ class ACPClientHandler implements acp.Client {
       // The callback server returns "captured" status, causing the sidecar
       // to return an error to the agent, which stops execution.
       const result = selectAllowOption();
-      if (result) return result;
+      if (result) {
+        this.logger.info(
+          `Permission APPROVED (toolTag) for "${toolCall.title}" (session=${sessionId})`,
+        );
+        return result;
+      }
 
       // If no allow option, fall back to denying
       this.logger.warn(
@@ -137,7 +167,7 @@ class ACPClientHandler implements acp.Client {
       return { outcome: { outcome: "cancelled" } };
     }
 
-    // Deny all other permission requests. The shim agent is only used for
+    // 4. Deny all other permission requests. The shim agent is only used for
     // text generation (sampling), so it should not need to perform
     // privileged operations like file I/O or shell execution.
     this.logger.info(
@@ -342,6 +372,8 @@ export interface ACPClientOptions {
   filesystem?: FilesystemConfig;
   /** Optional function to look up working directory for a session. */
   getWorkingDirectory?: WorkingDirectoryLookup;
+  /** Optional configuration for auto-approving tool calls by kind. */
+  allowOwnTools?: AllowOwnToolsConfig;
 }
 
 /**
@@ -364,12 +396,14 @@ export class ACPClient {
   private readonly logger: ILogger;
   private readonly filesystemConfig?: FilesystemConfig;
   private readonly getWorkingDirectory?: WorkingDirectoryLookup;
+  private readonly allowOwnToolsConfig?: AllowOwnToolsConfig;
 
   constructor(options: ACPClientOptions) {
     this.config = options.config;
     this.logger = options.logger;
     this.filesystemConfig = options.filesystem;
     this.getWorkingDirectory = options.getWorkingDirectory;
+    this.allowOwnToolsConfig = options.allowOwnTools;
   }
 
   /**
@@ -423,6 +457,7 @@ export class ACPClient {
       filesystem: this.filesystemConfig,
       getWorkingDirectory: this.getWorkingDirectory,
       logger: this.logger,
+      allowOwnTools: this.allowOwnToolsConfig,
     });
     this.connection = new acp.ClientSideConnection(() => this.handler!, stream);
 
