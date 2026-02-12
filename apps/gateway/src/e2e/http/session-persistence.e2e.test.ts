@@ -1,12 +1,4 @@
-import {
-  describe,
-  it,
-  expect,
-  beforeAll,
-  afterAll,
-  beforeEach,
-  afterEach,
-} from "vitest";
+import { describe, it, expect, beforeAll, beforeEach, afterEach } from "vitest";
 import { existsSync, unlinkSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -32,16 +24,6 @@ describe("Session Persistence E2E", () => {
     // Create temp directory for test DBs
     testDir = join(tmpdir(), `mcp-gateway-test-${Date.now()}`);
     mkdirSync(testDir, { recursive: true });
-  });
-
-  afterAll(() => {
-    // Clean up temp directory
-    try {
-      // Note: We leave the directory as rmdir of non-empty dirs is complex
-      // The OS will clean up temp files eventually
-    } catch {
-      // Ignore cleanup errors
-    }
   });
 
   beforeEach(() => {
