@@ -26,6 +26,11 @@ import type {
 } from "./types.js";
 
 /**
+ * Timeout in milliseconds for force-killing an ACP process if SIGTERM doesn't work.
+ */
+const PROCESS_KILL_TIMEOUT_MS = 2000;
+
+/**
  * Content block handler function type.
  */
 type ContentBlockHandler = (block: ContentBlock) => void;
@@ -545,7 +550,7 @@ export class ACPClient {
           // Force kill if SIGTERM didn't work
           proc.kill("SIGKILL");
           resolve();
-        }, 2000);
+        }, PROCESS_KILL_TIMEOUT_MS);
 
         proc.once("exit", () => {
           clearTimeout(timeout);

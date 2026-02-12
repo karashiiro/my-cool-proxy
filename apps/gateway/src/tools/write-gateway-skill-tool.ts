@@ -4,6 +4,7 @@ import { resolve, dirname } from "path";
 import { parse as parseYaml } from "yaml";
 import * as z from "zod";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import { getErrorMessage } from "@my-cool-proxy/mcp-utilities";
 import { $inject } from "../container/decorators.js";
 import { TYPES } from "../types/index.js";
 import type { ITool } from "./base-tool.js";
@@ -216,8 +217,7 @@ export class WriteGatewaySkillTool implements ITool {
         ],
       };
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
+      const errorMessage = getErrorMessage(error);
       this.logger.error(
         `Failed to write skill '${skillName}': ${errorMessage}`,
       );
@@ -257,8 +257,7 @@ export class WriteGatewaySkillTool implements ITool {
         return "Error: YAML frontmatter should include at least a 'name' or 'description' field.";
       }
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
+      const errorMessage = getErrorMessage(error);
       return `Error: Invalid YAML in frontmatter: ${errorMessage}`;
     }
 

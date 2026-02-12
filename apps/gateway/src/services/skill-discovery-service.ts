@@ -2,6 +2,7 @@ import { injectable } from "inversify";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync } from "fs";
 import { resolve, sep } from "path";
 import { parse as parseYaml } from "yaml";
+import { getErrorMessage } from "@my-cool-proxy/mcp-utilities";
 import type { ILogger, ServerConfig } from "../types/interfaces.js";
 import type { ISkillDiscoveryService, SkillMetadata } from "../types/skill.js";
 import { getSkillsDir, SKILL_FILENAME } from "../utils/skills.js";
@@ -348,7 +349,7 @@ export class SkillDiscoveryService implements ISkillDiscoveryService {
       this.logger.info(`Created skills directory: ${skillsDir}`);
     } catch (error) {
       this.logger.warn(
-        `Failed to create skills directory: ${error instanceof Error ? error.message : String(error)}`,
+        `Failed to create skills directory: ${getErrorMessage(error)}`,
       );
     }
   }
@@ -385,8 +386,7 @@ export class SkillDiscoveryService implements ISkillDiscoveryService {
     try {
       frontmatter = parseYaml(frontmatterYaml) as SkillFrontmatter;
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
+      const errorMessage = getErrorMessage(error);
       this.logger.warn(
         `Invalid YAML in skill frontmatter: ${filePath} - ${errorMessage}`,
       );

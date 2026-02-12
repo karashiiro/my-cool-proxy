@@ -30,6 +30,12 @@ import { getConfigPaths, getPlatformConfigDir } from "./utils/config-paths.js";
 import { ensureServerLogDir, getServerLogPath } from "./utils/log-paths.js";
 import { createSessionTempDir, cleanupSessionTempDir } from "./utils/index.js";
 
+/**
+ * Session inactivity timeout in milliseconds.
+ * Sessions expire after this duration of inactivity.
+ */
+const SESSION_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
 interface InitializationResult {
   successful: string[];
   failed: Array<{ name: string; error: string }>;
@@ -304,7 +310,7 @@ async function startHttpMode(
       host: config.host,
       sessions: {
         // Session expires after 5 minutes of inactivity (default is 30 minutes)
-        sessionTtlMs: 5 * 60 * 1000,
+        sessionTtlMs: SESSION_TTL_MS,
         // Clean up session-scoped state when sessions are closed
         onSessionClosed: async (sessionId) => {
           logger.info(`Session ${sessionId} closed, cleaning up...`);

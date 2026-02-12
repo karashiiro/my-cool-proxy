@@ -2,6 +2,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { createWriteStream, type WriteStream } from "fs";
+import { getErrorMessage } from "@my-cool-proxy/mcp-utilities";
 import type {
   ClientConnectionResult,
   ILogger,
@@ -151,8 +152,7 @@ export class MCPClientManager implements IMCPClientManager {
       this.logger.info(`MCP client ${name} connected to ${endpoint}`);
       return { name, success: true };
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
+      const errorMessage = getErrorMessage(error);
       this.logger.error(
         `Failed to connect MCP client ${name} to ${endpoint}: ${errorMessage}`,
       );
@@ -273,8 +273,7 @@ export class MCPClientManager implements IMCPClientManager {
         stderrFileStream.end();
       }
 
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
+      const errorMessage = getErrorMessage(error);
       this.logger.error(
         `Failed to connect MCP client ${name} to stdio process ${command}: ${errorMessage}`,
       );
@@ -284,7 +283,9 @@ export class MCPClientManager implements IMCPClientManager {
   }
 
   async getClient(name: string, sessionId: string): Promise<MCPClientSession> {
-    // TODO: Support creating sessionless clients on-demand
+    // Note: On-demand client creation is not supported. All clients must be
+    // pre-connected via connectClient() before use. This ensures proper session
+    // isolation and lifecycle management.
     const client = this.clients.get(`${name}-${sessionId}`);
     if (!client) {
       throw new Error(`MCP client ${name} not found for session ${sessionId}`);

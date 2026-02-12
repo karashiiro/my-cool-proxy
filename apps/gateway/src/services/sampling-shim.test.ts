@@ -130,9 +130,15 @@ describe("SamplingShim", () => {
         messages: [{ role: "user", content: { type: "text", text: "Hi" } }],
         maxTokens: 100,
       };
-      await expect(
-        shim.handleSamplingRequest("session-1", params),
-      ).resolves.toBeDefined();
+      const result = await shim.handleSamplingRequest("session-1", params);
+
+      // Verify result structure matches expected MCP CreateMessageResult format
+      expect(result).toEqual({
+        role: "assistant",
+        content: { type: "text", text: "agent response" },
+        model: "acp-agent",
+        stopReason: "endTurn",
+      });
     });
   });
 

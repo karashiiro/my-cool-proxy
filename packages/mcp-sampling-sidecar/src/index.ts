@@ -15,6 +15,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import type { Tool, CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import { getErrorMessage } from "@my-cool-proxy/mcp-utilities";
 import * as z from "zod";
 
 /**
@@ -154,8 +155,7 @@ async function main(): Promise<void> {
 
           return result as CallToolResult;
         } catch (error) {
-          const message =
-            error instanceof Error ? error.message : String(error);
+          const message = getErrorMessage(error);
           return {
             isError: true,
             content: [

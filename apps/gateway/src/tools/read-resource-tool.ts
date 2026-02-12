@@ -1,11 +1,13 @@
 import { injectable } from "inversify";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import * as z from "zod";
+import { getErrorMessage } from "@my-cool-proxy/mcp-utilities";
 import { $inject } from "../container/decorators.js";
 import { TYPES } from "../types/index.js";
 import type { ITool, ToolExecutionContext } from "./base-tool.js";
 import type { ILogger } from "../types/interfaces.js";
 import { ResourceAggregationService } from "@my-cool-proxy/mcp-aggregation";
+import { getEffectiveSessionId } from "../utils/session.js";
 
 /**
  * Tool that reads the contents of a specific MCP resource by its namespaced URI.
@@ -38,7 +40,7 @@ export class ReadResourceTool implements ITool {
     context: ToolExecutionContext,
   ): Promise<CallToolResult> {
     const uri = args.uri as string;
-    const sessionId = context.sessionId || "default";
+    const sessionId = getEffectiveSessionId(context.sessionId);
 
     if (!uri || typeof uri !== "string") {
       return {
@@ -88,7 +90,7 @@ export class ReadResourceTool implements ITool {
 
       return { content: [{ type: "text", text: blocks.join("\n") }] };
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = getErrorMessage(error);
       this.logger.error(`Failed to read resource '${uri}':`, error as Error);
       return {
         content: [

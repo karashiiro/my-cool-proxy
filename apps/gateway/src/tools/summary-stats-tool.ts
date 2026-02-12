@@ -8,6 +8,7 @@ import {
   ResourceAggregationService,
   PromptAggregationService,
 } from "@my-cool-proxy/mcp-aggregation";
+import { getEffectiveSessionId } from "../utils/session.js";
 
 /**
  * Tool that provides summary statistics about the gateway.
@@ -36,7 +37,7 @@ export class SummaryStatsTool implements ITool {
     _args: Record<string, unknown>,
     context: ToolExecutionContext,
   ): Promise<CallToolResult> {
-    const sessionId = context.sessionId || "default";
+    const sessionId = getEffectiveSessionId(context.sessionId);
 
     try {
       const clients = this.clientPool.getClientsBySession(sessionId);

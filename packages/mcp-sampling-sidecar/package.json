@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.25.2",
+    "@my-cool-proxy/mcp-utilities": "workspace:*",
     "zod": "^4.3.5"
   },
   "devDependencies": {
