@@ -248,7 +248,7 @@ If validation fails, the server will exit with a descriptive error message.
 
 ## Gateway Transport Mode
 
-The `transport` field controls how the gateway **exposes itself** to MCP clients.
+The `transport` field controls how the gateway exposes itself to MCP clients.
 
 ### HTTP Mode (Default)
 
@@ -265,14 +265,6 @@ Run the gateway as an HTTP server that clients connect to remotely.
 }
 ```
 
-**Usage:**
-
-```bash
-pnpm dev
-# or for production:
-pnpm build && node dist/index.js
-```
-
 **MCP Client Configuration:**
 
 ```json
@@ -287,7 +279,16 @@ pnpm build && node dist/index.js
 
 ### Stdio Mode
 
-Run the gateway as a stdio-based MCP server that clients launch directly via command-line.
+Run the gateway as a stdio-based MCP server that clients launch directly. This is ideal when:
+
+- You want the MCP client to manage the gateway process's lifecycle
+- You're running everything locally and don't need a persistent server
+- You prefer simpler deployment without managing an HTTP server, or your client doesn't support localhost HTTP (e.g. Claude Desktop)
+
+**Key differences from HTTP mode:**
+
+- Single session only (no multi-client support)
+- All upstream MCP clients initialize at startup (not lazily)
 
 **Configuration:**
 
@@ -298,13 +299,7 @@ Run the gateway as a stdio-based MCP server that clients launch directly via com
 }
 ```
 
-Note: `port` and `host` are optional in stdio mode since the gateway doesn't run an HTTP server.
-
-**Usage:**
-
-```bash
-pnpm build
-```
+Note: The `port` and `host` options are ignored in stdio mode.
 
 **MCP Client Configuration:**
 
@@ -312,14 +307,45 @@ pnpm build
 {
   "mcpServers": {
     "my-cool-proxy": {
-      "command": "node",
-      "args": ["path/to/my-cool-proxy/dist/index.js"]
+      "command": "npx",
+      "args": ["-y", "@karashiiro/my-cool-proxy"]
     }
   }
 }
 ```
 
-**Important:** Stdio mode requires building first - `pnpm dev` won't work properly with stdio since stdout is used for the MCP protocol.
+#### Troubleshooting
+
+**Gateway not starting?**
+
+- Check your MCP client's logs for error messages
+- Verify the path to `dist/index.js` is correct and absolute
+- Ensure you ran `pnpm build` after any code changes
+
+**Config not found?**
+
+- Run `my-cool-proxy --config-path` to see expected location
+- Or set `CONFIG_PATH` environment variable to override it:
+
+```json
+{
+  "mcpServers": {
+    "my-cool-proxy": {
+      "command": "node",
+      "args": ["path/to/my-cool-proxy/dist/index.js"],
+      "env": {
+        "CONFIG_PATH": "/path/to/your/config.json"
+      }
+    }
+  }
+}
+```
+
+**Upstream servers failing to connect?**
+
+- All configured MCP clients must connect successfully at startup in stdio mode
+- Check that commands in your config are correct and dependencies are installed
+- Try running the upstream servers individually first to verify they work
 
 ## MCP Client Transport Types
 
