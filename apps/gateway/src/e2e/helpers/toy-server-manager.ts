@@ -3,9 +3,15 @@ import {
   startHttpDataServer,
   startHttpSamplingServer,
   startHttpElicitationServer,
+  startHttpLoggingServer,
 } from "../fixtures/toy-servers/index.js";
 
-type ToyServerType = "calculator" | "data" | "sampling" | "elicitation";
+type ToyServerType =
+  | "calculator"
+  | "data"
+  | "sampling"
+  | "elicitation"
+  | "logging";
 
 interface ToyServerInstance {
   type: ToyServerType;
@@ -53,6 +59,11 @@ export class ToyServerManager {
       }
       case "elicitation": {
         const server = await startHttpElicitationServer(port);
+        closeFunc = server.close;
+        break;
+      }
+      case "logging": {
+        const server = await startHttpLoggingServer(port);
         closeFunc = server.close;
         break;
       }

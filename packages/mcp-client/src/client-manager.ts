@@ -8,6 +8,7 @@ import type {
   IMCPClientManager,
   ClientCapabilities,
 } from "./types.js";
+import type { LoggingMessageNotification } from "@modelcontextprotocol/sdk/types.js";
 import { MCPClientSession } from "./client-session.js";
 
 export class MCPClientManager implements IMCPClientManager {
@@ -20,6 +21,10 @@ export class MCPClientManager implements IMCPClientManager {
   ) => void;
   private onPromptListChanged?: (serverName: string, sessionId: string) => void;
   private onToolListChanged?: (serverName: string, sessionId: string) => void;
+  private onLoggingMessage?: (
+    params: LoggingMessageNotification["params"],
+    sessionId: string,
+  ) => void;
 
   constructor(private logger: ILogger) {}
 
@@ -39,6 +44,15 @@ export class MCPClientManager implements IMCPClientManager {
     handler: (serverName: string, sessionId: string) => void,
   ): void {
     this.onToolListChanged = handler;
+  }
+
+  setLoggingMessageHandler(
+    handler: (
+      params: LoggingMessageNotification["params"],
+      sessionId: string,
+    ) => void,
+  ): void {
+    this.onLoggingMessage = handler;
   }
 
   async addHttpClient(
@@ -111,6 +125,9 @@ export class MCPClientManager implements IMCPClientManager {
           ? (serverName) => this.onToolListChanged!(serverName, sessionId)
           : undefined,
         dangerouslyEnableSampling,
+        this.onLoggingMessage
+          ? (params) => this.onLoggingMessage!(params, sessionId)
+          : undefined,
       );
 
       this.clients.set(key, wrappedClient);
@@ -223,6 +240,9 @@ export class MCPClientManager implements IMCPClientManager {
           ? (serverName) => this.onToolListChanged!(serverName, sessionId)
           : undefined,
         dangerouslyEnableSampling,
+        this.onLoggingMessage
+          ? (params) => this.onLoggingMessage!(params, sessionId)
+          : undefined,
       );
 
       this.clients.set(key, wrappedClient);

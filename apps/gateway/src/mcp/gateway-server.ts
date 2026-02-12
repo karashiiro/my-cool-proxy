@@ -12,6 +12,7 @@ import type {
   CreateMessageResultWithTools,
   ElicitRequest,
   ElicitResult,
+  LoggingMessageNotification,
 } from "@modelcontextprotocol/sdk/types.js";
 import type {
   IMCPClientManager,
@@ -96,6 +97,8 @@ export class MCPGatewayServer {
           prompts: {
             listChanged: true,
           },
+          // Enable logging so we can forward log messages from upstream servers
+          logging: {},
         },
         ...(this.instructions && { instructions: this.instructions }),
       },
@@ -130,6 +133,17 @@ export class MCPGatewayServer {
         this.logger.info(
           `Upstream server '${serverName}' reported tool list changed (session: ${sessionId})`,
         );
+      },
+    );
+
+    // Register handler for logging notifications from clients
+    // Forward log messages from upstream servers to downstream clients
+    this.clientPool.setLoggingMessageHandler(
+      (params: LoggingMessageNotification["params"], sessionId: string) => {
+        this.logger.debug(
+          `Forwarding log from upstream (level=${params.level}, logger=${params.logger}) to session ${sessionId}`,
+        );
+        this.server.sendLoggingMessage(params, sessionId);
       },
     );
 

@@ -2,7 +2,10 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { MCPClientSession } from "./client-session.js";
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { ILogger } from "./types.js";
-import { ToolListChangedNotificationSchema } from "@modelcontextprotocol/sdk/types.js";
+import {
+  ToolListChangedNotificationSchema,
+  LoggingMessageNotificationSchema,
+} from "@modelcontextprotocol/sdk/types.js";
 
 // Mock logger
 const createMockLogger = (): ILogger => ({
@@ -414,6 +417,229 @@ describe("MCPClientSession", () => {
       );
 
       expect(session.getServerName()).toBe(serverName);
+    });
+  });
+
+  describe("logging message notifications", () => {
+    it("should forward logging messages with prefixed logger field", async () => {
+      const onLoggingMessage = vi.fn();
+
+      // Capture the notification handler
+      let loggingHandler:
+        | ((notification: {
+            params: { level: string; logger?: string; data: unknown };
+          }) => Promise<void>)
+        | undefined;
+      vi.mocked(mockClient.setNotificationHandler).mockImplementation(
+        (schema, handler) => {
+          if (schema === LoggingMessageNotificationSchema) {
+            loggingHandler = handler as typeof loggingHandler;
+          }
+        },
+      );
+
+      new MCPClientSession(
+        mockClient,
+        serverName,
+        undefined,
+        logger,
+        undefined, // onResourceListChanged
+        undefined, // onPromptListChanged
+        undefined, // onToolListChanged
+        undefined, // dangerouslyEnableSampling
+        onLoggingMessage,
+      );
+
+      expect(loggingHandler).toBeDefined();
+
+      // Trigger notification with a logger field
+      await loggingHandler!({
+        params: {
+          level: "info",
+          logger: "my-logger",
+          data: { message: "test log" },
+        },
+      });
+
+      expect(onLoggingMessage).toHaveBeenCalledWith({
+        level: "info",
+        logger: "[test-server] my-logger",
+        data: { message: "test log" },
+      });
+
+      expect(logger.debug).toHaveBeenCalledWith(
+        `Server '${serverName}': Logging message received (level=info)`,
+      );
+    });
+
+    it("should use server name as logger when no logger provided", async () => {
+      const onLoggingMessage = vi.fn();
+
+      let loggingHandler:
+        | ((notification: {
+            params: { level: string; logger?: string; data: unknown };
+          }) => Promise<void>)
+        | undefined;
+      vi.mocked(mockClient.setNotificationHandler).mockImplementation(
+        (schema, handler) => {
+          if (schema === LoggingMessageNotificationSchema) {
+            loggingHandler = handler as typeof loggingHandler;
+          }
+        },
+      );
+
+      new MCPClientSession(
+        mockClient,
+        serverName,
+        undefined,
+        logger,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        onLoggingMessage,
+      );
+
+      // Trigger notification without a logger field
+      await loggingHandler!({
+        params: {
+          level: "warning",
+          data: "simple string data",
+        },
+      });
+
+      expect(onLoggingMessage).toHaveBeenCalledWith({
+        level: "warning",
+        logger: "[test-server]",
+        data: "simple string data",
+      });
+    });
+
+    it("should preserve structured data field unchanged", async () => {
+      const onLoggingMessage = vi.fn();
+
+      let loggingHandler:
+        | ((notification: {
+            params: { level: string; logger?: string; data: unknown };
+          }) => Promise<void>)
+        | undefined;
+      vi.mocked(mockClient.setNotificationHandler).mockImplementation(
+        (schema, handler) => {
+          if (schema === LoggingMessageNotificationSchema) {
+            loggingHandler = handler as typeof loggingHandler;
+          }
+        },
+      );
+
+      new MCPClientSession(
+        mockClient,
+        serverName,
+        undefined,
+        logger,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        onLoggingMessage,
+      );
+
+      const complexData = {
+        nested: { value: 42 },
+        array: [1, 2, 3],
+        nullValue: null,
+      };
+
+      await loggingHandler!({
+        params: {
+          level: "debug",
+          logger: "complex",
+          data: complexData,
+        },
+      });
+
+      expect(onLoggingMessage).toHaveBeenCalledWith({
+        level: "debug",
+        logger: "[test-server] complex",
+        data: complexData,
+      });
+    });
+
+    it("should handle errors in handler without crashing", async () => {
+      const onLoggingMessage = vi.fn().mockImplementation(() => {
+        throw new Error("Handler error");
+      });
+
+      let loggingHandler:
+        | ((notification: {
+            params: { level: string; logger?: string; data: unknown };
+          }) => Promise<void>)
+        | undefined;
+      vi.mocked(mockClient.setNotificationHandler).mockImplementation(
+        (schema, handler) => {
+          if (schema === LoggingMessageNotificationSchema) {
+            loggingHandler = handler as typeof loggingHandler;
+          }
+        },
+      );
+
+      new MCPClientSession(
+        mockClient,
+        serverName,
+        undefined,
+        logger,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        onLoggingMessage,
+      );
+
+      // Should not throw
+      await expect(
+        loggingHandler!({
+          params: {
+            level: "error",
+            data: "test",
+          },
+        }),
+      ).resolves.not.toThrow();
+
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining("Error handling logging notification"),
+      );
+    });
+
+    it("should not call callback if not provided", async () => {
+      let loggingHandler:
+        | ((notification: {
+            params: { level: string; logger?: string; data: unknown };
+          }) => Promise<void>)
+        | undefined;
+      vi.mocked(mockClient.setNotificationHandler).mockImplementation(
+        (schema, handler) => {
+          if (schema === LoggingMessageNotificationSchema) {
+            loggingHandler = handler as typeof loggingHandler;
+          }
+        },
+      );
+
+      // Create session without logging callback
+      new MCPClientSession(mockClient, serverName, undefined, logger);
+
+      // Should not throw when handler is called without callback
+      await expect(
+        loggingHandler!({
+          params: {
+            level: "info",
+            data: "test",
+          },
+        }),
+      ).resolves.not.toThrow();
+
+      // Should still log the received message
+      expect(logger.debug).toHaveBeenCalledWith(
+        `Server '${serverName}': Logging message received (level=info)`,
+      );
     });
   });
 });

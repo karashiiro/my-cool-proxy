@@ -4,6 +4,7 @@ import {
   ToolListChangedNotificationSchema,
   ResourceListChangedNotificationSchema,
   PromptListChangedNotificationSchema,
+  LoggingMessageNotificationSchema,
   type Implementation,
   type ListResourcesResult,
   type ListPromptsResult,
@@ -13,6 +14,7 @@ import {
   type Request,
   type Notification,
   type Result,
+  type LoggingMessageNotification,
 } from "@modelcontextprotocol/sdk/types.js";
 import type { RequestHandlerExtra } from "@modelcontextprotocol/sdk/shared/protocol.js";
 import type {
@@ -38,6 +40,9 @@ export class MCPClientSession {
   private onResourceListChanged?: (serverName: string) => void;
   private onPromptListChanged?: (serverName: string) => void;
   private onToolListChanged?: (serverName: string) => void;
+  private onLoggingMessage?: (
+    params: LoggingMessageNotification["params"],
+  ) => void;
 
   constructor(
     client: Client,
@@ -48,6 +53,7 @@ export class MCPClientSession {
     onPromptListChanged?: (serverName: string) => void,
     onToolListChanged?: (serverName: string) => void,
     dangerouslyEnableSampling?: boolean,
+    onLoggingMessage?: (params: LoggingMessageNotification["params"]) => void,
   ) {
     this.client = client;
     this.serverName = serverName;
@@ -57,6 +63,7 @@ export class MCPClientSession {
     this.onResourceListChanged = onResourceListChanged;
     this.onPromptListChanged = onPromptListChanged;
     this.onToolListChanged = onToolListChanged;
+    this.onLoggingMessage = onLoggingMessage;
 
     // Initialize cache instances
     this.toolCache = createCache<Tool[]>(logger);
@@ -129,6 +136,36 @@ export class MCPClientSession {
         } catch (error) {
           this.logger.error(
             `Server '${this.serverName}': Error handling prompt list change notification: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+      },
+    );
+
+    // Handle notifications/message (logging) notifications
+    this.client.setNotificationHandler(
+      LoggingMessageNotificationSchema,
+      async (notification) => {
+        try {
+          // Prefix the logger field with server name for source identification
+          const originalLogger = notification.params.logger;
+          const prefixedLogger = originalLogger
+            ? `[${this.serverName}] ${originalLogger}`
+            : `[${this.serverName}]`;
+
+          this.logger.debug(
+            `Server '${this.serverName}': Logging message received (level=${notification.params.level})`,
+          );
+
+          // Forward to gateway with prefixed logger, preserving original data
+          if (this.onLoggingMessage) {
+            this.onLoggingMessage({
+              ...notification.params,
+              logger: prefixedLogger,
+            });
+          }
+        } catch (error) {
+          this.logger.error(
+            `Server '${this.serverName}': Error handling logging notification: ${error instanceof Error ? error.message : String(error)}`,
           );
         }
       },

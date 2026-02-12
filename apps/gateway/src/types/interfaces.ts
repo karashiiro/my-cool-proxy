@@ -1,7 +1,10 @@
 import type { MCPClientSession } from "@my-cool-proxy/mcp-client";
 import type { ACPAgentConfig } from "@my-cool-proxy/acp-client";
 import type { SkillMetadata } from "./skill.js";
-import type { ClientCapabilities } from "@modelcontextprotocol/sdk/types.js";
+import type {
+  ClientCapabilities,
+  LoggingMessageNotification,
+} from "@modelcontextprotocol/sdk/types.js";
 
 export type { ACPAgentConfig, ClientCapabilities };
 
@@ -63,6 +66,12 @@ export interface IMCPClientManager {
   ): void;
   setToolListChangedHandler(
     handler: (serverName: string, sessionId: string) => void,
+  ): void;
+  setLoggingMessageHandler(
+    handler: (
+      params: LoggingMessageNotification["params"],
+      sessionId: string,
+    ) => void,
   ): void;
   close(): Promise<void>;
 }

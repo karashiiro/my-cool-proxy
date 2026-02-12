@@ -55,6 +55,7 @@ const createMockClientManager = (
   setResourceListChangedHandler: vi.fn(),
   setPromptListChangedHandler: vi.fn(),
   setToolListChangedHandler: vi.fn(),
+  setLoggingMessageHandler: vi.fn(),
   close: vi.fn(),
 });
 

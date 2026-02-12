@@ -1,5 +1,8 @@
 import type { MCPClientSession } from "./client-session.js";
-import type { ClientCapabilities } from "@modelcontextprotocol/sdk/types.js";
+import type {
+  ClientCapabilities,
+  LoggingMessageNotification,
+} from "@modelcontextprotocol/sdk/types.js";
 
 export type { ILogger } from "@my-cool-proxy/logger";
 export type { ClientCapabilities };
@@ -47,6 +50,12 @@ export interface IMCPClientManager {
   ): void;
   setToolListChangedHandler(
     handler: (serverName: string, sessionId: string) => void,
+  ): void;
+  setLoggingMessageHandler(
+    handler: (
+      params: LoggingMessageNotification["params"],
+      sessionId: string,
+    ) => void,
   ): void;
   close(): Promise<void>;
 }

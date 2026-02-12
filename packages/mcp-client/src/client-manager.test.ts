@@ -330,4 +330,73 @@ describe("MCPClientManager", () => {
       expect(logger.warn).toHaveBeenCalled();
     });
   });
+
+  describe("logging message handler", () => {
+    beforeEach(() => {
+      vi.mocked(StreamableHTTPClientTransport).mockImplementation(function (
+        this: StreamableHTTPClientTransport,
+      ) {
+        return mockTransport as StreamableHTTPClientTransport;
+      } as unknown as typeof StreamableHTTPClientTransport);
+    });
+
+    it("stores and invokes logging handler with sessionId", async () => {
+      const loggingHandler = vi.fn();
+      clientManager.setLoggingMessageHandler(loggingHandler);
+
+      await clientManager.addHttpClient("log-test", "http://x", "sess-log");
+
+      // Get the logging callback that was passed to MCPClientSession
+      const sessionCalls = vi.mocked(MCPClientSession).mock.calls;
+      const lastCall = sessionCalls[sessionCalls.length - 1];
+      // onLoggingMessage is the 9th argument (index 8)
+      const loggingCallback = lastCall?.[8] as
+        | ((params: { level: string; data: unknown }) => void)
+        | undefined;
+
+      expect(loggingCallback).toBeDefined();
+
+      // Simulate calling the callback
+      loggingCallback!({ level: "info", data: "test message" });
+
+      // Verify the handler was called with params AND sessionId
+      expect(loggingHandler).toHaveBeenCalledWith(
+        { level: "info", data: "test message" },
+        "sess-log",
+      );
+    });
+
+    it("passes logging callback to stdio client", async () => {
+      vi.mocked(StdioClientTransport).mockImplementation(function (
+        this: StdioClientTransport,
+      ) {
+        return mockTransport as StdioClientTransport;
+      } as unknown as typeof StdioClientTransport);
+
+      const loggingHandler = vi.fn();
+      clientManager.setLoggingMessageHandler(loggingHandler);
+
+      await clientManager.addStdioClient("stdio-log", "node", "sess-stdio-log");
+
+      // Verify MCPClientSession was called with logging callback for stdio client
+      const sessionCalls = vi.mocked(MCPClientSession).mock.calls;
+      const lastCall = sessionCalls[sessionCalls.length - 1];
+      const loggingCallback = lastCall?.[8];
+
+      expect(loggingCallback).toBeDefined();
+    });
+
+    it("does not pass logging callback when handler not set", async () => {
+      // Don't set any logging handler
+
+      await clientManager.addHttpClient("no-log", "http://x", "sess-no-log");
+
+      // Verify MCPClientSession was called with undefined for logging callback
+      const sessionCalls = vi.mocked(MCPClientSession).mock.calls;
+      const lastCall = sessionCalls[sessionCalls.length - 1];
+      const loggingCallback = lastCall?.[8];
+
+      expect(loggingCallback).toBeUndefined();
+    });
+  });
 });
