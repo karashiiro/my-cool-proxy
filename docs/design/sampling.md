@@ -378,6 +378,82 @@ The original name is extracted when capturing, and that's what's returned in the
 | CreateMessageResult with tool_use | [Schema: CreateMessageResult](https://modelcontextprotocol.io/specification/2025-11-25/schema)            |
 | Server executes tools             | [SEP-1577: Sampling With Tools](https://modelcontextprotocol.io/community/seps/1577--sampling-with-tools) |
 
+## ACP Permission Auto-Approval
+
+When using the ACP shim, the gateway can auto-approve permission requests from the agent based on tool kind. This provides fine-grained control over what actions the shim agent can perform.
+
+### AllowOwnToolsConfig Interface
+
+```typescript
+interface AllowOwnToolsConfig {
+  /**
+   * DANGEROUS: Auto-approve ALL permission requests regardless of tool kind.
+   * Supersedes toolKinds if set to true.
+   * Default: false
+   */
+  dangerouslyAllowAll?: boolean;
+
+  /**
+   * List of tool kinds to auto-approve.
+   * Default: [] (no auto-approval by kind)
+   */
+  toolKinds?: ToolKind[];
+}
+```
+
+### Valid Tool Kinds
+
+| Tool Kind     | Description                                 |
+| ------------- | ------------------------------------------- |
+| `read`        | Reading files or data                       |
+| `edit`        | Modifying existing content                  |
+| `delete`      | Removing files or data                      |
+| `move`        | Moving or renaming files                    |
+| `search`      | Searching through content                   |
+| `execute`     | Running commands or scripts                 |
+| `think`       | Internal reasoning/planning operations      |
+| `fetch`       | Network requests or external data retrieval |
+| `switch_mode` | Changing operational modes                  |
+| `other`       | Uncategorized operations                    |
+
+### Permission Check Priority
+
+Permission requests are evaluated in this order:
+
+1. **dangerouslyAllowAll** - If true, approve immediately
+2. **toolKinds** - If tool kind is in the list, approve
+3. **Sidecar tool tag** - If tool name contains the session's sidecar tag, approve
+4. **Default deny** - All other requests are denied
+
+```mermaid
+flowchart TB
+    Request["Permission Request"] --> DangerCheck{"dangerouslyAllowAll?"}
+    DangerCheck -->|Yes| Approve["✓ APPROVE"]
+    DangerCheck -->|No| KindCheck{"toolKind in\ntoolKinds[]?"}
+    KindCheck -->|Yes| Approve
+    KindCheck -->|No| TagCheck{"Has sidecar\ntool tag?"}
+    TagCheck -->|Yes| Approve
+    TagCheck -->|No| Deny["✗ DENY"]
+```
+
+### Example Configuration
+
+```json
+{
+  "acp": {
+    "agent": {
+      "command": "npx",
+      "args": ["@zed-industries/claude-code-acp"]
+    },
+    "allowOwnTools": {
+      "toolKinds": ["read", "search", "think"]
+    }
+  }
+}
+```
+
+Implementation in `packages/acp-client/src/acp-client.ts`.
+
 ## Configuration
 
 ### Enabling Sampling Per-Server
@@ -436,6 +512,7 @@ Native client sampling always takes priority over the shim.
 | `apps/gateway/src/handlers/proxy-handlers.ts`       | Handler registration logic                    |
 | `packages/acp-client/src/acp-client.ts`             | Permission handler with tool call capture     |
 | `packages/acp-client/src/acp-client-session.ts`     | Exposes getCapturedToolCall() to shim         |
+| `packages/acp-client/src/types.ts`                  | AllowOwnToolsConfig interface                 |
 | `packages/mcp-client/src/client-manager.ts`         | Capability advertising                        |
 | `packages/mcp-sampling-sidecar/src/index.ts`        | Exposes tools to agent, handles capture       |
 

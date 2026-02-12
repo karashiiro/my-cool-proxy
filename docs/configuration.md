@@ -891,6 +891,80 @@ Keep filesystem disabled (default) when:
 - Running untrusted or experimental agents
 - Minimizing attack surface
 
+### ACP Permission Auto-Approval
+
+The `allowOwnTools` option controls automatic permission approval for ACP agent tool calls based on tool kind.
+
+```json
+{
+  "acp": {
+    "agent": {
+      "command": "npx",
+      "args": ["@zed-industries/claude-code-acp"]
+    },
+    "allowOwnTools": {
+      "toolKinds": ["read", "search", "think"]
+    }
+  }
+}
+```
+
+- **allowOwnTools** (object, optional): Configuration for auto-approving tool permissions
+  - **dangerouslyAllowAll** (boolean, optional): Auto-approve ALL permission requests. **DANGEROUS** - bypasses all safety checks. Default: `false`
+  - **toolKinds** (array, optional): List of tool kinds to auto-approve. Default: `[]`
+
+#### Valid Tool Kinds
+
+| Tool Kind     | Description                                 |
+| ------------- | ------------------------------------------- |
+| `read`        | Reading files or data                       |
+| `edit`        | Modifying existing content                  |
+| `delete`      | Removing files or data                      |
+| `move`        | Moving or renaming files                    |
+| `search`      | Searching through content                   |
+| `execute`     | Running commands or scripts                 |
+| `think`       | Internal reasoning/planning operations      |
+| `fetch`       | Network requests or external data retrieval |
+| `switch_mode` | Changing operational modes                  |
+| `other`       | Uncategorized operations                    |
+
+#### Permission Check Priority
+
+Permission requests are evaluated in this order:
+
+1. **dangerouslyAllowAll** - If true, immediately approve (supersedes all other checks)
+2. **toolKinds** - If tool's kind is in the list, approve
+3. **Sidecar tool tag** - If tool name contains the session's sidecar tag, approve (for sampling-with-tools flow)
+4. **Default deny** - All other requests are denied
+
+#### Example Configurations
+
+**Read-only agent** (safe for exploration):
+
+```json
+{
+  "acp": {
+    "allowOwnTools": {
+      "toolKinds": ["read", "search", "think"]
+    }
+  }
+}
+```
+
+**Full-access agent** (for trusted environments):
+
+```json
+{
+  "acp": {
+    "allowOwnTools": {
+      "dangerouslyAllowAll": true
+    }
+  }
+}
+```
+
+See [Sampling - ACP Permission Auto-Approval](./design/sampling.md#acp-permission-auto-approval) for detailed architecture.
+
 ## Session Persistence (HTTP Mode)
 
 In HTTP mode, the gateway automatically persists session state to SQLite, enabling session resumability across server restarts. This is always enabled with zero configuration required.

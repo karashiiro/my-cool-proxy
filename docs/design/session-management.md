@@ -78,8 +78,29 @@ classDiagram
         +getServer()
     }
 
+    class SQLiteDatabase {
+        -db: Database
+        +getDatabase()
+        +transaction(fn)
+        +close()
+    }
+
+    class SQLiteCapabilityStore {
+        +setCapabilities(sessionId, caps)
+        +getCapabilities(sessionId)
+        +setWorkingDirectory(sessionId, path)
+        +getWorkingDirectory(sessionId)
+    }
+
+    class SQLiteEventStore {
+        +storeEvent(eventId, streamId, message)
+        +getEventsAfter(lastEventId)
+    }
+
     MCPClientManager "1" --> "*" MCPClientSession
     MCPGatewayServer --> MCPClientManager
+    SQLiteCapabilityStore --> SQLiteDatabase
+    SQLiteEventStore --> SQLiteDatabase
 ```
 
 ## Session Lifecycle (HTTP Mode)
@@ -250,21 +271,114 @@ sequenceDiagram
     Gateway->>Agent: sendPromptListChanged()
 ```
 
+### Logging Message Forwarding
+
+The gateway forwards `notifications/message` (logging) notifications from upstream servers to downstream clients. The gateway advertises the "logging" capability to upstream servers.
+
+**Source Identification**: Log messages are prefixed with `[server-name]` so downstream clients can identify which upstream server generated the log:
+
+```
+Original logger: "database"
+Forwarded logger: "[postgres-server] database"
+```
+
+Implementation in `packages/mcp-client/src/client-session.ts`:
+
+```typescript
+const prefixedLogger = originalLogger
+  ? `[${this.serverName}] ${originalLogger}`
+  : `[${this.serverName}]`;
+```
+
+## Session Persistence (HTTP Mode)
+
+In HTTP mode, session state is automatically persisted to SQLite, enabling session resumability across server restarts.
+
+### SQLite Components
+
+| Component               | Purpose                                              |
+| ----------------------- | ---------------------------------------------------- |
+| `SQLiteDatabase`        | Database connection and schema management            |
+| `SQLiteCapabilityStore` | Persists client capabilities and working directories |
+| `SQLiteEventStore`      | Persists SSE events for resumability                 |
+
+### Database Location
+
+Session data is stored at platform-specific locations:
+
+| Platform    | Path                                                      |
+| ----------- | --------------------------------------------------------- |
+| **Linux**   | `~/.local/share/my-cool-proxy/sessions.db`                |
+| **macOS**   | `~/Library/Application Support/my-cool-proxy/sessions.db` |
+| **Windows** | `%LOCALAPPDATA%\my-cool-proxy\Data\sessions.db`           |
+
+### Configuration
+
+- **WAL Mode**: Enabled for better concurrent access and crash recovery
+- **Event Retention**: 1000 events per session (FIFO eviction when exceeded)
+- **Session TTL**: 5 minutes (`SESSION_TTL_MS`) of inactivity before expiration
+
+### Implementation Files
+
+| File                                                 | Purpose                          |
+| ---------------------------------------------------- | -------------------------------- |
+| `apps/gateway/src/stores/sqlite-database.ts`         | Database connection wrapper      |
+| `apps/gateway/src/stores/sqlite-capability-store.ts` | Session capability persistence   |
+| `apps/gateway/src/stores/sqlite-event-store.ts`      | SSE event persistence            |
+| `apps/gateway/src/utils/db-paths.ts`                 | Platform-specific database paths |
+
+## Session Restoration
+
+When the gateway restarts, persisted sessions can be restored automatically.
+
+### onSessionRestored Callback
+
+The `onSessionRestored` callback handles session restoration:
+
+1. Triggered when a client reconnects with a previously-stored session ID
+2. Re-initializes upstream MCP client connections
+3. Blocks incoming requests until upstream servers are ready
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Gateway
+    participant Upstream as Upstream Servers
+
+    Note over Client,Upstream: Server Restart
+    Client->>Gateway: Reconnect with existing session ID
+    Gateway->>Gateway: Restore session from SQLite
+    Gateway->>Gateway: onSessionRestored() triggered
+
+    loop For each configured server
+        Gateway->>Upstream: Reconnect MCP client
+        Upstream-->>Gateway: Connected
+    end
+
+    Gateway-->>Client: Session ready for requests
+```
+
+### SSE Event Resumability
+
+When clients reconnect, they can provide a `Last-Event-ID` header. The gateway replays events after that ID from the SQLite event store, ensuring no messages are lost during disconnections.
+
 ## Stdio Mode Differences
 
-| Aspect            | HTTP Mode                  | Stdio Mode            |
-| ----------------- | -------------------------- | --------------------- |
-| Session ID        | From header or generated   | Fixed "default"       |
-| Client init       | Lazy (on first request)    | Eager (at startup)    |
-| Multiple sessions | Yes                        | No                    |
-| Server factory    | `serveHttp()` with factory | `serveStdio()` direct |
-| Gateway instances | One per session            | Single instance       |
+| Aspect              | HTTP Mode                  | Stdio Mode            |
+| ------------------- | -------------------------- | --------------------- |
+| Session ID          | From header or generated   | Fixed "default"       |
+| Client init         | Lazy (on first request)    | Eager (at startup)    |
+| Multiple sessions   | Yes                        | No                    |
+| Server factory      | `serveHttp()` with factory | `serveStdio()` direct |
+| Gateway instances   | One per session            | Single instance       |
+| Session persistence | SQLite-backed              | Not used              |
 
 In stdio mode:
 
 - All clients initialized at startup via `serveStdio()`
 - Single gateway server connects to stdio transport
 - No session isolation needed
+- Session persistence is not used (single fixed session)
 
 ## Implementation Files
 
