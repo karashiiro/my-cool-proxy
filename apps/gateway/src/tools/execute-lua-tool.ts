@@ -1,5 +1,8 @@
 import { injectable } from "inversify";
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import type {
+  CallToolResult,
+  ToolAnnotations,
+} from "@modelcontextprotocol/sdk/types.js";
 import { CallToolResultSchema } from "@modelcontextprotocol/sdk/types.js";
 import * as z from "zod";
 import type {
@@ -62,6 +65,13 @@ export class ExecuteLuaTool implements ITool {
       .describe(
         "Lua script to execute. See tool description for syntax and workflow.",
       ),
+  };
+  readonly annotations: ToolAnnotations = {
+    title: "Execute Lua Script",
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: false,
+    openWorldHint: true,
   };
 
   constructor(

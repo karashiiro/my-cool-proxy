@@ -1,5 +1,8 @@
 import { injectable } from "inversify";
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import type {
+  CallToolResult,
+  ToolAnnotations,
+} from "@modelcontextprotocol/sdk/types.js";
 import * as z from "zod";
 import { getErrorMessage } from "@my-cool-proxy/mcp-utilities";
 import { $inject } from "../container/decorators.js";
@@ -27,6 +30,12 @@ export class ReadResourceTool implements ITool {
     uri: z
       .string()
       .describe("The namespaced resource URI (as returned by list-resources)"),
+  };
+  readonly annotations: ToolAnnotations = {
+    title: "Read MCP Resource",
+    readOnlyHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
   };
 
   constructor(

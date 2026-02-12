@@ -1,5 +1,8 @@
 import { injectable } from "inversify";
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import type {
+  CallToolResult,
+  ToolAnnotations,
+} from "@modelcontextprotocol/sdk/types.js";
 import { $inject } from "../container/decorators.js";
 import { TYPES } from "../types/index.js";
 import type { ITool, ToolExecutionContext } from "./base-tool.js";
@@ -24,6 +27,12 @@ export class ListResourcesTool implements ITool {
     "- server (optional): The name of a specific MCP server to get resources from. If not provided, " +
     "resources from all connected servers will be returned.";
   readonly schema = {};
+  readonly annotations: ToolAnnotations = {
+    title: "List MCP Resources",
+    readOnlyHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  };
 
   constructor(
     @$inject(TYPES.ResourceAggregationService)

@@ -160,6 +160,7 @@ export class MCPGatewayServer {
           description: tool.description,
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           inputSchema: tool.schema as any,
+          annotations: tool.annotations,
         },
         async (
           args: Record<string, unknown>,

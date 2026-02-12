@@ -1,5 +1,8 @@
 import { injectable } from "inversify";
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import type {
+  CallToolResult,
+  ToolAnnotations,
+} from "@modelcontextprotocol/sdk/types.js";
 import * as z from "zod";
 import { $inject } from "../container/decorators.js";
 import { TYPES } from "../types/index.js";
@@ -46,6 +49,13 @@ export class InspectToolResponseTool implements ITool {
         "Minimal arguments for the sample call (e.g., {limit: 1} for pagination). " +
           "Use the smallest/cheapest request possible to understand the response structure.",
       ),
+  };
+  readonly annotations: ToolAnnotations = {
+    title: "Inspect Tool Response",
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: false,
+    openWorldHint: true,
   };
 
   constructor(

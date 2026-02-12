@@ -3,7 +3,10 @@ import * as z from "zod";
 import { spawn } from "child_process";
 import { resolve, sep } from "path";
 import { existsSync, statSync } from "fs";
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import type {
+  CallToolResult,
+  ToolAnnotations,
+} from "@modelcontextprotocol/sdk/types.js";
 import { getErrorMessage } from "@my-cool-proxy/mcp-utilities";
 import { $inject } from "../container/decorators.js";
 import { TYPES } from "../types/index.js";
@@ -37,6 +40,13 @@ export class InvokeGatewaySkillScriptTool implements ITool {
       .array(z.string())
       .optional()
       .describe("Optional arguments to pass to the script"),
+  };
+  readonly annotations: ToolAnnotations = {
+    title: "Invoke Skill Script",
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: false,
+    openWorldHint: true,
   };
 
   constructor(
