@@ -1,4 +1,7 @@
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import type {
+  CallToolResult,
+  ToolAnnotations,
+} from "@modelcontextprotocol/sdk/types.js";
 
 /**
  * Context provided to tool execution
@@ -28,6 +31,12 @@ export interface ITool {
    * The JSON schema for the tool's input parameters
    */
   readonly schema: Record<string, unknown>;
+
+  /**
+   * Optional annotations providing hints about the tool's behavior.
+   * See MCP spec for details on each annotation field.
+   */
+  readonly annotations?: ToolAnnotations;
 
   /**
    * Execute the tool with the given arguments and context
