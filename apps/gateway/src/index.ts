@@ -159,6 +159,12 @@ async function startHttpMode(
     logger,
   );
 
+  // Rebind capability store in container so other services (like SamplingShim) use SQLite store
+  container.unbind(TYPES.CapabilityStore);
+  container
+    .bind<ICapabilityStore>(TYPES.CapabilityStore)
+    .toConstantValue(capabilityStore);
+
   // Get shared services from DI container
   const clientManager = container.get<IMCPClientManager>(
     TYPES.MCPClientManager,
@@ -271,23 +277,36 @@ async function startHttpMode(
         capabilityStore.setWorkingDirectory(sessionId, workingDirectory);
 
         // Determine if we need the sampling shim:
-        // Only when client lacks native sampling AND an ACP agent is configured
+        // Install when client lacks sampling entirely OR has sampling without tools support.
+        // The shim provides enhanced sampling with tools support via the ACP agent sidecar.
         let activeShim: ISamplingShim | undefined;
         let upstreamCapabilities = capabilities;
 
-        if (!capabilities.sampling && samplingShim) {
+        const clientHasSampling = !!capabilities.sampling;
+        const clientHasSamplingTools = !!capabilities.sampling?.tools;
+        const shimShouldInstall =
+          samplingShim && (!clientHasSampling || !clientHasSamplingTools);
+
+        if (shimShouldInstall) {
           try {
+            const reason = !clientHasSampling
+              ? "lacks sampling support"
+              : "has sampling but lacks tools support";
             logger.info(
-              `Session ${sessionId}: Client lacks sampling support, initializing ACP shim`,
+              `Session ${sessionId}: Client ${reason}, initializing ACP shim`,
             );
             await samplingShim.initialize(sessionId);
             activeShim = samplingShim;
 
-            // Augment capabilities so upstream servers see sampling support.
+            // Augment capabilities so upstream servers see full sampling support.
+            // Preserve any existing sampling fields (like context) while adding tools.
             // This global augmentation is safe - buildClientCapabilities() filters
             // per-server based on dangerouslyEnableSampling, so only trusted servers
             // will see the sampling capability. Untrusted servers remain unaware.
-            upstreamCapabilities = { ...capabilities, sampling: { tools: {} } };
+            upstreamCapabilities = {
+              ...capabilities,
+              sampling: { ...capabilities.sampling, tools: {} },
+            };
           } catch (error) {
             logger.error(
               "Failed to initialize sampling shim, continuing without sampling support",
@@ -503,21 +522,35 @@ async function startStdioMode(
       // Store working directory BEFORE initializing shim
       capabilityStore.setWorkingDirectory(SESSION_ID, workingDirectory);
 
-      // Determine if we need the sampling shim
+      // Determine if we need the sampling shim:
+      // Install when client lacks sampling entirely OR has sampling without tools support.
+      // The shim provides enhanced sampling with tools support via the ACP agent sidecar.
       let activeShim: ISamplingShim | undefined;
       let upstreamCapabilities = capabilities;
 
-      if (!capabilities.sampling && samplingShim) {
+      const clientHasSampling = !!capabilities.sampling;
+      const clientHasSamplingTools = !!capabilities.sampling?.tools;
+      const shimShouldInstall =
+        samplingShim && (!clientHasSampling || !clientHasSamplingTools);
+
+      if (shimShouldInstall) {
         try {
-          logger.info(`Client lacks sampling support, initializing ACP shim`);
+          const reason = !clientHasSampling
+            ? "lacks sampling support"
+            : "has sampling but lacks tools support";
+          logger.info(`Client ${reason}, initializing ACP shim`);
           await samplingShim.initialize(SESSION_ID);
           activeShim = samplingShim;
 
-          // Augment capabilities so upstream servers see sampling support.
+          // Augment capabilities so upstream servers see full sampling support.
+          // Preserve any existing sampling fields (like context) while adding tools.
           // This global augmentation is safe - buildClientCapabilities() filters
           // per-server based on dangerouslyEnableSampling, so only trusted servers
           // will see the sampling capability. Untrusted servers remain unaware.
-          upstreamCapabilities = { ...capabilities, sampling: { tools: {} } };
+          upstreamCapabilities = {
+            ...capabilities,
+            sampling: { ...capabilities.sampling, tools: {} },
+          };
         } catch (error) {
           logger.error(
             "Failed to initialize sampling shim, continuing without sampling support",

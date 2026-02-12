@@ -129,6 +129,125 @@ describe("Sampling Shim E2E (HTTP Mode)", () => {
     });
   });
 
+  describe("Shim activates when client has sampling but lacks tools support", () => {
+    let gatewayPort: number;
+    let samplingServerPort: number;
+    let gatewayManager: HttpServerManager;
+    let toyServers: ToyServerManager;
+    let gatewayClient: Client;
+    let configCleanup: () => void;
+
+    beforeAll(async () => {
+      gatewayPort = await allocatePort();
+      samplingServerPort = await allocatePort();
+
+      // Start the sampling toy server (upstream - sends sampling requests)
+      toyServers = new ToyServerManager();
+      await toyServers.startHttp("sampling", samplingServerPort);
+
+      // Generate config WITH acp.agent
+      const configResult = generateHttpTestConfig({
+        port: gatewayPort,
+        host: "localhost",
+        mcpClients: {
+          "sampling-test-server": {
+            type: "http",
+            url: `http://localhost:${samplingServerPort}/mcp`,
+            dangerouslyEnableSampling: true,
+          },
+        },
+        acp: {
+          agent: {
+            command: "node",
+            args: [ECHO_AGENT_PATH],
+          },
+        },
+      });
+      configCleanup = configResult.cleanup;
+
+      // Start gateway
+      gatewayManager = new HttpServerManager();
+      await gatewayManager.start({
+        transport: "http",
+        port: gatewayPort,
+        host: "localhost",
+        mcpClients: {
+          "sampling-test-server": {
+            type: "http",
+            url: `http://localhost:${samplingServerPort}/mcp`,
+            dangerouslyEnableSampling: true,
+          },
+        },
+        acp: {
+          agent: {
+            command: "node",
+            args: [ECHO_AGENT_PATH],
+          },
+        },
+      });
+
+      // Create client WITH sampling capability but WITHOUT tools support
+      // The shim should activate because the client lacks tools capability
+      gatewayClient = await createCapableGatewayClient({
+        gatewayPort,
+        clientName: "partial-sampling-client",
+        sampling: true,
+        samplingTools: false,
+        expectedServerCount: 1,
+      });
+    }, 30000);
+
+    afterAll(async () => {
+      await gatewayClient?.close();
+      await gatewayManager?.stop();
+      await toyServers?.stopAll();
+      configCleanup?.();
+    });
+
+    it("should route sampling request through ACP shim (not native)", async () => {
+      const script = `
+        local res = sampling_test_server.ask_llm({ question = "What is 2+2?" }):await()
+        result(res)
+      `;
+
+      const result = await gatewayClient.callTool({
+        name: "execute",
+        arguments: { script },
+      });
+
+      // The response should contain text from the echo agent (via shim)
+      // NOT from the native mock handler
+      assertTextContains(result, "ACP echo:");
+      assertTextContains(result, "LLM responded");
+
+      // Verify it's NOT from the native client mock
+      const content = result.content as Array<{ type: string; text?: string }>;
+      const text = content
+        .filter((c) => c.type === "text")
+        .map((c) => c.text)
+        .join("");
+      expect(text).not.toContain("Mock LLM response");
+    });
+
+    it("should handle tool-based sampling requests through shim", async () => {
+      const script = `
+        local res = sampling_test_server.multi_turn_llm({
+          context = "Testing partial capability scenario.",
+          question = "Why is tools support important?"
+        }):await()
+        result(res)
+      `;
+
+      const result = await gatewayClient.callTool({
+        name: "execute",
+        arguments: { script },
+      });
+
+      // The echo agent should have received the request via shim
+      assertTextContains(result, "ACP echo:");
+    });
+  });
+
   describe("Native sampling takes priority over shim", () => {
     let gatewayPort: number;
     let samplingServerPort: number;

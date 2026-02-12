@@ -31,32 +31,10 @@ export function registerProxyHandlers(
     const samplingEnabled = clientSession.getDangerouslyEnableSampling();
 
     // Register sampling handler ONLY if server is trusted
-    if (samplingEnabled && capabilities.sampling) {
-      clientSession.setRequestHandler(
-        CreateMessageRequestSchema,
-        async (request) => {
-          logger.debug(
-            `Received sampling request from upstream server '${serverName}', forwarding to downstream`,
-          );
-          try {
-            const result = await gatewayServer.forwardSamplingRequest(
-              request.params,
-            );
-            return result;
-          } catch (error) {
-            logger.error(
-              `Failed to forward sampling request from '${serverName}'`,
-              error instanceof Error ? error : new Error(String(error)),
-            );
-            throw error;
-          }
-        },
-      );
-      logger.debug(
-        `Registered sampling request handler for upstream server '${serverName}'`,
-      );
-    } else if (samplingEnabled && samplingShim) {
-      // Sampling shim: route through ACP agent when client lacks native sampling
+    // IMPORTANT: Check samplingShim FIRST - if index.ts passed a shim, it determined
+    // the shim is superior (client either lacks sampling or lacks tools support).
+    if (samplingEnabled && samplingShim) {
+      // Sampling shim: route through ACP agent (shim has enhanced tools support)
       clientSession.setRequestHandler(
         CreateMessageRequestSchema,
         async (request) => {
@@ -80,6 +58,31 @@ export function registerProxyHandlers(
       );
       logger.debug(
         `Registered sampling shim handler for upstream server '${serverName}'`,
+      );
+    } else if (samplingEnabled && capabilities.sampling) {
+      // Native client: forward to downstream (client has full capability)
+      clientSession.setRequestHandler(
+        CreateMessageRequestSchema,
+        async (request) => {
+          logger.debug(
+            `Received sampling request from upstream server '${serverName}', forwarding to downstream`,
+          );
+          try {
+            const result = await gatewayServer.forwardSamplingRequest(
+              request.params,
+            );
+            return result;
+          } catch (error) {
+            logger.error(
+              `Failed to forward sampling request from '${serverName}'`,
+              error instanceof Error ? error : new Error(String(error)),
+            );
+            throw error;
+          }
+        },
+      );
+      logger.debug(
+        `Registered sampling request handler for upstream server '${serverName}'`,
       );
     } else if (!samplingEnabled && (capabilities.sampling || samplingShim)) {
       logger.debug(

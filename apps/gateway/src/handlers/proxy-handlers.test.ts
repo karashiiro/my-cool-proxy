@@ -13,6 +13,9 @@ import type { IMCPClientSession } from "@my-cool-proxy/mcp-aggregation";
 const withSampling: ClientCapabilities = {
   sampling: { context: {}, tools: {} },
 };
+const withSamplingNoTools: ClientCapabilities = {
+  sampling: { context: {} },
+};
 const withElicitation: ClientCapabilities = { elicitation: { form: {} } };
 const withBoth: ClientCapabilities = {
   sampling: { context: {}, tools: {} },
@@ -204,6 +207,67 @@ describe("registerProxyHandlers", () => {
           }
         ).setRequestHandler,
       ).toHaveBeenCalledTimes(1);
+      expect(logger.debug).toHaveBeenCalledWith(
+        expect.stringContaining("Registered sampling shim handler"),
+      );
+    });
+
+    it("should use sampling shim when client has sampling but lacks tools support", () => {
+      const clientSession = createMockClientSession({
+        dangerouslyEnableSampling: true,
+      });
+      const clients = new Map([["test-server", clientSession]]);
+      const clientManager = createMockClientManager(clients);
+      const samplingShim = createMockSamplingShim();
+
+      registerProxyHandlers(
+        "test-session",
+        clientManager,
+        gatewayServer,
+        logger,
+        withSamplingNoTools,
+        samplingShim,
+      );
+
+      expect(
+        (
+          clientSession as unknown as {
+            setRequestHandler: ReturnType<typeof vi.fn>;
+          }
+        ).setRequestHandler,
+      ).toHaveBeenCalledTimes(1);
+      expect(logger.debug).toHaveBeenCalledWith(
+        expect.stringContaining("Registered sampling shim handler"),
+      );
+    });
+
+    it("should prefer shim over native when both are available", () => {
+      const clientSession = createMockClientSession({
+        dangerouslyEnableSampling: true,
+      });
+      const clients = new Map([["test-server", clientSession]]);
+      const clientManager = createMockClientManager(clients);
+      const samplingShim = createMockSamplingShim();
+
+      // Client has full sampling capability AND shim is provided
+      // This simulates when index.ts determines shim is superior despite client having sampling
+      registerProxyHandlers(
+        "test-session",
+        clientManager,
+        gatewayServer,
+        logger,
+        withSampling,
+        samplingShim,
+      );
+
+      expect(
+        (
+          clientSession as unknown as {
+            setRequestHandler: ReturnType<typeof vi.fn>;
+          }
+        ).setRequestHandler,
+      ).toHaveBeenCalledTimes(1);
+      // Shim should take priority over native
       expect(logger.debug).toHaveBeenCalledWith(
         expect.stringContaining("Registered sampling shim handler"),
       );

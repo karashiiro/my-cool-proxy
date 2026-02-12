@@ -106,18 +106,34 @@ export class HttpServerManager {
           // Store working directory BEFORE initializing shim
           capabilityStore.setWorkingDirectory(sessionId, workingDirectory);
 
-          // Determine if we need the sampling shim
+          // Determine if we need the sampling shim:
+          // Install when client lacks sampling entirely OR has sampling without tools support.
+          // The shim provides enhanced sampling with tools support via the ACP agent sidecar.
           let activeShim: ISamplingShim | undefined;
           let upstreamCapabilities = capabilities;
 
-          if (!capabilities.sampling && samplingShim) {
+          const clientHasSampling = !!capabilities.sampling;
+          const clientHasSamplingTools = !!capabilities.sampling?.tools;
+          const shimShouldInstall =
+            samplingShim && (!clientHasSampling || !clientHasSamplingTools);
+
+          if (shimShouldInstall) {
             try {
+              const reason = !clientHasSampling
+                ? "lacks sampling support"
+                : "has sampling but lacks tools support";
               logger.info(
-                `Session ${sessionId}: Client lacks sampling support, initializing ACP shim`,
+                `Session ${sessionId}: Client ${reason}, initializing ACP shim`,
               );
               await samplingShim.initialize(sessionId);
               activeShim = samplingShim;
-              upstreamCapabilities = { ...capabilities, sampling: {} };
+
+              // Augment capabilities so upstream servers see full sampling support.
+              // Preserve any existing sampling fields (like context) while adding tools.
+              upstreamCapabilities = {
+                ...capabilities,
+                sampling: { ...capabilities.sampling, tools: {} },
+              };
             } catch (error) {
               logger.error(
                 "Failed to initialize sampling shim, continuing without sampling support",

@@ -91,6 +91,12 @@ export async function closeClients(
 export interface CapableClientConfig extends ClientConfig {
   /** Whether to enable sampling capability */
   sampling?: boolean;
+  /**
+   * Whether to enable sampling tools capability.
+   * Defaults to true when sampling is enabled.
+   * Set to false to simulate clients with partial sampling support.
+   */
+  samplingTools?: boolean;
   /** Whether to enable elicitation capability */
   elicitation?: boolean;
   /** Mock response for sampling requests */
@@ -115,6 +121,10 @@ export async function createCapableGatewayClient(
 
   if (config.sampling) {
     capabilities.sampling = {};
+    // Add tools capability unless explicitly disabled
+    if (config.samplingTools !== false) {
+      (capabilities.sampling as Record<string, unknown>).tools = {};
+    }
   }
 
   if (config.elicitation) {
