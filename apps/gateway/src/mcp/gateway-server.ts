@@ -25,6 +25,7 @@ import {
   PromptAggregationService,
 } from "@my-cool-proxy/mcp-aggregation";
 import type { IToolRegistry } from "../tools/tool-registry.js";
+import { getEffectiveSessionId } from "../utils/session.js";
 
 /**
  * Gateway server that aggregates multiple MCP servers and provides namespaced access.
@@ -163,7 +164,9 @@ export class MCPGatewayServer {
     this.server.server.setRequestHandler(
       ListResourcesRequestSchema,
       async (_request: unknown, { sessionId }: { sessionId?: string }) =>
-        this.resourceAggregation.listResources(sessionId || "default"),
+        this.resourceAggregation.listResources(
+          getEffectiveSessionId(sessionId),
+        ),
     );
 
     this.server.server.setRequestHandler(
@@ -174,14 +177,14 @@ export class MCPGatewayServer {
       ) =>
         this.resourceAggregation.readResource(
           request.params.uri,
-          sessionId || "default",
+          getEffectiveSessionId(sessionId),
         ),
     );
 
     this.server.server.setRequestHandler(
       ListPromptsRequestSchema,
       async (_request: unknown, { sessionId }: { sessionId?: string }) =>
-        this.promptAggregation.listPrompts(sessionId || "default"),
+        this.promptAggregation.listPrompts(getEffectiveSessionId(sessionId)),
     );
 
     this.server.server.setRequestHandler(
@@ -195,7 +198,7 @@ export class MCPGatewayServer {
         this.promptAggregation.getPrompt(
           request.params.name,
           request.params.arguments,
-          sessionId || "default",
+          getEffectiveSessionId(sessionId),
         ),
     );
   }

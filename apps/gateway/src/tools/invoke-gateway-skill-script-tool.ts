@@ -4,6 +4,7 @@ import { spawn } from "child_process";
 import { resolve, sep } from "path";
 import { existsSync, statSync } from "fs";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import { getErrorMessage } from "@my-cool-proxy/mcp-utilities";
 import { $inject } from "../container/decorators.js";
 import { TYPES } from "../types/index.js";
 import type { ITool } from "./base-tool.js";
@@ -171,8 +172,7 @@ export class InvokeGatewaySkillScriptTool implements ITool {
         isError: result.exitCode !== 0,
       };
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
+      const errorMessage = getErrorMessage(error);
       this.logger.error(`Script execution failed: ${errorMessage}`);
       return {
         content: [

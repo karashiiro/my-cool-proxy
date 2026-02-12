@@ -1,7 +1,338 @@
 import { mkdirSync, readFileSync, writeFileSync } from "fs";
 import { dirname } from "path";
-import type { ServerConfig } from "../types/interfaces.js";
+import type { ServerConfig, MCPClientConfig } from "../types/interfaces.js";
 import { getActiveConfigPath, getPlatformConfigPath } from "./config-paths.js";
+
+/**
+ * Valid log levels for console and file logging.
+ */
+const VALID_LOG_LEVELS = ["trace", "debug", "info", "warn", "error", "fatal"];
+
+/**
+ * Valid tool kinds for ACP allowOwnTools configuration.
+ */
+const VALID_TOOL_KINDS = [
+  "read",
+  "edit",
+  "delete",
+  "move",
+  "search",
+  "execute",
+  "think",
+  "fetch",
+  "switch_mode",
+  "other",
+];
+
+/**
+ * Validates the transport configuration.
+ * Sets default transport to 'http' if not specified.
+ * Validates port and host for HTTP transport.
+ */
+function validateTransportConfig(config: ServerConfig): void {
+  if (config.transport !== undefined) {
+    if (config.transport !== "http" && config.transport !== "stdio") {
+      throw new Error(
+        "Config 'transport' must be 'http' or 'stdio' if specified",
+      );
+    }
+  }
+
+  // Set default transport to http
+  if (!config.transport) {
+    config.transport = "http";
+  }
+
+  // Validate port and host only if using HTTP transport
+  if (config.transport === "http") {
+    if (typeof config.port !== "number") {
+      throw new Error(
+        "Config must specify 'port' as a number when using HTTP transport",
+      );
+    }
+    if (typeof config.host !== "string") {
+      throw new Error(
+        "Config must specify 'host' as a string when using HTTP transport",
+      );
+    }
+  }
+}
+
+/**
+ * Validates the skills configuration if provided.
+ */
+function validateSkillsConfig(config: ServerConfig): void {
+  if (config.skills === undefined) return;
+
+  if (typeof config.skills !== "object" || config.skills === null) {
+    throw new Error("Config 'skills' must be an object if specified");
+  }
+
+  if (
+    config.skills.enabled !== undefined &&
+    typeof config.skills.enabled !== "boolean"
+  ) {
+    throw new Error("Config 'skills.enabled' must be a boolean if specified");
+  }
+
+  if (
+    config.skills.mutable !== undefined &&
+    typeof config.skills.mutable !== "boolean"
+  ) {
+    throw new Error("Config 'skills.mutable' must be a boolean if specified");
+  }
+}
+
+/**
+ * Validates ACP agent configuration if provided.
+ */
+function validateACPAgentConfig(
+  agent: NonNullable<ServerConfig["acp"]>["agent"],
+): void {
+  if (agent === undefined) return;
+
+  if (typeof agent !== "object" || agent === null) {
+    throw new Error("Config 'acp.agent' must be an object if specified");
+  }
+
+  if (typeof agent.command !== "string") {
+    throw new Error("Config 'acp.agent' must specify 'command' as a string");
+  }
+
+  if (agent.args !== undefined && !Array.isArray(agent.args)) {
+    throw new Error("Config 'acp.agent.args' must be an array if specified");
+  }
+
+  if (agent.args !== undefined) {
+    for (const arg of agent.args) {
+      if (typeof arg !== "string") {
+        throw new Error("Config 'acp.agent.args' must contain only strings");
+      }
+    }
+  }
+
+  if (agent.env !== undefined) {
+    if (typeof agent.env !== "object" || agent.env === null) {
+      throw new Error("Config 'acp.agent.env' must be an object if specified");
+    }
+
+    for (const [key, value] of Object.entries(agent.env)) {
+      if (typeof value !== "string") {
+        throw new Error(`Config 'acp.agent.env.${key}' must be a string`);
+      }
+    }
+  }
+}
+
+/**
+ * Validates ACP filesystem configuration if provided.
+ */
+function validateACPFilesystemConfig(
+  filesystem: NonNullable<ServerConfig["acp"]>["filesystem"],
+): void {
+  if (filesystem === undefined) return;
+
+  if (typeof filesystem !== "object" || filesystem === null) {
+    throw new Error("Config 'acp.filesystem' must be an object if specified");
+  }
+
+  if (
+    filesystem.readTextFile !== undefined &&
+    typeof filesystem.readTextFile !== "boolean"
+  ) {
+    throw new Error(
+      "Config 'acp.filesystem.readTextFile' must be a boolean if specified",
+    );
+  }
+
+  if (
+    filesystem.writeTextFile !== undefined &&
+    typeof filesystem.writeTextFile !== "boolean"
+  ) {
+    throw new Error(
+      "Config 'acp.filesystem.writeTextFile' must be a boolean if specified",
+    );
+  }
+}
+
+/**
+ * Validates ACP allowOwnTools configuration if provided.
+ */
+function validateAllowOwnToolsConfig(
+  allowOwnTools: NonNullable<ServerConfig["acp"]>["allowOwnTools"],
+): void {
+  if (allowOwnTools === undefined) return;
+
+  if (typeof allowOwnTools !== "object" || allowOwnTools === null) {
+    throw new Error(
+      "Config 'acp.allowOwnTools' must be an object if specified",
+    );
+  }
+
+  if (
+    allowOwnTools.dangerouslyAllowAll !== undefined &&
+    typeof allowOwnTools.dangerouslyAllowAll !== "boolean"
+  ) {
+    throw new Error(
+      "Config 'acp.allowOwnTools.dangerouslyAllowAll' must be a boolean if specified",
+    );
+  }
+
+  if (allowOwnTools.toolKinds !== undefined) {
+    if (!Array.isArray(allowOwnTools.toolKinds)) {
+      throw new Error(
+        "Config 'acp.allowOwnTools.toolKinds' must be an array if specified",
+      );
+    }
+    for (const kind of allowOwnTools.toolKinds) {
+      if (typeof kind !== "string") {
+        throw new Error(
+          "Config 'acp.allowOwnTools.toolKinds' must contain only strings",
+        );
+      }
+      if (!VALID_TOOL_KINDS.includes(kind)) {
+        throw new Error(
+          `Config 'acp.allowOwnTools.toolKinds' contains invalid value '${kind}'. Valid: ${VALID_TOOL_KINDS.join(", ")}`,
+        );
+      }
+    }
+  }
+}
+
+/**
+ * Validates the ACP configuration if provided.
+ */
+function validateACPConfig(config: ServerConfig): void {
+  if (config.acp === undefined) return;
+
+  if (typeof config.acp !== "object" || config.acp === null) {
+    throw new Error("Config 'acp' must be an object if specified");
+  }
+
+  validateACPAgentConfig(config.acp.agent);
+  validateACPFilesystemConfig(config.acp.filesystem);
+  validateAllowOwnToolsConfig(config.acp.allowOwnTools);
+}
+
+/**
+ * Validates the logging configuration if provided.
+ */
+function validateLoggingConfig(config: ServerConfig): void {
+  if (config.logging === undefined) return;
+
+  if (typeof config.logging !== "object" || config.logging === null) {
+    throw new Error("Config 'logging' must be an object if specified");
+  }
+
+  if (config.logging.console !== undefined) {
+    if (
+      typeof config.logging.console !== "object" ||
+      config.logging.console === null
+    ) {
+      throw new Error(
+        "Config 'logging.console' must be an object if specified",
+      );
+    }
+    if (config.logging.console.level !== undefined) {
+      if (!VALID_LOG_LEVELS.includes(config.logging.console.level)) {
+        throw new Error(
+          `Config 'logging.console.level' must be one of: ${VALID_LOG_LEVELS.join(", ")}`,
+        );
+      }
+    }
+  }
+
+  if (config.logging.file !== undefined) {
+    if (
+      typeof config.logging.file !== "object" ||
+      config.logging.file === null
+    ) {
+      throw new Error("Config 'logging.file' must be an object if specified");
+    }
+    if (config.logging.file.level !== undefined) {
+      if (!VALID_LOG_LEVELS.includes(config.logging.file.level)) {
+        throw new Error(
+          `Config 'logging.file.level' must be one of: ${VALID_LOG_LEVELS.join(", ")}`,
+        );
+      }
+    }
+  }
+}
+
+/**
+ * Validates a single MCP client configuration.
+ */
+function validateMcpClientConfig(
+  name: string,
+  clientConfig: MCPClientConfig,
+): void {
+  if (typeof clientConfig !== "object" || clientConfig === null) {
+    throw new Error(
+      `MCP client '${name}' must be an object with type and transport details`,
+    );
+  }
+
+  if (clientConfig.type === "http") {
+    if (typeof clientConfig.url !== "string") {
+      throw new Error(
+        `MCP client '${name}' with type 'http' must specify 'url' as a string`,
+      );
+    }
+  } else if (clientConfig.type === "stdio") {
+    if (typeof clientConfig.command !== "string") {
+      throw new Error(
+        `MCP client '${name}' with type 'stdio' must specify 'command' as a string`,
+      );
+    }
+  } else {
+    throw new Error(
+      `MCP client '${name}' has invalid type. Must be 'http' or 'stdio'`,
+    );
+  }
+
+  // Validate allowedTools if provided
+  if (clientConfig.allowedTools !== undefined) {
+    if (!Array.isArray(clientConfig.allowedTools)) {
+      throw new Error(
+        `MCP client '${name}' has invalid 'allowedTools'. Must be an array of strings`,
+      );
+    }
+
+    for (const tool of clientConfig.allowedTools) {
+      if (typeof tool !== "string") {
+        throw new Error(
+          `MCP client '${name}' has invalid tool in 'allowedTools'. All items must be strings`,
+        );
+      }
+    }
+  }
+
+  // Validate dangerouslyEnableSampling if provided
+  if (clientConfig.dangerouslyEnableSampling !== undefined) {
+    if (typeof clientConfig.dangerouslyEnableSampling !== "boolean") {
+      throw new Error(
+        `MCP client '${name}' has invalid 'dangerouslyEnableSampling'. Must be a boolean (true or false)`,
+      );
+    }
+  }
+}
+
+/**
+ * Validates all MCP client configurations.
+ */
+function validateMcpClientsConfig(config: ServerConfig): void {
+  if (
+    typeof config.mcpClients !== "object" ||
+    config.mcpClients === null ||
+    Array.isArray(config.mcpClients)
+  ) {
+    throw new Error("Config must specify 'mcpClients' as an object");
+  }
+
+  for (const [name, clientConfig] of Object.entries(config.mcpClients)) {
+    validateMcpClientConfig(name, clientConfig);
+  }
+}
 
 /**
  * Default configuration for first-time setup.
@@ -72,311 +403,12 @@ export function loadConfig(): ServerConfig {
     const configContent = readFileSync(configPath, "utf-8");
     const config = JSON.parse(configContent) as ServerConfig;
 
-    // Validate mcpClients (always required)
-    if (
-      typeof config.mcpClients !== "object" ||
-      config.mcpClients === null ||
-      Array.isArray(config.mcpClients)
-    ) {
-      throw new Error("Config must specify 'mcpClients' as an object");
-    }
-
-    // Validate transport if provided
-    if (config.transport !== undefined) {
-      if (config.transport !== "http" && config.transport !== "stdio") {
-        throw new Error(
-          "Config 'transport' must be 'http' or 'stdio' if specified",
-        );
-      }
-    }
-
-    // Set default transport to http
-    if (!config.transport) {
-      config.transport = "http";
-    }
-
-    // Validate port and host only if using HTTP transport
-    if (config.transport === "http") {
-      if (typeof config.port !== "number") {
-        throw new Error(
-          "Config must specify 'port' as a number when using HTTP transport",
-        );
-      }
-      if (typeof config.host !== "string") {
-        throw new Error(
-          "Config must specify 'host' as a string when using HTTP transport",
-        );
-      }
-    }
-
-    // Validate skills config if provided
-    if (config.skills !== undefined) {
-      if (typeof config.skills !== "object" || config.skills === null) {
-        throw new Error("Config 'skills' must be an object if specified");
-      }
-
-      if (
-        config.skills.enabled !== undefined &&
-        typeof config.skills.enabled !== "boolean"
-      ) {
-        throw new Error(
-          "Config 'skills.enabled' must be a boolean if specified",
-        );
-      }
-
-      if (
-        config.skills.mutable !== undefined &&
-        typeof config.skills.mutable !== "boolean"
-      ) {
-        throw new Error(
-          "Config 'skills.mutable' must be a boolean if specified",
-        );
-      }
-    }
-
-    // Validate acp config if provided
-    if (config.acp !== undefined) {
-      if (typeof config.acp !== "object" || config.acp === null) {
-        throw new Error("Config 'acp' must be an object if specified");
-      }
-
-      if (config.acp.agent !== undefined) {
-        if (typeof config.acp.agent !== "object" || config.acp.agent === null) {
-          throw new Error("Config 'acp.agent' must be an object if specified");
-        }
-
-        if (typeof config.acp.agent.command !== "string") {
-          throw new Error(
-            "Config 'acp.agent' must specify 'command' as a string",
-          );
-        }
-
-        if (
-          config.acp.agent.args !== undefined &&
-          !Array.isArray(config.acp.agent.args)
-        ) {
-          throw new Error(
-            "Config 'acp.agent.args' must be an array if specified",
-          );
-        }
-
-        if (config.acp.agent.args !== undefined) {
-          for (const arg of config.acp.agent.args) {
-            if (typeof arg !== "string") {
-              throw new Error(
-                "Config 'acp.agent.args' must contain only strings",
-              );
-            }
-          }
-        }
-
-        if (config.acp.agent.env !== undefined) {
-          if (
-            typeof config.acp.agent.env !== "object" ||
-            config.acp.agent.env === null
-          ) {
-            throw new Error(
-              "Config 'acp.agent.env' must be an object if specified",
-            );
-          }
-
-          for (const [key, value] of Object.entries(config.acp.agent.env)) {
-            if (typeof value !== "string") {
-              throw new Error(`Config 'acp.agent.env.${key}' must be a string`);
-            }
-          }
-        }
-      }
-
-      // Validate filesystem config if provided
-      if (config.acp.filesystem !== undefined) {
-        if (
-          typeof config.acp.filesystem !== "object" ||
-          config.acp.filesystem === null
-        ) {
-          throw new Error(
-            "Config 'acp.filesystem' must be an object if specified",
-          );
-        }
-
-        if (
-          config.acp.filesystem.readTextFile !== undefined &&
-          typeof config.acp.filesystem.readTextFile !== "boolean"
-        ) {
-          throw new Error(
-            "Config 'acp.filesystem.readTextFile' must be a boolean if specified",
-          );
-        }
-
-        if (
-          config.acp.filesystem.writeTextFile !== undefined &&
-          typeof config.acp.filesystem.writeTextFile !== "boolean"
-        ) {
-          throw new Error(
-            "Config 'acp.filesystem.writeTextFile' must be a boolean if specified",
-          );
-        }
-      }
-
-      // Validate allowOwnTools config if provided
-      const VALID_TOOL_KINDS = [
-        "read",
-        "edit",
-        "delete",
-        "move",
-        "search",
-        "execute",
-        "think",
-        "fetch",
-        "switch_mode",
-        "other",
-      ];
-
-      if (config.acp.allowOwnTools !== undefined) {
-        if (
-          typeof config.acp.allowOwnTools !== "object" ||
-          config.acp.allowOwnTools === null
-        ) {
-          throw new Error(
-            "Config 'acp.allowOwnTools' must be an object if specified",
-          );
-        }
-
-        if (
-          config.acp.allowOwnTools.dangerouslyAllowAll !== undefined &&
-          typeof config.acp.allowOwnTools.dangerouslyAllowAll !== "boolean"
-        ) {
-          throw new Error(
-            "Config 'acp.allowOwnTools.dangerouslyAllowAll' must be a boolean if specified",
-          );
-        }
-
-        if (config.acp.allowOwnTools.toolKinds !== undefined) {
-          if (!Array.isArray(config.acp.allowOwnTools.toolKinds)) {
-            throw new Error(
-              "Config 'acp.allowOwnTools.toolKinds' must be an array if specified",
-            );
-          }
-          for (const kind of config.acp.allowOwnTools.toolKinds) {
-            if (typeof kind !== "string") {
-              throw new Error(
-                "Config 'acp.allowOwnTools.toolKinds' must contain only strings",
-              );
-            }
-            if (!VALID_TOOL_KINDS.includes(kind)) {
-              throw new Error(
-                `Config 'acp.allowOwnTools.toolKinds' contains invalid value '${kind}'. Valid: ${VALID_TOOL_KINDS.join(", ")}`,
-              );
-            }
-          }
-        }
-      }
-    }
-
-    // Validate logging config if provided
-    const VALID_LOG_LEVELS = [
-      "trace",
-      "debug",
-      "info",
-      "warn",
-      "error",
-      "fatal",
-    ];
-
-    if (config.logging !== undefined) {
-      if (typeof config.logging !== "object" || config.logging === null) {
-        throw new Error("Config 'logging' must be an object if specified");
-      }
-
-      if (config.logging.console !== undefined) {
-        if (
-          typeof config.logging.console !== "object" ||
-          config.logging.console === null
-        ) {
-          throw new Error(
-            "Config 'logging.console' must be an object if specified",
-          );
-        }
-        if (config.logging.console.level !== undefined) {
-          if (!VALID_LOG_LEVELS.includes(config.logging.console.level)) {
-            throw new Error(
-              `Config 'logging.console.level' must be one of: ${VALID_LOG_LEVELS.join(", ")}`,
-            );
-          }
-        }
-      }
-
-      if (config.logging.file !== undefined) {
-        if (
-          typeof config.logging.file !== "object" ||
-          config.logging.file === null
-        ) {
-          throw new Error(
-            "Config 'logging.file' must be an object if specified",
-          );
-        }
-        if (config.logging.file.level !== undefined) {
-          if (!VALID_LOG_LEVELS.includes(config.logging.file.level)) {
-            throw new Error(
-              `Config 'logging.file.level' must be one of: ${VALID_LOG_LEVELS.join(", ")}`,
-            );
-          }
-        }
-      }
-    }
-
-    // Validate each MCP client config
-    for (const [name, clientConfig] of Object.entries(config.mcpClients)) {
-      if (typeof clientConfig !== "object" || clientConfig === null) {
-        throw new Error(
-          `MCP client '${name}' must be an object with type and transport details`,
-        );
-      }
-
-      if (clientConfig.type === "http") {
-        if (typeof clientConfig.url !== "string") {
-          throw new Error(
-            `MCP client '${name}' with type 'http' must specify 'url' as a string`,
-          );
-        }
-      } else if (clientConfig.type === "stdio") {
-        if (typeof clientConfig.command !== "string") {
-          throw new Error(
-            `MCP client '${name}' with type 'stdio' must specify 'command' as a string`,
-          );
-        }
-      } else {
-        throw new Error(
-          `MCP client '${name}' has invalid type. Must be 'http' or 'stdio'`,
-        );
-      }
-
-      // Validate allowedTools if provided
-      if (clientConfig.allowedTools !== undefined) {
-        if (!Array.isArray(clientConfig.allowedTools)) {
-          throw new Error(
-            `MCP client '${name}' has invalid 'allowedTools'. Must be an array of strings`,
-          );
-        }
-
-        for (const tool of clientConfig.allowedTools) {
-          if (typeof tool !== "string") {
-            throw new Error(
-              `MCP client '${name}' has invalid tool in 'allowedTools'. All items must be strings`,
-            );
-          }
-        }
-      }
-
-      // Validate dangerouslyEnableSampling if provided
-      if (clientConfig.dangerouslyEnableSampling !== undefined) {
-        if (typeof clientConfig.dangerouslyEnableSampling !== "boolean") {
-          throw new Error(
-            `MCP client '${name}' has invalid 'dangerouslyEnableSampling'. Must be a boolean (true or false)`,
-          );
-        }
-      }
-    }
+    // Validate all config sections
+    validateMcpClientsConfig(config);
+    validateTransportConfig(config);
+    validateSkillsConfig(config);
+    validateACPConfig(config);
+    validateLoggingConfig(config);
 
     return config;
   } catch (error) {

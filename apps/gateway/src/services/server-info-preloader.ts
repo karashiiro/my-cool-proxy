@@ -2,6 +2,7 @@ import { injectable } from "inversify";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { getErrorMessage } from "@my-cool-proxy/mcp-utilities";
 import type {
   ILogger,
   IServerInfoPreloader,
@@ -68,7 +69,7 @@ export class ServerInfoPreloader implements IServerInfoPreloader {
             toolNames = toolsResponse.tools.map((t) => t.name);
           } catch (error) {
             this.logger.warn(
-              `Failed to list tools for server '${name}': ${error instanceof Error ? error.message : String(error)}`,
+              `Failed to list tools for server '${name}': ${getErrorMessage(error)}`,
             );
           }
 
@@ -88,8 +89,7 @@ export class ServerInfoPreloader implements IServerInfoPreloader {
             toolNames,
           };
         } catch (error) {
-          const errorMessage =
-            error instanceof Error ? error.message : String(error);
+          const errorMessage = getErrorMessage(error);
           this.logger.warn(
             `Failed to preload info for server '${name}': ${errorMessage}`,
           );

@@ -7,6 +7,8 @@ import type { ITool, ToolExecutionContext } from "./base-tool.js";
 import type { ServerConfig } from "../types/interfaces.js";
 import { ToolDiscoveryService } from "@my-cool-proxy/mcp-aggregation";
 import { SKILLS_REMINDER_CONTENT_BLOCK } from "../utils/skills.js";
+import { getEffectiveSessionId } from "../utils/session.js";
+import { luaServerNameSchema, luaToolNameSchema } from "./schemas.js";
 
 /**
  * Tool that inspects a tool's response structure by making a sample call.
@@ -35,8 +37,8 @@ export class InspectToolResponseTool implements ITool {
     "structures gracefully, or return the full response and accept the token cost.";
 
   readonly schema = {
-    luaServerName: z.string().describe("The Lua identifier of the MCP server"),
-    luaToolName: z.string().describe("The Lua identifier of the tool"),
+    luaServerName: luaServerNameSchema,
+    luaToolName: luaToolNameSchema,
     sampleArgs: z
       .record(z.string(), z.unknown())
       .optional()
@@ -62,7 +64,7 @@ export class InspectToolResponseTool implements ITool {
       luaServerName as string,
       luaToolName as string,
       (sampleArgs as Record<string, unknown>) || {},
-      context.sessionId || "default",
+      getEffectiveSessionId(context.sessionId),
     );
 
     // Add skill check note if skills are enabled

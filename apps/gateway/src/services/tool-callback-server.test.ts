@@ -61,7 +61,9 @@ describe("ToolCallbackServer", () => {
         expect(captured).not.toBeNull();
         expect(captured!.name).toBe("calculator-add");
         expect(captured!.input).toEqual({ a: 5, b: 3 });
-        expect(captured!.id).toBeDefined();
+        // ID should be a non-empty string (UUID-like format)
+        expect(typeof captured!.id).toBe("string");
+        expect(captured!.id.length).toBeGreaterThan(0);
       } finally {
         await server.stop();
       }
@@ -154,8 +156,11 @@ describe("ToolCallbackServer", () => {
         const result = (await response.json()) as { status: string };
         expect(result.status).toBe("captured");
 
-        // Error should be logged
-        expect(logger.error).toHaveBeenCalled();
+        // Error should be logged with descriptive message about the callback
+        expect(logger.error).toHaveBeenCalledWith(
+          expect.stringContaining("tool callback"),
+          expect.any(Error),
+        );
       } finally {
         await server.stop();
       }

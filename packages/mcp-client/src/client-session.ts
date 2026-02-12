@@ -1,4 +1,5 @@
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { getErrorMessage } from "@my-cool-proxy/mcp-utilities";
 import type { ILogger, ICacheService } from "./types.js";
 import {
   ToolListChangedNotificationSchema,
@@ -84,7 +85,7 @@ export class MCPClientSession {
           }
         } catch (error) {
           this.logger.error(
-            `Server '${this.serverName}': Error handling tool list change notification: ${error instanceof Error ? error.message : String(error)}`,
+            `Server '${this.serverName}': Error handling tool list change notification: ${getErrorMessage(error)}`,
           );
         }
       },
@@ -106,7 +107,7 @@ export class MCPClientSession {
           }
         } catch (error) {
           this.logger.error(
-            `Server '${this.serverName}': Error handling resource list change notification: ${error instanceof Error ? error.message : String(error)}`,
+            `Server '${this.serverName}': Error handling resource list change notification: ${getErrorMessage(error)}`,
           );
         }
       },
@@ -128,7 +129,7 @@ export class MCPClientSession {
           }
         } catch (error) {
           this.logger.error(
-            `Server '${this.serverName}': Error handling prompt list change notification: ${error instanceof Error ? error.message : String(error)}`,
+            `Server '${this.serverName}': Error handling prompt list change notification: ${getErrorMessage(error)}`,
           );
         }
       },

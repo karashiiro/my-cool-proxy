@@ -1,3 +1,6 @@
+// Error utilities
+export { getErrorMessage } from "./error-utils.js";
+
 // Lua identifier utilities
 export { sanitizeLuaIdentifier } from "./lua-identifier.js";
 

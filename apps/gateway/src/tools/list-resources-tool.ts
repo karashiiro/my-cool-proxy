@@ -5,6 +5,7 @@ import { TYPES } from "../types/index.js";
 import type { ITool, ToolExecutionContext } from "./base-tool.js";
 import { ResourceAggregationService } from "@my-cool-proxy/mcp-aggregation";
 import { parseResourceUri } from "@my-cool-proxy/mcp-utilities";
+import { getEffectiveSessionId } from "../utils/session.js";
 
 /**
  * Tool that lists all available MCP resources across all connected servers.
@@ -33,7 +34,7 @@ export class ListResourcesTool implements ITool {
     _args: Record<string, unknown>,
     context: ToolExecutionContext,
   ): Promise<CallToolResult> {
-    const sessionId = context.sessionId || "default";
+    const sessionId = getEffectiveSessionId(context.sessionId);
 
     const result = await this.resourceAggregation.listResources(sessionId);
     const resources = result.resources;

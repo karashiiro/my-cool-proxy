@@ -6,6 +6,7 @@ import type { ITool, ToolExecutionContext } from "./base-tool.js";
 import type { ServerConfig } from "../types/interfaces.js";
 import { ToolDiscoveryService } from "@my-cool-proxy/mcp-aggregation";
 import { SKILLS_REMINDER_CONTENT_BLOCK } from "../utils/skills.js";
+import { getEffectiveSessionId } from "../utils/session.js";
 
 /**
  * Tool that lists all available MCP servers for the current session.
@@ -36,7 +37,7 @@ export class ListServersTool implements ITool {
     context: ToolExecutionContext,
   ): Promise<CallToolResult> {
     const result = await this.toolDiscovery.listServers(
-      context.sessionId || "default",
+      getEffectiveSessionId(context.sessionId),
     );
 
     // Add skill check note if skills are enabled

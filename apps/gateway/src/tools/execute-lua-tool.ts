@@ -11,6 +11,7 @@ import type {
 import { $inject } from "../container/decorators.js";
 import { TYPES } from "../types/index.js";
 import type { ITool, ToolExecutionContext } from "./base-tool.js";
+import { getEffectiveSessionId } from "../utils/session.js";
 
 /**
  * Tool that executes Lua scripts with access to MCP servers.
@@ -81,7 +82,7 @@ export class ExecuteLuaTool implements ITool {
   ): Promise<CallToolResult> {
     const { script } = args;
     const mcpServers = this.clientPool.getClientsBySession(
-      context.sessionId || "default",
+      getEffectiveSessionId(context.sessionId),
     );
 
     try {
@@ -132,7 +133,7 @@ export class ExecuteLuaTool implements ITool {
         ],
       };
     } catch (error) {
-      this.logger.error(`Lua script execution failed: ${error}`);
+      this.logger.error("Lua script execution failed:", error as Error);
       return {
         content: [{ type: "text", text: `Script execution failed:\n${error}` }],
         isError: true,
