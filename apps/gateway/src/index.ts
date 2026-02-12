@@ -28,7 +28,11 @@ import type {
 import { parseArgs } from "./utils/cli-args.js";
 import { getConfigPaths, getPlatformConfigDir } from "./utils/config-paths.js";
 import { ensureServerLogDir, getServerLogPath } from "./utils/log-paths.js";
-import { createSessionTempDir, cleanupSessionTempDir } from "./utils/index.js";
+import {
+  createSessionTempDir,
+  cleanupSessionTempDir,
+  initializeSamplingShim,
+} from "./utils/index.js";
 import { getDbPath, ensureDbDirectory } from "./utils/db-paths.js";
 import { SQLiteDatabase } from "./stores/sqlite-database.js";
 import { SQLiteEventStore } from "./stores/sqlite-event-store.js";
@@ -276,44 +280,14 @@ async function startHttpMode(
         // Store working directory BEFORE initializing shim
         capabilityStore.setWorkingDirectory(sessionId, workingDirectory);
 
-        // Determine if we need the sampling shim:
-        // Install when client lacks sampling entirely OR has sampling without tools support.
-        // The shim provides enhanced sampling with tools support via the ACP agent sidecar.
-        let activeShim: ISamplingShim | undefined;
-        let upstreamCapabilities = capabilities;
-
-        const clientHasSampling = !!capabilities.sampling;
-        const clientHasSamplingTools = !!capabilities.sampling?.tools;
-        const shimShouldInstall =
-          samplingShim && (!clientHasSampling || !clientHasSamplingTools);
-
-        if (shimShouldInstall) {
-          try {
-            const reason = !clientHasSampling
-              ? "lacks sampling support"
-              : "has sampling but lacks tools support";
-            logger.info(
-              `Session ${sessionId}: Client ${reason}, initializing ACP shim`,
-            );
-            await samplingShim.initialize(sessionId);
-            activeShim = samplingShim;
-
-            // Augment capabilities so upstream servers see full sampling support.
-            // Preserve any existing sampling fields (like context) while adding tools.
-            // This global augmentation is safe - buildClientCapabilities() filters
-            // per-server based on dangerouslyEnableSampling, so only trusted servers
-            // will see the sampling capability. Untrusted servers remain unaware.
-            upstreamCapabilities = {
-              ...capabilities,
-              sampling: { ...capabilities.sampling, tools: {} },
-            };
-          } catch (error) {
-            logger.error(
-              "Failed to initialize sampling shim, continuing without sampling support",
-              error instanceof Error ? error : new Error(String(error)),
-            );
-          }
-        }
+        // Initialize sampling shim if needed (when client lacks full sampling capability)
+        const { activeShim, upstreamCapabilities } =
+          await initializeSamplingShim(
+            sessionId,
+            capabilities,
+            samplingShim,
+            logger,
+          );
 
         // Now initialize upstream MCP clients with the (possibly augmented) capabilities
         // This tells upstream servers what requests they can send through the proxy
@@ -522,42 +496,13 @@ async function startStdioMode(
       // Store working directory BEFORE initializing shim
       capabilityStore.setWorkingDirectory(SESSION_ID, workingDirectory);
 
-      // Determine if we need the sampling shim:
-      // Install when client lacks sampling entirely OR has sampling without tools support.
-      // The shim provides enhanced sampling with tools support via the ACP agent sidecar.
-      let activeShim: ISamplingShim | undefined;
-      let upstreamCapabilities = capabilities;
-
-      const clientHasSampling = !!capabilities.sampling;
-      const clientHasSamplingTools = !!capabilities.sampling?.tools;
-      const shimShouldInstall =
-        samplingShim && (!clientHasSampling || !clientHasSamplingTools);
-
-      if (shimShouldInstall) {
-        try {
-          const reason = !clientHasSampling
-            ? "lacks sampling support"
-            : "has sampling but lacks tools support";
-          logger.info(`Client ${reason}, initializing ACP shim`);
-          await samplingShim.initialize(SESSION_ID);
-          activeShim = samplingShim;
-
-          // Augment capabilities so upstream servers see full sampling support.
-          // Preserve any existing sampling fields (like context) while adding tools.
-          // This global augmentation is safe - buildClientCapabilities() filters
-          // per-server based on dangerouslyEnableSampling, so only trusted servers
-          // will see the sampling capability. Untrusted servers remain unaware.
-          upstreamCapabilities = {
-            ...capabilities,
-            sampling: { ...capabilities.sampling, tools: {} },
-          };
-        } catch (error) {
-          logger.error(
-            "Failed to initialize sampling shim, continuing without sampling support",
-            error instanceof Error ? error : new Error(String(error)),
-          );
-        }
-      }
+      // Initialize sampling shim if needed (when client lacks full sampling capability)
+      const { activeShim, upstreamCapabilities } = await initializeSamplingShim(
+        SESSION_ID,
+        capabilities,
+        samplingShim,
+        logger,
+      );
 
       // Initialize upstream MCP clients with (possibly augmented) capabilities
       const initResult = await initializeClientsForSession(
