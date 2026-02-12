@@ -5,7 +5,6 @@
 export const TYPES = {
   LuaRuntime: "LuaRuntime",
   MCPClientManager: "MCPClientManager",
-  SessionStore: "SessionStore",
   AuthStrategy: "AuthStrategy",
   ServerConfig: "ServerConfig",
   Logger: "Logger",

@@ -76,12 +76,6 @@ export interface IMCPClientManager {
   close(): Promise<void>;
 }
 
-export interface ISessionStore {
-  create(sessionId: string, data: unknown): void;
-  get(sessionId: string): unknown | undefined;
-  delete(sessionId: string): void;
-}
-
 export interface IAuthStrategy {
   authenticate(token: string): Promise<AuthInfo | null>;
 }

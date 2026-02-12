@@ -890,3 +890,77 @@ Keep filesystem disabled (default) when:
 - Using agents for pure text generation or Q&A
 - Running untrusted or experimental agents
 - Minimizing attack surface
+
+## Session Persistence (HTTP Mode)
+
+In HTTP mode, the gateway automatically persists session state to SQLite, enabling session resumability across server restarts. This is always enabled with zero configuration required.
+
+### What Gets Persisted
+
+| Data Type                | Description                                                                    |
+| ------------------------ | ------------------------------------------------------------------------------ |
+| **Session capabilities** | Client capabilities (sampling, elicitation) stored when the client initializes |
+| **Working directories**  | Session working directory paths for ACP sandboxing                             |
+| **SSE events**           | Server-Sent Events for resumability when clients reconnect                     |
+
+### Database Location
+
+Session data is stored in a SQLite database at the platform-specific data directory:
+
+| Platform    | Path                                                      |
+| ----------- | --------------------------------------------------------- |
+| **Linux**   | `~/.local/share/my-cool-proxy/sessions.db`                |
+| **macOS**   | `~/Library/Application Support/my-cool-proxy/sessions.db` |
+| **Windows** | `%LOCALAPPDATA%\my-cool-proxy\Data\sessions.db`           |
+
+### How It Works
+
+1. **On client connect**: Session capabilities and working directory are stored in SQLite
+2. **On tool calls**: SSE events are persisted for resumability
+3. **On server restart**: Sessions can resume because state is persisted
+4. **On client reconnect**: SSE events are replayed if the client provides `Last-Event-ID`
+5. **On session close**: Session data is cleaned up from the database
+
+### Event Retention
+
+SSE events are retained with a per-session limit of 1000 events. When this limit is exceeded, the oldest events are automatically evicted (FIFO). This prevents unbounded database growth while maintaining recent history for reconnection scenarios.
+
+### Session TTL
+
+Sessions expire after 5 minutes of inactivity. When a session expires:
+
+- Session data is removed from the database
+- Upstream MCP client connections for that session are closed
+- Temporary working directories are cleaned up
+
+### Inspecting the Database
+
+You can inspect the session database using standard SQLite tools:
+
+```bash
+# View all sessions
+sqlite3 ~/.local/share/my-cool-proxy/sessions.db "SELECT * FROM sessions"
+
+# Count SSE events
+sqlite3 ~/.local/share/my-cool-proxy/sessions.db "SELECT COUNT(*) FROM mcp_events"
+
+# View events for a specific session
+sqlite3 ~/.local/share/my-cool-proxy/sessions.db \
+  "SELECT event_id, stream_id FROM mcp_events WHERE session_id = 'your-session-id'"
+```
+
+### Backup and Recovery
+
+The database uses SQLite WAL (Write-Ahead Logging) mode for better concurrent access and crash recovery. To back up the database:
+
+```bash
+# Simple file copy (safe when gateway is stopped)
+cp ~/.local/share/my-cool-proxy/sessions.db ~/backup/sessions.db
+
+# Or use SQLite backup (safe while gateway is running)
+sqlite3 ~/.local/share/my-cool-proxy/sessions.db ".backup ~/backup/sessions.db"
+```
+
+### Stdio Mode
+
+Session persistence is **not used in stdio mode**. Stdio transport has a single fixed session (`default`) that exists only for the lifetime of the process. There's no benefit to persisting state across restarts since the session ID is always the same and the client process also terminates with the gateway.

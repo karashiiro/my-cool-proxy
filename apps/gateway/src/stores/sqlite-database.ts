@@ -1,0 +1,83 @@
+import Database from "better-sqlite3";
+
+/**
+ * SQLite database wrapper for session persistence.
+ * Manages the database connection and schema initialization.
+ *
+ * NOT injectable - instantiated directly in index.ts for HTTP mode.
+ */
+export class SQLiteDatabase {
+  private db: Database.Database;
+
+  /**
+   * Create a new SQLite database connection.
+   * @param dbPath Path to the SQLite database file, or ":memory:" for in-memory
+   */
+  constructor(dbPath: string) {
+    this.db = new Database(dbPath);
+    // Enable WAL mode for better concurrent access
+    this.db.pragma("journal_mode = WAL");
+    this.initializeSchema();
+  }
+
+  /**
+   * Initialize the database schema.
+   * Creates tables if they don't exist.
+   */
+  private initializeSchema(): void {
+    // Events table for SSE resumability
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS mcp_events (
+        event_id TEXT PRIMARY KEY,
+        stream_id TEXT NOT NULL,
+        session_id TEXT NOT NULL,
+        message TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_session_stream ON mcp_events(session_id, stream_id, event_id);
+      CREATE INDEX IF NOT EXISTS idx_session_created ON mcp_events(session_id, created_at);
+    `);
+
+    // Sessions table for capability persistence
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS sessions (
+        session_id TEXT PRIMARY KEY,
+        capabilities TEXT,
+        working_directory TEXT,
+        created_at INTEGER NOT NULL,
+        last_activity INTEGER NOT NULL
+      );
+    `);
+
+    // Session init requests table for session restoration
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS session_init_requests (
+        session_id TEXT PRIMARY KEY,
+        request TEXT NOT NULL
+      );
+    `);
+  }
+
+  /**
+   * Get the underlying better-sqlite3 database instance.
+   */
+  getDatabase(): Database.Database {
+    return this.db;
+  }
+
+  /**
+   * Run a function within a transaction.
+   * @param fn Function to run within the transaction
+   * @returns The return value of the function
+   */
+  transaction<T>(fn: () => T): T {
+    return this.db.transaction(fn)();
+  }
+
+  /**
+   * Close the database connection.
+   */
+  close(): void {
+    this.db.close();
+  }
+}

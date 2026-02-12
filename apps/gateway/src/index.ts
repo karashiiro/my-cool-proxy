@@ -29,6 +29,10 @@ import { parseArgs } from "./utils/cli-args.js";
 import { getConfigPaths, getPlatformConfigDir } from "./utils/config-paths.js";
 import { ensureServerLogDir, getServerLogPath } from "./utils/log-paths.js";
 import { createSessionTempDir, cleanupSessionTempDir } from "./utils/index.js";
+import { getDbPath, ensureDbDirectory } from "./utils/db-paths.js";
+import { SQLiteDatabase } from "./stores/sqlite-database.js";
+import { SQLiteEventStore } from "./stores/sqlite-event-store.js";
+import { SQLiteCapabilityStore } from "./stores/sqlite-capability-store.js";
 
 /**
  * Session inactivity timeout in milliseconds.
@@ -142,6 +146,19 @@ async function startHttpMode(
     throw new Error("Port and host are required for HTTP mode");
   }
 
+  // Initialize SQLite persistence for HTTP mode
+  // This provides session persistence across server restarts
+  ensureDbDirectory();
+  const dbPath = getDbPath();
+  const sqliteDb = new SQLiteDatabase(dbPath);
+  logger.info(`Session persistence enabled: ${dbPath}`);
+
+  // Create SQLite-backed capability store (replaces in-memory store for HTTP mode)
+  const capabilityStore: ICapabilityStore = new SQLiteCapabilityStore(
+    sqliteDb,
+    logger,
+  );
+
   // Get shared services from DI container
   const clientManager = container.get<IMCPClientManager>(
     TYPES.MCPClientManager,
@@ -155,9 +172,6 @@ async function startHttpMode(
   );
   const shutdownHandler = container.get<IShutdownHandler>(
     TYPES.ShutdownHandler,
-  );
-  const capabilityStore = container.get<ICapabilityStore>(
-    TYPES.CapabilityStore,
   );
   const serverInfoPreloader = container.get<IServerInfoPreloader>(
     TYPES.ServerInfoPreloader,
@@ -181,6 +195,27 @@ async function startHttpMode(
   if (skillsEnabled) {
     skillDiscoveryService.ensureSkillsDirectory();
   }
+
+  // Track session initialization for restoration support
+  // Each session has a promise that resolves when upstream servers are connected
+  const sessionInitPromises = new Map<
+    string,
+    { promise: Promise<void>; resolve: () => void }
+  >();
+
+  // Helper to get or create init promise for a session
+  const getSessionInitPromise = (sessionId: string) => {
+    let entry = sessionInitPromises.get(sessionId);
+    if (!entry) {
+      let resolve: () => void = () => {};
+      const promise = new Promise<void>((r) => {
+        resolve = r;
+      });
+      entry = { promise, resolve };
+      sessionInitPromises.set(sessionId, entry);
+    }
+    return entry;
+  };
 
   // Start HTTP server with per-session factory
   const handle = await serveHttp(
@@ -301,6 +336,10 @@ async function startHttpMode(
           capabilities,
           activeShim,
         );
+
+        // Signal that this session is fully initialized (upstream servers connected)
+        // This allows restored sessions to wait for completion before accepting requests
+        getSessionInitPromise(sessionId).resolve();
       });
 
       return gatewayServer.getServer();
@@ -311,6 +350,9 @@ async function startHttpMode(
       sessions: {
         // Session expires after 5 minutes of inactivity (default is 30 minutes)
         sessionTtlMs: SESSION_TTL_MS,
+        // SQLite-backed event store for SSE resumability across restarts
+        eventStoreFactory: (sessionId) =>
+          new SQLiteEventStore(sqliteDb, sessionId),
         // Clean up session-scoped state when sessions are closed
         onSessionClosed: async (sessionId) => {
           logger.info(`Session ${sessionId} closed, cleaning up...`);
@@ -334,6 +376,9 @@ async function startHttpMode(
               const shim = container.get<ISamplingShim>(TYPES.SamplingShim);
               await shim.close(sessionId);
             }
+
+            // Clean up init promise tracking
+            sessionInitPromises.delete(sessionId);
           } catch (error) {
             // Log but don't re-throw - ensure callback doesn't fail the cleanup
             logger.error(
@@ -341,6 +386,18 @@ async function startHttpMode(
               error instanceof Error ? error : new Error(String(error)),
             );
           }
+        },
+        // Wait for session to be fully initialized after restoration
+        // This ensures upstream servers are connected before accepting requests
+        onSessionRestored: async (sessionId) => {
+          logger.info(
+            `Session ${sessionId} restored, waiting for upstream servers...`,
+          );
+          const entry = getSessionInitPromise(sessionId);
+          await entry.promise;
+          logger.info(
+            `Session ${sessionId} restoration complete, upstream servers ready`,
+          );
         },
       },
     },
@@ -354,6 +411,8 @@ async function startHttpMode(
   process.on("SIGINT", async () => {
     await handle.close();
     await shutdownHandler.shutdown();
+    sqliteDb.close();
+    logger.info("SQLite database closed");
   });
 }
 
