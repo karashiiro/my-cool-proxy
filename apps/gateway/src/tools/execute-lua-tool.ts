@@ -373,6 +373,13 @@ export class ExecuteLuaTool implements ITool {
             await this.promptAggregation.listPrompts(sessionId);
           const totalPrompts = promptsResult.prompts.length;
 
+          // Get skills count
+          let totalSkills = 0;
+          if (this.config.skills?.enabled === true) {
+            const skills = await this.skillDiscoveryService.discoverSkills();
+            totalSkills = skills.length;
+          }
+
           return {
             servers: {
               connected: connectedCount,
@@ -382,6 +389,7 @@ export class ExecuteLuaTool implements ITool {
             tools: totalTools,
             resources: totalResources,
             prompts: totalPrompts,
+            skills: totalSkills,
           };
         } catch (error) {
           this.logger.error("Failed to gather summary stats:", error as Error);
