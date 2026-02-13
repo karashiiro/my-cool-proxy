@@ -61,6 +61,11 @@ describe("ExecuteLuaTool", () => {
       expect(luaRuntime.executeScript).toHaveBeenCalledWith(
         'result(server.tool({arg = "value"}):await())',
         mockServers,
+        expect.objectContaining({
+          listResources: expect.any(Function),
+          readResource: expect.any(Function),
+          summaryStats: expect.any(Function),
+        }),
       );
     });
 
@@ -239,6 +244,11 @@ describe("ExecuteLuaTool", () => {
       expect(luaRuntime.executeScript).toHaveBeenCalledWith(
         "result({})",
         expect.any(Map),
+        expect.objectContaining({
+          listResources: expect.any(Function),
+          readResource: expect.any(Function),
+          summaryStats: expect.any(Function),
+        }),
       );
     });
 

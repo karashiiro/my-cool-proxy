@@ -132,9 +132,9 @@ result({ total = #results, data = results })
 
 Gateway Skills are My Cool Proxy's implementation of [Agent Skills](https://agentskills.io) - reusable context documents that agents can load as [MCP Resources](https://modelcontextprotocol.io/specification/2025-11-25/server/resources). When enabled, agents can:
 
-- Discover skills via an automatically-injected prompt in the gateway's server instructions (or via the `list-resources` tool; look for `gw-skill://` URIs)
-- Read skill content via the `read-resource` tool
-- Execute skill scripts via the `invoke-gateway-skill-script` tool
+- Discover skills via an automatically-injected prompt in the gateway's server instructions (or via the `_gateway.list_resources()` Lua builtin; look for `gw-skill://` URIs)
+- Read skill content via the `_gateway.read_resource()` Lua builtin
+- Execute skill scripts via the `_gateway.invoke_skill_script()` Lua builtin
 
 While many agents implement their own skill systems already, these systems are highly fragmented, and it is difficult to reuse the same skills across multiple separate agent applications. While some systems such as [skills.sh](https://skills.sh) solve this by copying skills between applications explicitly, My Cool Proxy solves this by centralizing all skills into its own skill management system and exposing them over MCP. To distinguish these from existing skill systems, My Cool Proxy refers to these as "Gateway Skills."
 
@@ -152,7 +152,7 @@ See the [Configuration Guide](docs/configuration.md) for the full config referen
 | --------------------------------------------------------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [Tools](https://modelcontextprotocol.io/specification/2025-11-25/server/tools)                      | ✅         | My Cool Proxy expects tools to be supported at a bare minimum. Fortunately, everything that supports MCP supports tools.                                                                                                              |
 | [Prompts](https://modelcontextprotocol.io/specification/2025-11-25/server/prompts)                  | ⚠️         | My Cool Proxy forwards prompts from your MCP servers to the connected client. However, if your client doesn't support prompts natively, they won't be usable.                                                                         |
-| [Resources](https://modelcontextprotocol.io/specification/2025-11-25/server/resources)              | ✅         | My Cool Proxy both forwards resources from your MCP servers to the connected client and exposes dedicated `read-resource` and `list-resources` tools for agents to load them automatically.                                           |
+| [Resources](https://modelcontextprotocol.io/specification/2025-11-25/server/resources)              | ✅         | My Cool Proxy both forwards resources from your MCP servers to the connected client and provides `_gateway.read_resource()` and `_gateway.list_resources()` Lua builtins for agents to load them within scripts.                      |
 | Server Instructions                                                                                 | ✅         | My Cool Proxy loads excerpts of the instructions of connected MCP servers into its own server instructions, and also sends full copies through the `list-servers` tool when invoked.                                                  |
 | Discovery Notifications                                                                             | ✅         | My Cool Proxy listens to the tool/prompt/resource change notifications of connected MCP servers to automatically update its own internal registries, which reflects in subsequent tool calls.                                         |
 | [Completions](https://modelcontextprotocol.io/specification/2025-11-25/server/utilities/completion) | ❌         | Completions are not yet supported (but [will be](https://github.com/karashiiro/my-cool-proxy/issues/26) soon).                                                                                                                        |

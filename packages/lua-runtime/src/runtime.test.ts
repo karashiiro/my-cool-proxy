@@ -5,7 +5,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import * as z from "zod";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import type { ILogger, IMCPClientSession } from "./types.js";
+import type { ILogger, IMCPClientSession, IGatewayBuiltins } from "./types.js";
 
 // Mock logger factory
 const createMockLogger = (): ILogger => ({
@@ -14,6 +14,13 @@ const createMockLogger = (): ILogger => ({
   error: vi.fn(),
   debug: vi.fn(),
   fatal: vi.fn(),
+});
+
+// Mock gateway builtins factory - provides minimal implementation for tests
+const createMockGatewayBuiltins = (): IGatewayBuiltins => ({
+  listResources: vi.fn().mockResolvedValue({ resources: [] }),
+  readResource: vi.fn().mockResolvedValue({ contents: [] }),
+  summaryStats: vi.fn().mockResolvedValue({ servers: 0, tools: 0 }),
 });
 
 /**
@@ -126,7 +133,11 @@ describe("WasmoonRuntime", () => {
         result(42)
       `;
 
-      const result = await runtime.executeScript(script, new Map());
+      const result = await runtime.executeScript(
+        script,
+        new Map(),
+        createMockGatewayBuiltins(),
+      );
       expect(result).toBe(42);
     });
 
@@ -153,7 +164,11 @@ describe("WasmoonRuntime", () => {
       });
 
       const error = await runtime
-        .executeScript(script, new Map([["github", client]]))
+        .executeScript(
+          script,
+          new Map([["github", client]]),
+          createMockGatewayBuiltins(),
+        )
         .catch((err) => err);
 
       expect(error).toBeInstanceOf(Error);
@@ -170,7 +185,11 @@ describe("WasmoonRuntime", () => {
         result(10 + 5 * 2)
       `;
 
-      const result = await runtime.executeScript(script, new Map());
+      const result = await runtime.executeScript(
+        script,
+        new Map(),
+        createMockGatewayBuiltins(),
+      );
       expect(result).toBe(20);
     });
 
@@ -179,7 +198,11 @@ describe("WasmoonRuntime", () => {
         result("hello world")
       `;
 
-      const result = await runtime.executeScript(script, new Map());
+      const result = await runtime.executeScript(
+        script,
+        new Map(),
+        createMockGatewayBuiltins(),
+      );
       expect(result).toBe("hello world");
     });
 
@@ -188,7 +211,11 @@ describe("WasmoonRuntime", () => {
         result({ name = "test", value = 123 })
       `;
 
-      const result = await runtime.executeScript(script, new Map());
+      const result = await runtime.executeScript(
+        script,
+        new Map(),
+        createMockGatewayBuiltins(),
+      );
       expect(result).toEqual({ name: "test", value: 123 });
     });
 
@@ -198,7 +225,11 @@ describe("WasmoonRuntime", () => {
         local x = 42
       `;
 
-      const result = await runtime.executeScript(script, new Map());
+      const result = await runtime.executeScript(
+        script,
+        new Map(),
+        createMockGatewayBuiltins(),
+      );
       expect(result).toBeUndefined();
     });
   });
@@ -209,7 +240,11 @@ describe("WasmoonRuntime", () => {
         result(os)
       `;
 
-      const result = await runtime.executeScript(script, new Map());
+      const result = await runtime.executeScript(
+        script,
+        new Map(),
+        createMockGatewayBuiltins(),
+      );
       expect(result).toBeNull();
     });
 
@@ -218,7 +253,11 @@ describe("WasmoonRuntime", () => {
         result(io)
       `;
 
-      const result = await runtime.executeScript(script, new Map());
+      const result = await runtime.executeScript(
+        script,
+        new Map(),
+        createMockGatewayBuiltins(),
+      );
       expect(result).toBeNull();
     });
 
@@ -227,7 +266,11 @@ describe("WasmoonRuntime", () => {
         result(require)
       `;
 
-      const result = await runtime.executeScript(script, new Map());
+      const result = await runtime.executeScript(
+        script,
+        new Map(),
+        createMockGatewayBuiltins(),
+      );
       expect(result).toBeNull();
     });
 
@@ -236,7 +279,11 @@ describe("WasmoonRuntime", () => {
         result(dofile)
       `;
 
-      const result = await runtime.executeScript(script, new Map());
+      const result = await runtime.executeScript(
+        script,
+        new Map(),
+        createMockGatewayBuiltins(),
+      );
       expect(result).toBeNull();
     });
 
@@ -245,7 +292,11 @@ describe("WasmoonRuntime", () => {
         result(loadfile)
       `;
 
-      const result = await runtime.executeScript(script, new Map());
+      const result = await runtime.executeScript(
+        script,
+        new Map(),
+        createMockGatewayBuiltins(),
+      );
       expect(result).toBeNull();
     });
 
@@ -254,7 +305,11 @@ describe("WasmoonRuntime", () => {
         result(debug)
       `;
 
-      const result = await runtime.executeScript(script, new Map());
+      const result = await runtime.executeScript(
+        script,
+        new Map(),
+        createMockGatewayBuiltins(),
+      );
       expect(result).toBeNull();
     });
 
@@ -263,7 +318,11 @@ describe("WasmoonRuntime", () => {
         result(math.floor(3.7))
       `;
 
-      const result = await runtime.executeScript(script, new Map());
+      const result = await runtime.executeScript(
+        script,
+        new Map(),
+        createMockGatewayBuiltins(),
+      );
       expect(result).toBe(3);
     });
 
@@ -272,7 +331,11 @@ describe("WasmoonRuntime", () => {
         result(string.upper("hello"))
       `;
 
-      const result = await runtime.executeScript(script, new Map());
+      const result = await runtime.executeScript(
+        script,
+        new Map(),
+        createMockGatewayBuiltins(),
+      );
       expect(result).toBe("HELLO");
     });
 
@@ -283,7 +346,11 @@ describe("WasmoonRuntime", () => {
         result(#t)
       `;
 
-      const result = await runtime.executeScript(script, new Map());
+      const result = await runtime.executeScript(
+        script,
+        new Map(),
+        createMockGatewayBuiltins(),
+      );
       expect(result).toBe(4);
     });
   });
@@ -311,7 +378,11 @@ describe("WasmoonRuntime", () => {
         result(test_server ~= nil)
       `;
 
-      const result = await runtime.executeScript(script, servers);
+      const result = await runtime.executeScript(
+        script,
+        servers,
+        createMockGatewayBuiltins(),
+      );
       expect(result).toBe(true);
     });
 
@@ -338,7 +409,11 @@ describe("WasmoonRuntime", () => {
         result(test_server ~= nil)
       `;
 
-      const result = await runtime.executeScript(script, servers);
+      const result = await runtime.executeScript(
+        script,
+        servers,
+        createMockGatewayBuiltins(),
+      );
       expect(result).toBe(true);
     });
 
@@ -364,7 +439,11 @@ describe("WasmoonRuntime", () => {
         result(type(my_server.get_data) == "function")
       `;
 
-      const result = await runtime.executeScript(script, servers);
+      const result = await runtime.executeScript(
+        script,
+        servers,
+        createMockGatewayBuiltins(),
+      );
       expect(result).toBe(true);
     });
 
@@ -400,7 +479,11 @@ describe("WasmoonRuntime", () => {
         result(hasGetData and hasProcessInfo)
       `;
 
-      const result = await runtime.executeScript(script, servers);
+      const result = await runtime.executeScript(
+        script,
+        servers,
+        createMockGatewayBuiltins(),
+      );
       expect(result).toBe(true);
     });
 
@@ -450,7 +533,11 @@ describe("WasmoonRuntime", () => {
         result((server1 ~= nil) and (server2 ~= nil))
       `;
 
-      const result = await runtime.executeScript(script, servers);
+      const result = await runtime.executeScript(
+        script,
+        servers,
+        createMockGatewayBuiltins(),
+      );
       expect(result).toBe(true);
     });
   });
@@ -483,7 +570,7 @@ describe("WasmoonRuntime", () => {
         result(true)
       `;
 
-      await runtime.executeScript(script, servers);
+      await runtime.executeScript(script, servers, createMockGatewayBuiltins());
 
       expect(handler).toHaveBeenCalledWith({ arg1: "value1", arg2: 42 });
     });
@@ -510,7 +597,11 @@ describe("WasmoonRuntime", () => {
         result(api.get_value({}))
       `;
 
-      const result = await runtime.executeScript(script, servers);
+      const result = await runtime.executeScript(
+        script,
+        servers,
+        createMockGatewayBuiltins(),
+      );
       expect(result).toEqual({
         content: [{ type: "text", text: "Hello, world!" }],
       });
@@ -541,7 +632,7 @@ describe("WasmoonRuntime", () => {
         result(true)
       `;
 
-      await runtime.executeScript(script, servers);
+      await runtime.executeScript(script, servers, createMockGatewayBuiltins());
 
       expect(handler).toHaveBeenCalledWith({});
     });
@@ -574,7 +665,11 @@ describe("WasmoonRuntime", () => {
         result(data_server.fetch_data({}):await())
       `;
 
-      const result = await runtime.executeScript(script, servers);
+      const result = await runtime.executeScript(
+        script,
+        servers,
+        createMockGatewayBuiltins(),
+      );
       expect(result).toEqual({
         type: "article",
         title: "Test Article",
@@ -602,7 +697,11 @@ describe("WasmoonRuntime", () => {
         result(json_server.get_json({}):await())
       `;
 
-      const result = await runtime.executeScript(script, servers);
+      const result = await runtime.executeScript(
+        script,
+        servers,
+        createMockGatewayBuiltins(),
+      );
       expect(result).toEqual({ key: "value" });
     });
   });
@@ -613,7 +712,9 @@ describe("WasmoonRuntime", () => {
         this is not valid lua syntax !!!
       `;
 
-      await expect(runtime.executeScript(script, new Map())).rejects.toThrow();
+      await expect(
+        runtime.executeScript(script, new Map(), createMockGatewayBuiltins()),
+      ).rejects.toThrow();
     });
 
     it("should throw error for undefined variables", async () => {
@@ -622,7 +723,11 @@ describe("WasmoonRuntime", () => {
       `;
 
       // Lua allows undefined variables and returns nil, not an error
-      const result = await runtime.executeScript(script, new Map());
+      const result = await runtime.executeScript(
+        script,
+        new Map(),
+        createMockGatewayBuiltins(),
+      );
       expect(result).toBeNull();
     });
 
@@ -631,7 +736,9 @@ describe("WasmoonRuntime", () => {
         error("intentional error")
       `;
 
-      await expect(runtime.executeScript(script, new Map())).rejects.toThrow();
+      await expect(
+        runtime.executeScript(script, new Map(), createMockGatewayBuiltins()),
+      ).rejects.toThrow();
 
       expect(logger.error).toHaveBeenCalled();
     });
@@ -667,7 +774,11 @@ describe("WasmoonRuntime", () => {
         result(good_server ~= nil)
       `;
 
-      const result = await runtime.executeScript(script, servers);
+      const result = await runtime.executeScript(
+        script,
+        servers,
+        createMockGatewayBuiltins(),
+      );
       expect(result).toBe(true);
       expect(logger.error).toHaveBeenCalledWith(
         expect.stringContaining("Failed to inject MCP server 'bad-server'"),
@@ -725,7 +836,11 @@ describe("WasmoonRuntime", () => {
         result({ data = data, processed = processed })
       `;
 
-      const result = await runtime.executeScript(script, servers);
+      const result = await runtime.executeScript(
+        script,
+        servers,
+        createMockGatewayBuiltins(),
+      );
       expect(result).toEqual({
         data: { content: [{ type: "text", text: "data" }] },
         processed: { content: [{ type: "text", text: "processed" }] },
@@ -762,7 +877,11 @@ describe("WasmoonRuntime", () => {
         result(#results)
       `;
 
-      const result = await runtime.executeScript(script, servers);
+      const result = await runtime.executeScript(
+        script,
+        servers,
+        createMockGatewayBuiltins(),
+      );
       expect(result).toBe(3);
       expect(handler).toHaveBeenCalledTimes(3);
     });
@@ -800,7 +919,7 @@ describe("WasmoonRuntime", () => {
         result(true)
       `;
 
-      await runtime.executeScript(script, servers);
+      await runtime.executeScript(script, servers, createMockGatewayBuiltins());
 
       expect(handler).toHaveBeenCalledWith({
         nested: {

@@ -337,7 +337,7 @@ The gateway also uses a `gw-skill://` scheme for [Skills](./skills.md) - local p
 - **`gw://`** - Namespaces resources from upstream MCP servers (proxied content)
 - **`gw-skill://`** - References gateway-local skill resources (local content)
 
-Both schemes appear in `list-resources` results, allowing agents to discover both upstream resources and available skills.
+Both schemes appear in `_gateway.list_resources()` results (and native MCP resource operations), allowing agents to discover both upstream resources and available skills.
 
 ### Why Namespace in Runtime Too?
 

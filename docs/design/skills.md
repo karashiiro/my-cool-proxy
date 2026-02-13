@@ -40,31 +40,38 @@ flowchart LR
 
 ## Discovery Workflow
 
-Agents discover and use skills through standard MCP resource operations:
+Agents discover and use skills through Lua builtins within `execute` scripts:
 
 ```mermaid
 sequenceDiagram
     participant Agent
     participant Gateway
+    participant Lua as Lua Runtime
     participant Skills as Skills Directory
 
     Note over Agent,Skills: Step 1: Discover Available Skills
-    Agent->>Gateway: list-resources()
-    Gateway->>Skills: Scan skills directory
-    Skills-->>Gateway: Available skills
-    Gateway-->>Agent: Resources including gw-skill:// URIs
+    Agent->>Gateway: execute({ script = "_gateway.list_resources():await()" })
+    Gateway->>Lua: Execute script
+    Lua->>Skills: Scan skills directory
+    Skills-->>Lua: Available skills
+    Lua-->>Gateway: Resources including gw-skill:// URIs
+    Gateway-->>Agent: Resource list
 
     Note over Agent,Skills: Step 2: Load Skill Content
-    Agent->>Gateway: read-resource("gw-skill://code-review")
-    Gateway->>Skills: Read SKILL.md
-    Skills-->>Gateway: Skill content
-    Gateway-->>Agent: Skill instructions
+    Agent->>Gateway: execute({ script = "_gateway.read_resource({ uri = '...' }):await()" })
+    Gateway->>Lua: Execute script
+    Lua->>Skills: Read SKILL.md
+    Skills-->>Lua: Skill content
+    Lua-->>Gateway: Skill instructions
+    Gateway-->>Agent: Skill content
 
     Note over Agent,Skills: Step 3: (Optional) Execute Skill Script
-    Agent->>Gateway: invoke-gateway-skill-script({skill: "code-review", script: "analyze.py"})
-    Gateway->>Skills: Run scripts/analyze.py
-    Skills-->>Gateway: Script output
-    Gateway-->>Agent: Execution result
+    Agent->>Gateway: execute({ script = "_gateway.invoke_skill_script({ ... }):await()" })
+    Gateway->>Lua: Execute script
+    Lua->>Skills: Run scripts/analyze.py
+    Skills-->>Lua: Script output
+    Lua-->>Gateway: Execution result
+    Gateway-->>Agent: Result
 ```
 
 ## Skill Directory Structure
@@ -109,14 +116,20 @@ description: Analyze code for quality, maintainability, and test coverage
 Instructions for the agent on how to perform code reviews...
 ```
 
-## Gateway Tools for Skills
+## Lua Builtins for Skills
 
-When skills are enabled, these tools become available:
+When skills are enabled, these Lua builtins become available in the `_gateway` global table (within `execute` scripts):
 
-| Tool                          | Requires                                          | Description                                          |
-| ----------------------------- | ------------------------------------------------- | ---------------------------------------------------- |
-| `invoke-gateway-skill-script` | `skills.enabled: true`                            | Execute a script from a skill's `scripts/` directory |
-| `write-gateway-skill`         | `skills.enabled: true` AND `skills.mutable: true` | Create or modify skills                              |
+| Builtin                                 | Requires                                          | Description                                          |
+| --------------------------------------- | ------------------------------------------------- | ---------------------------------------------------- |
+| `_gateway.invoke_skill_script({ ... })` | `skills.enabled: true`                            | Execute a script from a skill's `scripts/` directory |
+| `_gateway.write_skill({ ... })`         | `skills.enabled: true` AND `skills.mutable: true` | Create or modify skills                              |
+
+Additionally, these builtins are always available (not skill-specific):
+
+- `_gateway.list_resources()` - List all resources including skills
+- `_gateway.read_resource({ uri = "..." })` - Read resources by URI (including `gw-skill://` URIs)
+- `_gateway.summary_stats()` - Get gateway statistics
 
 ## Configuration
 
@@ -165,7 +178,7 @@ sequenceDiagram
 
 The injected instructions include:
 
-1. **Skill name** - The identifier for `read-resource` calls
+1. **Skill name** - The identifier for `_gateway.read_resource()` calls
 2. **Description** - Tells agents _when_ to load the skill (trigger conditions)
 3. **Usage hints** - How to access skill content and nested resources
 
@@ -184,15 +197,15 @@ The description field is critical: it determines when agents choose to load a sk
 
 In HTTP mode, skills are re-discovered for each new session. This enables runtime changes without gateway restarts:
 
-1. Create a new skill with `write-gateway-skill`
+1. Create a new skill with `_gateway.write_skill()`
 2. Next session sees the new skill in its instructions
-3. Existing sessions see the skill via `list-resources` but not in their original instructions
+3. Existing sessions see the skill via `_gateway.list_resources()` but not in their original instructions
 
 This tradeoff balances discoverability with performance (instruction injection happens once per session).
 
-## Resources vs Tools: The Dual Interface
+## Resources vs Lua Builtins: The Dual Interface
 
-Skills are exposed through both MCP resources (`gw-skill://` URIs) and gateway tools (`list-resources`, `read-resource`). This is intended to resolve an interoperability problem.
+Skills are exposed through both MCP resources (`gw-skill://` URIs) and Lua builtins (`_gateway.list_resources()`, `_gateway.read_resource()`). This is intended to resolve an interoperability problem.
 
 ### The Problem: Inconsistent Resource Access
 
@@ -206,9 +219,9 @@ MCP clients handle resources differently; here are some examples:
 
 This inconsistency means skills-as-pure-resources would only work reliably in some environments. An agent using a "manual attachment" client would never discover skills on its own.
 
-### The Solution: Tool-Based Access
+### The Solution: Lua Builtin Access
 
-The gateway exposes `list-resources` and `read-resource` as **tools**, not just as MCP resource protocol handlers:
+The gateway provides `_gateway.list_resources()` and `_gateway.read_resource()` as **Lua builtins**, accessible within `execute` scripts:
 
 ```mermaid
 flowchart LR
@@ -217,9 +230,9 @@ flowchart LR
         R2["resources/read"]
     end
 
-    subgraph Tools["Gateway Tools"]
-        T1["list-resources tool"]
-        T2["read-resource tool"]
+    subgraph Builtins["Lua Builtins"]
+        B1["_gateway.list_resources()"]
+        B2["_gateway.read_resource()"]
     end
 
     subgraph Skills["Skill Resources"]
@@ -227,38 +240,37 @@ flowchart LR
     end
 
     Native --> Skills
-    Tools --> Skills
+    Builtins --> Skills
 
     Agent((Agent))
     Agent -.->|"Some clients"| Native
-    Agent -->|"All clients"| Tools
+    Agent -->|"All clients<br/>(via execute)"| Builtins
 ```
 
-Since all MCP clients support tools, agents can **always** discover and load skills by calling the gateway's tools, regardless of how their client handles native resources.
+Since all MCP clients support tools, agents can **always** discover and load skills by calling the gateway's `execute` tool with Lua scripts that use the `_gateway` builtins, regardless of how their client handles native resources.
 
 ### Complete Skill Interface
 
-| Interface                          | Purpose                                      |
-| ---------------------------------- | -------------------------------------------- |
-| `list-resources` tool              | Discover available skills (works everywhere) |
-| `read-resource` tool               | Load skill content (works everywhere)        |
-| `invoke-gateway-skill-script` tool | Execute bundled scripts                      |
-| `write-gateway-skill` tool         | Create/modify skills (when mutable)          |
-| Native `resources/list`            | For clients with built-in resource support   |
-| Native `resources/read`            | For clients with built-in resource support   |
+| Interface                                | Purpose                                         |
+| ---------------------------------------- | ----------------------------------------------- |
+| `_gateway.list_resources()` builtin      | Discover available skills (via execute)         |
+| `_gateway.read_resource()` builtin       | Load skill content (via execute)                |
+| `_gateway.invoke_skill_script()` builtin | Execute bundled scripts (via execute)           |
+| `_gateway.write_skill()` builtin         | Create/modify skills when mutable (via execute) |
+| Native `resources/list`                  | For clients with built-in resource support      |
+| Native `resources/read`                  | For clients with built-in resource support      |
 
-The native resource protocol handlers exist for clients that _do_ support resources well, but the tools ensure no agent is left behind.
+The native resource protocol handlers exist for clients that _do_ support resources well, but the Lua builtins ensure no agent is left behind.
 
 ## Implementation Details
 
 ### Key Components
 
-| Component                      | File                                            | Purpose                                         |
-| ------------------------------ | ----------------------------------------------- | ----------------------------------------------- |
-| `SkillDiscoveryService`        | `src/services/skill-discovery-service.ts`       | Scans skill directories, resolves skill content |
-| `SkillResourceProvider`        | `src/services/skill-resource-provider.ts`       | Provides skills as MCP resources                |
-| `InvokeGatewaySkillScriptTool` | `src/tools/invoke-gateway-skill-script-tool.ts` | Executes skill scripts                          |
-| `WriteGatewaySkillTool`        | `src/tools/write-gateway-skill-tool.ts`         | Creates/modifies skills                         |
+| Component               | File                                      | Purpose                                          |
+| ----------------------- | ----------------------------------------- | ------------------------------------------------ |
+| `SkillDiscoveryService` | `src/services/skill-discovery-service.ts` | Scans skill directories, resolves skill content  |
+| `SkillResourceProvider` | `src/services/skill-resource-provider.ts` | Provides skills as MCP resources                 |
+| `ExecuteLuaTool`        | `src/tools/execute-lua-tool.ts`           | Hosts `_gateway.*` builtins for skill operations |
 
 ### Resource Integration
 
@@ -266,9 +278,9 @@ Skills integrate with the resource aggregation system:
 
 ```mermaid
 flowchart TB
-    subgraph Tools["Resource Tools"]
-        ListRes["list-resources"]
-        ReadRes["read-resource"]
+    subgraph Builtins["Lua Builtins"]
+        ListRes["_gateway.list_resources()"]
+        ReadRes["_gateway.read_resource()"]
     end
 
     subgraph Aggregation["Resource Aggregation Service"]

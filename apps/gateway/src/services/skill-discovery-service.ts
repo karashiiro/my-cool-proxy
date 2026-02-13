@@ -44,9 +44,9 @@ description: Use when asked to create, write, or save a gateway skill. Covers st
 
 ## Overview
 
-Use the \`write-gateway-skill\` tool to create skills. Skills extend agent capabilities with specialized knowledge, workflows, and tools.
+Use the \`_gateway.write_skill()\` Lua builtin to create skills. Skills extend agent capabilities with specialized knowledge, workflows, and tools.
 
-NOTE: This skill is built into the MCP gateway. Do not attempt to modify it with \`write-gateway-skill\`.
+NOTE: This skill is built into the MCP gateway. Do not attempt to modify it with \`_gateway.write_skill()\`.
 
 ## Core Principles
 
@@ -127,11 +127,11 @@ Keep SKILL.md under 500 lines. Use imperative form ("Run the script" not "You sh
 
 ### Bundled Resources
 
-**scripts/** - Executable code run via \`invoke-gateway-skill-script\`
+**scripts/** - Executable code run via \`_gateway.invoke_skill_script()\`
 - Use when: same code is repeatedly rewritten, deterministic reliability needed
 - Example: \`scripts/rotate_pdf.py\` for PDF tasks
 
-**references/** - Documentation loaded on-demand via \`read-resource\` with \`gw-skill://{name}/{path}\`
+**references/** - Documentation loaded on-demand via \`_gateway.read_resource()\` with \`gw-skill://{name}/{path}\`
 - Use when: detailed docs the agent should reference while working
 - Examples: API specs, database schemas, domain knowledge
 - For large files (>10k words): include grep patterns in SKILL.md

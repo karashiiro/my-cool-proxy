@@ -63,13 +63,34 @@ export interface IMCPClientManager {
 }
 
 /**
+ * Gateway builtins interface for Lua runtime.
+ * These are functions injected into the _gateway global table.
+ */
+export interface IGatewayBuiltins {
+  listResources(): Promise<unknown>;
+  readResource(uri: string): Promise<unknown>;
+  summaryStats(): Promise<unknown>;
+  invokeSkillScript?(
+    skillName: string,
+    script: string,
+    args?: string[],
+  ): Promise<unknown>;
+  writeSkill?(
+    skillName: string,
+    content?: string,
+    files?: Array<{ path: string; content: string }>,
+  ): Promise<unknown>;
+}
+
+/**
  * Interface for Lua runtime used by tool discovery (for inspect-tool-response)
  */
 export interface ILuaRuntime {
-  /** Execute a Lua script with injected MCP servers */
+  /** Execute a Lua script with injected MCP servers and gateway builtins */
   executeScript(
     script: string,
     mcpServers: Map<string, IMCPClientSession>,
+    gatewayBuiltins: IGatewayBuiltins,
   ): Promise<unknown>;
 }
 

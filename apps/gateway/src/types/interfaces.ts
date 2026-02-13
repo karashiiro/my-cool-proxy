@@ -1,17 +1,19 @@
 import type { MCPClientSession } from "@my-cool-proxy/mcp-client";
 import type { ACPAgentConfig } from "@my-cool-proxy/acp-client";
+import type { IGatewayBuiltins } from "@my-cool-proxy/lua-runtime";
 import type { SkillMetadata } from "./skill.js";
 import type {
   ClientCapabilities,
   LoggingMessageNotification,
 } from "@modelcontextprotocol/sdk/types.js";
 
-export type { ACPAgentConfig, ClientCapabilities };
+export type { ACPAgentConfig, ClientCapabilities, IGatewayBuiltins };
 
 export interface ILuaRuntime {
   executeScript(
     script: string,
     mcpServers: Map<string, MCPClientSession>,
+    gatewayBuiltins: IGatewayBuiltins,
   ): Promise<unknown>;
 }
 
@@ -231,14 +233,14 @@ export interface ISamplingShim {
  */
 export interface SkillsConfig {
   /**
-   * Enable skill discovery and skill-related tools.
-   * When enabled, the gateway exposes skill URIs and invoke-gateway-skill-script tools.
+   * Enable skill discovery and skill-related Lua builtins.
+   * When enabled, the gateway exposes skill URIs and _gateway.invoke_skill_script() builtin.
    * Default: false
    */
   enabled?: boolean;
 
   /**
-   * Allow creating and modifying skills via write-gateway-skill tool.
+   * Allow creating and modifying skills via _gateway.write_skill() Lua builtin.
    * Only takes effect if `enabled` is true.
    * Default: false
    */

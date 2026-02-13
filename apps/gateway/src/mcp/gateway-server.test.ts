@@ -17,6 +17,7 @@ import type {
   ILuaRuntime,
   IMCPClientManager,
   ServerConfig,
+  ISkillDiscoveryService,
 } from "../types/interfaces.js";
 import * as z from "zod";
 import { MCPClientSession } from "@my-cool-proxy/mcp-client";
@@ -60,6 +61,14 @@ const createMockClientManager = (
   close: vi.fn(),
 });
 
+// Mock skill discovery service
+const createMockSkillDiscoveryService = (): ISkillDiscoveryService => ({
+  discoverSkills: vi.fn().mockResolvedValue([]),
+  getSkillContent: vi.fn().mockResolvedValue(null),
+  getSkillResource: vi.fn().mockResolvedValue(null),
+  ensureSkillsDirectory: vi.fn(),
+});
+
 // Helper to create a tool registry with all tools
 const createToolRegistry = (
   luaRuntime: ILuaRuntime,
@@ -74,9 +83,26 @@ const createToolRegistry = (
     new MCPFormatterService(),
   );
 
+  // Create mock aggregation services for ExecuteLuaTool
+  const resourceAggregation = new ResourceAggregationService(
+    clientManager,
+    logger,
+    [],
+  );
+  const promptAggregation = new PromptAggregationService(clientManager, logger);
+  const skillDiscoveryService = createMockSkillDiscoveryService();
+
   const registry = new ToolRegistry();
   registry.register(
-    new ExecuteLuaTool(luaRuntime, clientManager, logger, config),
+    new ExecuteLuaTool(
+      luaRuntime,
+      clientManager,
+      logger,
+      config,
+      resourceAggregation,
+      promptAggregation,
+      skillDiscoveryService,
+    ),
   );
   registry.register(new ListServersTool(toolDiscovery, config));
   registry.register(new ListServerToolsTool(toolDiscovery, config));

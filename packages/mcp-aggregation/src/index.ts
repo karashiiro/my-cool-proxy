@@ -5,6 +5,7 @@ export type {
   IMCPClientManager,
   IMCPClientSession,
   ILuaRuntime,
+  IGatewayBuiltins,
   IResourceProvider,
   ServerListItem,
   ToolInfo,

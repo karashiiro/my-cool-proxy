@@ -206,67 +206,44 @@ result({ sum = sum, product = product })
 
 See [Lua Runtime](./lua-runtime.md) for detailed script execution documentation.
 
-### 6. `list-resources`
+### 6. `_gateway.list_resources()` (Lua Builtin)
 
-Lists all available MCP resources across connected servers.
+Lists all available MCP resources across connected servers. This is a Lua builtin accessible within `execute` scripts.
 
-**Input:** None (optional `server` parameter to filter by server)
+**Usage:**
 
-**Output:** Formatted listing of resources grouped by server, showing:
-
-- Resource name
-- Namespaced URI (for use with `read-resource`)
-- Description (if available)
-- MIME type (if available)
-
-**Example Output:**
-
-```
-Available Resources (3 total across 2 servers)
-==============================================
-
-## data-server (2 resources)
-
-- **config**
-  URI: gw://data-server/file:///config.json
-  Description: Server configuration file
-  MIME type: application/json
-
-- **template**
-  URI: gw://data-server/file:///template.txt
-
-## calculator (1 resource)
-
-- **help**
-  URI: gw://calculator/docs://help
-  Description: Calculator usage documentation
+```lua
+local resources = _gateway.list_resources():await()
+result(resources)
 ```
 
-**Implementation:** `src/tools/list-resources-tool.ts`
+**Output:** Structured data with resources grouped by server:
 
-### 7. `read-resource`
-
-Reads the contents of a specific MCP resource by its namespaced URI.
-
-**Input:**
-
-- `uri` - Namespaced resource URI (as returned by `list-resources`)
-
-**Output:** Resource content with URI and MIME type headers
-
-**Example:**
-
+```lua
+{
+  totalResources = 3,
+  serverCount = 2,
+  resources = {
+    { name = "config", uri = "gw://data-server/file:///config.json", ... },
+    -- ...
+  }
+}
 ```
-Input: { "uri": "gw://data-server/file:///config.json" }
 
-Output:
-[gw://data-server/file:///config.json] (application/json)
-{ "setting": "value" }
+### 7. `_gateway.read_resource()` (Lua Builtin)
+
+Reads the contents of a specific MCP resource by its namespaced URI. This is a Lua builtin accessible within `execute` scripts.
+
+**Usage:**
+
+```lua
+local content = _gateway.read_resource({ uri = "gw://data-server/file:///config.json" }):await()
+result(content)
 ```
+
+**Output:** Structured content with URI and contents array
 
 **Note:** URIs use the `gw://` namespace scheme to prevent collisions between servers. See [Resource Namespacing](./resource-namespacing.md) for details on how URIs are transformed.
-
-**Implementation:** `src/tools/read-resource-tool.ts`
 
 ## Tool Discovery Service
 
@@ -279,8 +256,12 @@ flowchart TB
         ListTools["list-server-tools"]
         Details["tool-details"]
         Inspect["inspect-tool-response"]
-        ListResources["list-resources"]
-        ReadResource["read-resource"]
+    end
+
+    subgraph Builtins["Lua Builtins (_gateway)"]
+        ListResources["list_resources()"]
+        ReadResource["read_resource()"]
+        SummaryStats["summary_stats()"]
     end
 
     subgraph Service["Tool Discovery Service"]
