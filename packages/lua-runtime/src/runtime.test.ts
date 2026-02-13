@@ -20,6 +20,8 @@ const createMockLogger = (): ILogger => ({
 const createMockGatewayBuiltins = (): IGatewayBuiltins => ({
   listResources: vi.fn().mockResolvedValue({ resources: [] }),
   readResource: vi.fn().mockResolvedValue({ contents: [] }),
+  listPrompts: vi.fn().mockResolvedValue({ prompts: [] }),
+  getPrompt: vi.fn().mockResolvedValue({ messages: [] }),
   summaryStats: vi.fn().mockResolvedValue({ servers: 0, tools: 0 }),
 });
 

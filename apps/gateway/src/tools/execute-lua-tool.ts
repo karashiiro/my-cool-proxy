@@ -72,6 +72,8 @@ GATEWAY BUILTINS:
 The \`_gateway\` global table provides built-in functions:
 - _gateway.list_resources():await() - List all available resources across connected servers
 - _gateway.read_resource({ uri = "..." }):await() - Read a resource by its namespaced URI (gw:// or gw-skill://)
+- _gateway.list_prompts():await() - List all available prompts across connected servers
+- _gateway.get_prompt({ name = "...", arguments = {...} }):await() - Get a prompt by namespaced name (server-name/prompt-name)
 - _gateway.summary_stats():await() - Get gateway statistics (server/tool/resource/prompt counts)
 
 OPTIMIZATION:
@@ -293,6 +295,47 @@ export class ExecuteLuaTool implements ITool {
             error as Error,
           );
           return { error: `Failed to read resource '${uri}': ${message}` };
+        }
+      },
+
+      listPrompts: async () => {
+        const result = await this.promptAggregation.listPrompts(sessionId);
+        const prompts = result.prompts;
+
+        if (prompts.length === 0) {
+          return { prompts: [], message: "No prompts available." };
+        }
+
+        return {
+          totalPrompts: prompts.length,
+          prompts: prompts.map((p) => ({
+            name: p.name,
+            description: p.description,
+            arguments: p.arguments,
+          })),
+        };
+      },
+
+      getPrompt: async (name: string, args?: Record<string, string>) => {
+        if (!name || typeof name !== "string") {
+          return { error: "Missing required parameter: name" };
+        }
+
+        try {
+          const result = await this.promptAggregation.getPrompt(
+            name,
+            args,
+            sessionId,
+          );
+          return {
+            name,
+            description: result.description,
+            messages: result.messages,
+          };
+        } catch (error) {
+          const message = getErrorMessage(error);
+          this.logger.error(`Failed to get prompt '${name}':`, error as Error);
+          return { error: `Failed to get prompt '${name}': ${message}` };
         }
       },
 

@@ -47,6 +47,18 @@ export interface IGatewayBuiltins {
   readResource(uri: string): Promise<unknown>;
 
   /**
+   * List all available prompts across connected MCP servers.
+   */
+  listPrompts(): Promise<unknown>;
+
+  /**
+   * Get a specific prompt by its namespaced name.
+   * @param name The namespaced prompt name (server-name/prompt-name)
+   * @param args Optional arguments to pass to the prompt
+   */
+  getPrompt(name: string, args?: Record<string, string>): Promise<unknown>;
+
+  /**
    * Get gateway summary statistics (server counts, tool counts, etc.).
    */
   summaryStats(): Promise<unknown>;

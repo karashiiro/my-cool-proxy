@@ -231,6 +231,20 @@ The 'result' function is global - don't use 'local result = ...' as this overwri
       return builtins.summaryStats();
     };
 
+    gatewayTable["list_prompts"] = async () => {
+      this.logger.debug("Calling _gateway.list_prompts()");
+      return builtins.listPrompts();
+    };
+
+    gatewayTable["get_prompt"] = async (args: {
+      name: string;
+      arguments?: Record<string, string>;
+    }) => {
+      const name = args?.name;
+      this.logger.debug(`Calling _gateway.get_prompt({ name = "${name}" })`);
+      return builtins.getPrompt(name, args?.arguments);
+    };
+
     // Conditional builtins (only when skills are enabled)
     if (builtins.invokeSkillScript) {
       const invokeSkillScript = builtins.invokeSkillScript;
