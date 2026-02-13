@@ -50,6 +50,42 @@ jobs:
         working-directory: pack-test-install
         run: npm install ../apps/gateway/karashiiro-my-cool-proxy-*.tgz
 
-      - name: Test CLI invocation
+      - name: Test CLI help
         working-directory: pack-test-install
         run: npx my-cool-proxy --help
+
+      - name: Create minimal test config
+        working-directory: pack-test-install
+        run: |
+          mkdir -p test-config
+          cat > test-config/config.json << 'EOF'
+          {
+            "transport": "http",
+            "host": "localhost",
+            "port": 3456,
+            "mcpClients": {}
+          }
+          EOF
+
+      - name: Test server actually starts
+        working-directory: pack-test-install
+        env:
+          CONFIG_PATH: ./test-config/config.json
+        run: |
+          # Start the server in background
+          npx my-cool-proxy &
+          SERVER_PID=$!
+
+          # Wait for server to initialize (imports all deps including pino)
+          sleep 3
+
+          # Verify server is responding (400 is fine - means server is up, just not a valid MCP request)
+          HTTP_CODE=$(curl --silent --output /dev/null --write-out "%{http_code}" http://localhost:3456/mcp)
+          if [ "$HTTP_CODE" = "000" ]; then
+            echo "Server failed to respond (connection refused)!"
+            kill $SERVER_PID 2>/dev/null || true
+            exit 1
+          fi
+
+          echo "Server started and responded with HTTP $HTTP_CODE!"
+          kill $SERVER_PID 2>/dev/null || true
