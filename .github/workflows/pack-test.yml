@@ -50,6 +50,38 @@ jobs:
         working-directory: pack-test-install
         run: npm install ../apps/gateway/karashiiro-my-cool-proxy-*.tgz
 
-      - name: Test CLI invocation
+      - name: Test CLI help
         working-directory: pack-test-install
         run: npx my-cool-proxy --help
+
+      - name: Create minimal test config
+        working-directory: pack-test-install
+        run: |
+          mkdir -p test-config
+          cat > test-config/config.yaml << 'EOF'
+          transport: http
+          port: 3456
+          servers: {}
+          EOF
+
+      - name: Test server actually starts
+        working-directory: pack-test-install
+        env:
+          CONFIG_PATH: ./test-config/config.yaml
+        run: |
+          # Start the server in background
+          npx my-cool-proxy &
+          SERVER_PID=$!
+
+          # Wait for server to initialize (imports all deps including pino)
+          sleep 3
+
+          # Verify server is responding
+          curl --fail --silent --show-error http://localhost:3456/mcp > /dev/null || {
+            echo "Server failed to respond!"
+            kill $SERVER_PID 2>/dev/null || true
+            exit 1
+          }
+
+          echo "Server started and responded successfully!"
+          kill $SERVER_PID 2>/dev/null || true
