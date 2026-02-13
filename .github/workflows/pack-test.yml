@@ -58,16 +58,19 @@ jobs:
         working-directory: pack-test-install
         run: |
           mkdir -p test-config
-          cat > test-config/config.yaml << 'EOF'
-          transport: http
-          port: 3456
-          servers: {}
+          cat > test-config/config.json << 'EOF'
+          {
+            "transport": "http",
+            "host": "localhost",
+            "port": 3456,
+            "mcpClients": {}
+          }
           EOF
 
       - name: Test server actually starts
         working-directory: pack-test-install
         env:
-          CONFIG_PATH: ./test-config/config.yaml
+          CONFIG_PATH: ./test-config/config.json
         run: |
           # Start the server in background
           npx my-cool-proxy &
