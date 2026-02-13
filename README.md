@@ -138,7 +138,9 @@ Gateway Skills are My Cool Proxy's implementation of [Agent Skills](https://agen
 
 While many agents implement their own skill systems already, these systems are highly fragmented, and it is difficult to reuse the same skills across multiple separate agent applications. While some systems such as [skills.sh](https://skills.sh) solve this by copying skills between applications explicitly, My Cool Proxy solves this by centralizing all skills into its own skill management system and exposing them over MCP. To distinguish these from existing skill systems, My Cool Proxy refers to these as "Gateway Skills."
 
-Gateway skills are disabled by default as they may conflict with existing skill systems built into your agent. See the [Configuration Guide](docs/configuration.md#skills) for setup options.
+Gateway Skills are disabled by default as they may conflict with existing skill systems built into your agent. See the [Configuration Guide](docs/configuration.md#skills) for setup options.
+
+For a deeper design discussion about why Gateway Skills are implemented this way, refer to [this section](https://github.com/karashiiro/my-cool-proxy/blob/main/docs/design/skills.md#context-injection) in the design docs.
 
 ## Configuration
 
