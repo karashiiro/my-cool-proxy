@@ -48,22 +48,59 @@ export class WasmoonRuntime implements ILuaRuntime {
       await engine.doString(script);
       return finalResult;
     } catch (error) {
-      this.logger.error("Lua script execution failed", error as Error);
-
-      // Check for common result() shadowing error
-      if (
-        error instanceof Error &&
-        error.message.includes("self is not a function")
-      ) {
-        const hint = `
+      if (error instanceof Error) {
+        // Check for common result() shadowing error
+        if (error.message.includes("self is not a function")) {
+          const hint = `
 💡 HINT: You may have shadowed the global 'result' function with a local variable.
 ❌ Incorrect: local result = someFunction():await()
 ✅ Correct: local res = someFunction():await(); result(res)
 
 The 'result' function is global - don't use 'local result = ...' as this overwrites it.
-        `.trim();
-        this.logger.error(hint);
-        throw new Error(`${error.message}\n${hint}`);
+          `.trim();
+          throw new Error(`${error.message}\n${hint}`);
+        }
+
+        // Check for "server not found" - attempting to use an undefined global
+        const nilGlobalMatch = error.message.match(
+          /attempt to index a nil value \(global '([^']+)'\)/,
+        );
+        if (nilGlobalMatch) {
+          const attemptedName = nilGlobalMatch[1];
+          const availableServers = Array.from(mcpServers.keys())
+            .map((name) => sanitizeLuaIdentifier(name))
+            .join(", ");
+
+          const hint = `
+💡 HINT: '${attemptedName}' is not a recognized server or global variable.
+
+Available servers: ${availableServers || "(none connected)"}
+
+Common issues:
+• Server names are sanitized for Lua (hyphens → underscores, e.g., 'my-server' → 'my_server')
+• Use list-servers tool to discover available servers before writing scripts
+• Server may have failed to connect - check gateway logs
+          `.trim();
+          throw new Error(`${error.message}\n\n${hint}`);
+        }
+
+        // Check for "tool not found" - attempting to call a non-existent tool on a server
+        const nilFieldMatch = error.message.match(
+          /attempt to call a nil value \(field '([^']+)'\)/,
+        );
+        if (nilFieldMatch) {
+          const attemptedTool = nilFieldMatch[1];
+
+          const hint = `
+💡 HINT: '${attemptedTool}' is not a recognized tool on this server.
+
+Common issues:
+• Tool names are sanitized for Lua (hyphens → underscores, e.g., 'get-data' → 'get_data')
+• Use list-server-tools to discover available tools on each server
+• Use tool-details to get the exact tool name and parameters before calling
+          `.trim();
+          throw new Error(`${error.message}\n\n${hint}`);
+        }
       }
 
       throw error;

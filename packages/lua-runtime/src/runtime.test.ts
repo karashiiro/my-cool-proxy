@@ -182,6 +182,82 @@ describe("WasmoonRuntime", () => {
       );
     });
 
+    it("should provide helpful error for non-existent server", async () => {
+      const script = `
+        result(nonexistent_server.some_tool():await())
+      `;
+
+      // Create a different server so we have something to suggest
+      const { server, client } = await createTestServer("my-api", [
+        {
+          name: "tool",
+          description: "A tool",
+          handler: async () => ({
+            content: [{ type: "text", text: "result" }],
+          }),
+        },
+      ]);
+      cleanupFns.push(async () => {
+        await client.close();
+        await server.close();
+      });
+
+      const error = await runtime
+        .executeScript(
+          script,
+          new Map([["my-api", client]]),
+          createMockGatewayBuiltins(),
+        )
+        .catch((err) => err);
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain(
+        "attempt to index a nil value (global 'nonexistent_server')",
+      );
+      expect((error as Error).message).toContain(
+        "HINT: 'nonexistent_server' is not a recognized server",
+      );
+      expect((error as Error).message).toContain("Available servers: my_api");
+    });
+
+    it("should provide helpful error for non-existent tool", async () => {
+      const script = `
+        result(my_api.nonexistent_tool():await())
+      `;
+
+      // Create server with a different tool name
+      const { server, client } = await createTestServer("my-api", [
+        {
+          name: "actual-tool",
+          description: "The actual tool",
+          handler: async () => ({
+            content: [{ type: "text", text: "result" }],
+          }),
+        },
+      ]);
+      cleanupFns.push(async () => {
+        await client.close();
+        await server.close();
+      });
+
+      const error = await runtime
+        .executeScript(
+          script,
+          new Map([["my-api", client]]),
+          createMockGatewayBuiltins(),
+        )
+        .catch((err) => err);
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain(
+        "attempt to call a nil value (field 'nonexistent_tool')",
+      );
+      expect((error as Error).message).toContain(
+        "HINT: 'nonexistent_tool' is not a recognized tool",
+      );
+      expect((error as Error).message).toContain("list-server-tools");
+    });
+
     it("should execute Lua math operations", async () => {
       const script = `
         result(10 + 5 * 2)
@@ -731,18 +807,6 @@ describe("WasmoonRuntime", () => {
         createMockGatewayBuiltins(),
       );
       expect(result).toBeNull();
-    });
-
-    it("should log errors on script failure", async () => {
-      const script = `
-        error("intentional error")
-      `;
-
-      await expect(
-        runtime.executeScript(script, new Map(), createMockGatewayBuiltins()),
-      ).rejects.toThrow();
-
-      expect(logger.error).toHaveBeenCalled();
     });
 
     it("should continue if one server fails to load tools", async () => {
