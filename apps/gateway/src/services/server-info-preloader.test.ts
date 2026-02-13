@@ -12,6 +12,7 @@ describe("ServerInfoPreloader", () => {
       warn: vi.fn(),
       error: vi.fn(),
       debug: vi.fn(),
+      fatal: vi.fn(),
     };
 
     preloader = new ServerInfoPreloader(mockLogger);

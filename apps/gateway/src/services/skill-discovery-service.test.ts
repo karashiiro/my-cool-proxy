@@ -39,6 +39,7 @@ describe("SkillDiscoveryService", () => {
       warn: vi.fn(),
       error: vi.fn(),
       debug: vi.fn(),
+      fatal: vi.fn(),
     };
 
     // Create mock config with skills disabled by default

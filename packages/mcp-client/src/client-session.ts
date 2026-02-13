@@ -16,7 +16,25 @@ import {
   type Notification,
   type Result,
   type LoggingMessageNotification,
+  type LoggingLevel,
 } from "@modelcontextprotocol/sdk/types.js";
+
+/**
+ * Maps MCP logging levels (RFC 5424 syslog) to pino levels.
+ * MCP has 8 levels; pino has 6. We map conservatively.
+ */
+type PinoLogLevel = "debug" | "info" | "warn" | "error" | "fatal";
+
+const MCP_TO_PINO_LEVEL: Record<LoggingLevel, PinoLogLevel> = {
+  debug: "debug",
+  info: "info",
+  notice: "info", // No pino equivalent, promote to info
+  warning: "warn",
+  error: "error",
+  critical: "error", // Severe but not system-wide
+  alert: "fatal", // Requires immediate action
+  emergency: "fatal", // System is unusable
+};
 import type { RequestHandlerExtra } from "@modelcontextprotocol/sdk/shared/protocol.js";
 import type {
   AnyObjectSchema,
@@ -147,15 +165,43 @@ export class MCPClientSession {
       LoggingMessageNotificationSchema,
       async (notification) => {
         try {
+          const { level, logger: loggerName, data } = notification.params;
+
           // Prefix the logger field with server name for source identification
-          const originalLogger = notification.params.logger;
-          const prefixedLogger = originalLogger
-            ? `[${this.serverName}] ${originalLogger}`
+          const prefixedLogger = loggerName
+            ? `[${this.serverName}] ${loggerName}`
             : `[${this.serverName}]`;
 
-          this.logger.debug(
-            `Server '${this.serverName}': Logging message received (level=${notification.params.level})`,
-          );
+          // Log to pino at the appropriate level with structured context
+          const pinoLevel = MCP_TO_PINO_LEVEL[level];
+          const logContext = {
+            mcpServer: this.serverName,
+            mcpLogger: loggerName,
+            mcpLevel: level,
+            data,
+          };
+
+          const dataStr = this.formatDataForMessage(data);
+          const message = `MCP log from ${this.serverName}: ${dataStr}`;
+
+          // Call the appropriate logger method based on MCP level
+          switch (pinoLevel) {
+            case "debug":
+              this.logger.debug(logContext, message);
+              break;
+            case "info":
+              this.logger.info(logContext, message);
+              break;
+            case "warn":
+              this.logger.warn(logContext, message);
+              break;
+            case "error":
+              this.logger.error(logContext, message);
+              break;
+            case "fatal":
+              this.logger.fatal(logContext, message);
+              break;
+          }
 
           // Forward to gateway with prefixed logger, preserving original data
           if (this.onLoggingMessage) {
@@ -171,6 +217,22 @@ export class MCPClientSession {
         }
       },
     );
+  }
+
+  /**
+   * Format log data for inclusion in the human-readable log message.
+   * Truncates long JSON to keep console output readable while full data
+   * is available in the structured context.
+   */
+  private formatDataForMessage(data: unknown): string {
+    if (data === undefined || data === null) return "";
+    if (typeof data === "string") return data;
+    try {
+      const str = JSON.stringify(data);
+      return str.length > 200 ? str.slice(0, 200) + "..." : str;
+    } catch {
+      return "[unserializable data]";
+    }
   }
 
   getServerVersion(): Implementation | undefined {

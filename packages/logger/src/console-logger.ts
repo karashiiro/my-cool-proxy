@@ -117,27 +117,55 @@ export class ConsoleLogger implements ILogger {
     );
   }
 
-  info(message: string): void {
-    this.logger.info(message);
-  }
-
-  warn(message: string): void {
-    this.logger.warn(message);
-  }
-
-  error(msgOrErr: string | Error, error?: Error): void {
-    if (typeof msgOrErr === "string") {
-      if (error) {
-        this.logger.error(error, msgOrErr);
-      } else {
-        this.logger.error(msgOrErr);
-      }
+  info(msgOrObj: string | object, message?: string): void {
+    if (typeof msgOrObj === "string") {
+      this.logger.info(msgOrObj);
     } else {
-      this.logger.error(msgOrErr);
+      this.logger.info(msgOrObj, message!);
     }
   }
 
-  debug(message: string): void {
-    this.logger.debug(message);
+  warn(msgOrObj: string | object, message?: string): void {
+    if (typeof msgOrObj === "string") {
+      this.logger.warn(msgOrObj);
+    } else {
+      this.logger.warn(msgOrObj, message!);
+    }
+  }
+
+  error(
+    msgOrObj: string | object | Error,
+    messageOrError?: string | Error,
+  ): void {
+    if (typeof msgOrObj === "string") {
+      // error(message) or error(message, error)
+      if (messageOrError instanceof Error) {
+        this.logger.error(messageOrError, msgOrObj);
+      } else {
+        this.logger.error(msgOrObj);
+      }
+    } else if (msgOrObj instanceof Error) {
+      // error(Error)
+      this.logger.error(msgOrObj);
+    } else {
+      // error(obj, message)
+      this.logger.error(msgOrObj, messageOrError as string);
+    }
+  }
+
+  debug(msgOrObj: string | object, message?: string): void {
+    if (typeof msgOrObj === "string") {
+      this.logger.debug(msgOrObj);
+    } else {
+      this.logger.debug(msgOrObj, message!);
+    }
+  }
+
+  fatal(msgOrObj: string | object, message?: string): void {
+    if (typeof msgOrObj === "string") {
+      this.logger.fatal(msgOrObj);
+    } else {
+      this.logger.fatal(msgOrObj, message!);
+    }
   }
 }

@@ -14,6 +14,7 @@ const createMockLogger = (): ILogger => ({
   warn: () => {},
   error: () => {},
   debug: () => {},
+  fatal: () => {},
 });
 
 describe("Session Persistence E2E", () => {

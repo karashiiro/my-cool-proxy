@@ -45,6 +45,7 @@ describe("WriteGatewaySkillTool", () => {
       warn: vi.fn(),
       error: vi.fn(),
       debug: vi.fn(),
+      fatal: vi.fn(),
     };
 
     tool = new WriteGatewaySkillTool(mockSkillService, mockLogger);

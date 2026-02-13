@@ -66,6 +66,7 @@ describe("InvokeGatewaySkillScriptTool", () => {
       warn: vi.fn(),
       error: vi.fn(),
       debug: vi.fn(),
+      fatal: vi.fn(),
     };
 
     tool = new InvokeGatewaySkillScriptTool(mockSkillService, mockLogger);

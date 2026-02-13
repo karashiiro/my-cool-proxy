@@ -71,6 +71,7 @@ function createMockLogger(): ILogger {
     info: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),
+    fatal: vi.fn(),
   } as unknown as ILogger;
 }
 

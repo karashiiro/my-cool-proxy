@@ -13,6 +13,7 @@ const createMockLogger = (): ILogger => ({
   warn: vi.fn(),
   error: vi.fn(),
   debug: vi.fn(),
+  fatal: vi.fn(),
 });
 
 describe("MCPClientSession", () => {
@@ -421,15 +422,16 @@ describe("MCPClientSession", () => {
   });
 
   describe("logging message notifications", () => {
-    it("should forward logging messages with prefixed logger field", async () => {
-      const onLoggingMessage = vi.fn();
+    // Variable to capture logging handler during session creation
+    let loggingHandler:
+      | ((notification: {
+          params: { level: string; logger?: string; data: unknown };
+        }) => Promise<void>)
+      | undefined;
 
-      // Capture the notification handler
-      let loggingHandler:
-        | ((notification: {
-            params: { level: string; logger?: string; data: unknown };
-          }) => Promise<void>)
-        | undefined;
+    // Set up mock to capture handler - must run before creating session
+    beforeEach(() => {
+      loggingHandler = undefined;
       vi.mocked(mockClient.setNotificationHandler).mockImplementation(
         (schema, handler) => {
           if (schema === LoggingMessageNotificationSchema) {
@@ -437,6 +439,16 @@ describe("MCPClientSession", () => {
           }
         },
       );
+    });
+
+    // Helper to get the captured handler
+    function getHandler() {
+      if (!loggingHandler) throw new Error("Handler not captured");
+      return loggingHandler;
+    }
+
+    it("should forward logging messages with prefixed logger field", async () => {
+      const onLoggingMessage = vi.fn();
 
       new MCPClientSession(
         mockClient,
@@ -450,10 +462,7 @@ describe("MCPClientSession", () => {
         onLoggingMessage,
       );
 
-      expect(loggingHandler).toBeDefined();
-
-      // Trigger notification with a logger field
-      await loggingHandler!({
+      await getHandler()({
         params: {
           level: "info",
           logger: "my-logger",
@@ -466,27 +475,10 @@ describe("MCPClientSession", () => {
         logger: "[test-server] my-logger",
         data: { message: "test log" },
       });
-
-      expect(logger.debug).toHaveBeenCalledWith(
-        `Server '${serverName}': Logging message received (level=info)`,
-      );
     });
 
     it("should use server name as logger when no logger provided", async () => {
       const onLoggingMessage = vi.fn();
-
-      let loggingHandler:
-        | ((notification: {
-            params: { level: string; logger?: string; data: unknown };
-          }) => Promise<void>)
-        | undefined;
-      vi.mocked(mockClient.setNotificationHandler).mockImplementation(
-        (schema, handler) => {
-          if (schema === LoggingMessageNotificationSchema) {
-            loggingHandler = handler as typeof loggingHandler;
-          }
-        },
-      );
 
       new MCPClientSession(
         mockClient,
@@ -500,8 +492,7 @@ describe("MCPClientSession", () => {
         onLoggingMessage,
       );
 
-      // Trigger notification without a logger field
-      await loggingHandler!({
+      await getHandler()({
         params: {
           level: "warning",
           data: "simple string data",
@@ -517,19 +508,6 @@ describe("MCPClientSession", () => {
 
     it("should preserve structured data field unchanged", async () => {
       const onLoggingMessage = vi.fn();
-
-      let loggingHandler:
-        | ((notification: {
-            params: { level: string; logger?: string; data: unknown };
-          }) => Promise<void>)
-        | undefined;
-      vi.mocked(mockClient.setNotificationHandler).mockImplementation(
-        (schema, handler) => {
-          if (schema === LoggingMessageNotificationSchema) {
-            loggingHandler = handler as typeof loggingHandler;
-          }
-        },
-      );
 
       new MCPClientSession(
         mockClient,
@@ -549,7 +527,7 @@ describe("MCPClientSession", () => {
         nullValue: null,
       };
 
-      await loggingHandler!({
+      await getHandler()({
         params: {
           level: "debug",
           logger: "complex",
@@ -569,19 +547,6 @@ describe("MCPClientSession", () => {
         throw new Error("Handler error");
       });
 
-      let loggingHandler:
-        | ((notification: {
-            params: { level: string; logger?: string; data: unknown };
-          }) => Promise<void>)
-        | undefined;
-      vi.mocked(mockClient.setNotificationHandler).mockImplementation(
-        (schema, handler) => {
-          if (schema === LoggingMessageNotificationSchema) {
-            loggingHandler = handler as typeof loggingHandler;
-          }
-        },
-      );
-
       new MCPClientSession(
         mockClient,
         serverName,
@@ -596,7 +561,7 @@ describe("MCPClientSession", () => {
 
       // Should not throw
       await expect(
-        loggingHandler!({
+        getHandler()({
           params: {
             level: "error",
             data: "test",
@@ -610,25 +575,12 @@ describe("MCPClientSession", () => {
     });
 
     it("should not call callback if not provided", async () => {
-      let loggingHandler:
-        | ((notification: {
-            params: { level: string; logger?: string; data: unknown };
-          }) => Promise<void>)
-        | undefined;
-      vi.mocked(mockClient.setNotificationHandler).mockImplementation(
-        (schema, handler) => {
-          if (schema === LoggingMessageNotificationSchema) {
-            loggingHandler = handler as typeof loggingHandler;
-          }
-        },
-      );
-
       // Create session without logging callback
       new MCPClientSession(mockClient, serverName, undefined, logger);
 
       // Should not throw when handler is called without callback
       await expect(
-        loggingHandler!({
+        getHandler()({
           params: {
             level: "info",
             data: "test",
@@ -636,10 +588,266 @@ describe("MCPClientSession", () => {
         }),
       ).resolves.not.toThrow();
 
-      // Should still log the received message
-      expect(logger.debug).toHaveBeenCalledWith(
-        `Server '${serverName}': Logging message received (level=info)`,
-      );
+      // Should still log the message to pino
+      expect(logger.info).toHaveBeenCalled();
+    });
+
+    describe("MCP to pino level mapping", () => {
+      it("should log MCP debug level to pino debug", async () => {
+        new MCPClientSession(mockClient, serverName, undefined, logger);
+
+        await getHandler()({
+          params: { level: "debug", data: "debug message" },
+        });
+
+        expect(logger.debug).toHaveBeenCalledWith(
+          expect.objectContaining({ mcpLevel: "debug" }),
+          expect.stringContaining("debug message"),
+        );
+      });
+
+      it("should log MCP info level to pino info", async () => {
+        new MCPClientSession(mockClient, serverName, undefined, logger);
+
+        await getHandler()({
+          params: { level: "info", data: "info message" },
+        });
+
+        expect(logger.info).toHaveBeenCalledWith(
+          expect.objectContaining({ mcpLevel: "info" }),
+          expect.stringContaining("info message"),
+        );
+      });
+
+      it("should log MCP notice level to pino info", async () => {
+        new MCPClientSession(mockClient, serverName, undefined, logger);
+
+        await getHandler()({
+          params: { level: "notice", data: "notice message" },
+        });
+
+        expect(logger.info).toHaveBeenCalledWith(
+          expect.objectContaining({ mcpLevel: "notice" }),
+          expect.stringContaining("notice message"),
+        );
+      });
+
+      it("should log MCP warning level to pino warn", async () => {
+        new MCPClientSession(mockClient, serverName, undefined, logger);
+
+        await getHandler()({
+          params: { level: "warning", data: "warning message" },
+        });
+
+        expect(logger.warn).toHaveBeenCalledWith(
+          expect.objectContaining({ mcpLevel: "warning" }),
+          expect.stringContaining("warning message"),
+        );
+      });
+
+      it("should log MCP error level to pino error", async () => {
+        new MCPClientSession(mockClient, serverName, undefined, logger);
+
+        await getHandler()({
+          params: { level: "error", data: "error message" },
+        });
+
+        expect(logger.error).toHaveBeenCalledWith(
+          expect.objectContaining({ mcpLevel: "error" }),
+          expect.stringContaining("error message"),
+        );
+      });
+
+      it("should log MCP critical level to pino error", async () => {
+        new MCPClientSession(mockClient, serverName, undefined, logger);
+
+        await getHandler()({
+          params: { level: "critical", data: "critical message" },
+        });
+
+        expect(logger.error).toHaveBeenCalledWith(
+          expect.objectContaining({ mcpLevel: "critical" }),
+          expect.stringContaining("critical message"),
+        );
+      });
+
+      it("should log MCP alert level to pino fatal", async () => {
+        new MCPClientSession(mockClient, serverName, undefined, logger);
+
+        await getHandler()({
+          params: { level: "alert", data: "alert message" },
+        });
+
+        expect(logger.fatal).toHaveBeenCalledWith(
+          expect.objectContaining({ mcpLevel: "alert" }),
+          expect.stringContaining("alert message"),
+        );
+      });
+
+      it("should log MCP emergency level to pino fatal", async () => {
+        new MCPClientSession(mockClient, serverName, undefined, logger);
+
+        await getHandler()({
+          params: { level: "emergency", data: "emergency message" },
+        });
+
+        expect(logger.fatal).toHaveBeenCalledWith(
+          expect.objectContaining({ mcpLevel: "emergency" }),
+          expect.stringContaining("emergency message"),
+        );
+      });
+    });
+
+    describe("structured logging context", () => {
+      it("should include mcpServer in log context", async () => {
+        new MCPClientSession(mockClient, serverName, undefined, logger);
+
+        await getHandler()({
+          params: { level: "info", data: "test" },
+        });
+
+        expect(logger.info).toHaveBeenCalledWith(
+          expect.objectContaining({ mcpServer: serverName }),
+          expect.any(String),
+        );
+      });
+
+      it("should include mcpLogger in log context", async () => {
+        new MCPClientSession(mockClient, serverName, undefined, logger);
+
+        await getHandler()({
+          params: { level: "info", logger: "database", data: "test" },
+        });
+
+        expect(logger.info).toHaveBeenCalledWith(
+          expect.objectContaining({ mcpLogger: "database" }),
+          expect.any(String),
+        );
+      });
+
+      it("should include mcpLevel in log context", async () => {
+        new MCPClientSession(mockClient, serverName, undefined, logger);
+
+        await getHandler()({
+          params: { level: "warning", data: "test" },
+        });
+
+        expect(logger.warn).toHaveBeenCalledWith(
+          expect.objectContaining({ mcpLevel: "warning" }),
+          expect.any(String),
+        );
+      });
+
+      it("should include full data in log context", async () => {
+        new MCPClientSession(mockClient, serverName, undefined, logger);
+
+        const testData = { pool_size: 10, connections: 5 };
+        await getHandler()({
+          params: { level: "info", data: testData },
+        });
+
+        expect(logger.info).toHaveBeenCalledWith(
+          expect.objectContaining({ data: testData }),
+          expect.any(String),
+        );
+      });
+    });
+
+    describe("data formatting in message", () => {
+      it("should include string data directly in message", async () => {
+        new MCPClientSession(mockClient, serverName, undefined, logger);
+
+        await getHandler()({
+          params: { level: "info", data: "Connection pool exhausted!" },
+        });
+
+        expect(logger.info).toHaveBeenCalledWith(
+          expect.any(Object),
+          expect.stringContaining("Connection pool exhausted!"),
+        );
+      });
+
+      it("should stringify object data in message", async () => {
+        new MCPClientSession(mockClient, serverName, undefined, logger);
+
+        await getHandler()({
+          params: { level: "info", data: { count: 42 } },
+        });
+
+        expect(logger.info).toHaveBeenCalledWith(
+          expect.any(Object),
+          expect.stringContaining('{"count":42}'),
+        );
+      });
+
+      it("should truncate long data in message", async () => {
+        new MCPClientSession(mockClient, serverName, undefined, logger);
+
+        const longData = { message: "x".repeat(300) };
+        await getHandler()({
+          params: { level: "info", data: longData },
+        });
+
+        // Check that message is truncated (ends with ...)
+        expect(logger.info).toHaveBeenCalledWith(
+          expect.any(Object),
+          expect.stringMatching(/\.\.\.$/),
+        );
+      });
+
+      it("should handle null data gracefully", async () => {
+        new MCPClientSession(mockClient, serverName, undefined, logger);
+
+        await getHandler()({
+          params: { level: "info", data: null },
+        });
+
+        expect(logger.info).toHaveBeenCalled();
+      });
+
+      it("should handle undefined data gracefully", async () => {
+        new MCPClientSession(mockClient, serverName, undefined, logger);
+
+        await getHandler()({
+          params: { level: "info", data: undefined },
+        });
+
+        expect(logger.info).toHaveBeenCalled();
+      });
+    });
+
+    describe("forwarding still works alongside logging", () => {
+      it("should both log and forward messages", async () => {
+        const onLoggingMessage = vi.fn();
+
+        new MCPClientSession(
+          mockClient,
+          serverName,
+          undefined,
+          logger,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          onLoggingMessage,
+        );
+
+        await getHandler()({
+          params: {
+            level: "warning",
+            logger: "api",
+            data: { error: "timeout" },
+          },
+        });
+
+        // Both should happen
+        expect(logger.warn).toHaveBeenCalled();
+        expect(onLoggingMessage).toHaveBeenCalledWith({
+          level: "warning",
+          logger: "[test-server] api",
+          data: { error: "timeout" },
+        });
+      });
     });
   });
 });

@@ -40,6 +40,7 @@ const createMockLogger = (): ILogger => ({
   warn: vi.fn(),
   error: vi.fn(),
   debug: vi.fn(),
+  fatal: vi.fn(),
 });
 
 // Mock client manager

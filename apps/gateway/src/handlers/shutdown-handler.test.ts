@@ -8,6 +8,7 @@ const createMockLogger = (): ILogger => ({
   warn: vi.fn(),
   error: vi.fn(),
   debug: vi.fn(),
+  fatal: vi.fn(),
 });
 
 // Mock client manager factory
@@ -85,7 +86,9 @@ describe("ShutdownHandler", () => {
     it("should execute operations in correct order", async () => {
       const executionOrder: string[] = [];
 
-      vi.mocked(logger.info).mockImplementation((msg: string) => {
+      vi.mocked(logger.info).mockImplementation((...args: unknown[]) => {
+        // Handle both overloads: info(msg) and info(obj, msg)
+        const msg = typeof args[0] === "string" ? args[0] : args[1];
         executionOrder.push(`log: ${msg}`);
       });
 
