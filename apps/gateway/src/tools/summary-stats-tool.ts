@@ -1,5 +1,8 @@
 import { injectable } from "inversify";
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import type {
+  CallToolResult,
+  ToolAnnotations,
+} from "@modelcontextprotocol/sdk/types.js";
 import { $inject } from "../container/decorators.js";
 import { TYPES } from "../types/index.js";
 import type { ITool, ToolExecutionContext } from "./base-tool.js";
@@ -8,6 +11,7 @@ import {
   ResourceAggregationService,
   PromptAggregationService,
 } from "@my-cool-proxy/mcp-aggregation";
+import { getEffectiveSessionId } from "../utils/session.js";
 
 /**
  * Tool that provides summary statistics about the gateway.
@@ -22,6 +26,12 @@ export class SummaryStatsTool implements ITool {
     "Get a quick summary of the gateway: total number of connected MCP servers, " +
     "and aggregate counts of tools, resources, and prompts across all servers.";
   readonly schema = {};
+  readonly annotations: ToolAnnotations = {
+    title: "Gateway Summary Statistics",
+    readOnlyHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  };
 
   constructor(
     @$inject(TYPES.MCPClientManager) private clientPool: IMCPClientManager,
@@ -36,7 +46,7 @@ export class SummaryStatsTool implements ITool {
     _args: Record<string, unknown>,
     context: ToolExecutionContext,
   ): Promise<CallToolResult> {
-    const sessionId = context.sessionId || "default";
+    const sessionId = getEffectiveSessionId(context.sessionId);
 
     try {
       const clients = this.clientPool.getClientsBySession(sessionId);

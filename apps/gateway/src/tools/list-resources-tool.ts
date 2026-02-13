@@ -1,10 +1,14 @@
 import { injectable } from "inversify";
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import type {
+  CallToolResult,
+  ToolAnnotations,
+} from "@modelcontextprotocol/sdk/types.js";
 import { $inject } from "../container/decorators.js";
 import { TYPES } from "../types/index.js";
 import type { ITool, ToolExecutionContext } from "./base-tool.js";
 import { ResourceAggregationService } from "@my-cool-proxy/mcp-aggregation";
 import { parseResourceUri } from "@my-cool-proxy/mcp-utilities";
+import { getEffectiveSessionId } from "../utils/session.js";
 
 /**
  * Tool that lists all available MCP resources across all connected servers.
@@ -16,13 +20,19 @@ import { parseResourceUri } from "@my-cool-proxy/mcp-utilities";
 export class ListResourcesTool implements ITool {
   readonly name = "list-resources";
   readonly description =
-    "List available resources from configured MCP servers. " +
-    "Each returned resource will include all standard MCP resource fields plus a 'server' field " +
-    "indicating which server the resource belongs to.\n\n" +
+    "Lists gateway-proxied resources from upstream MCP servers. Returns only resources that are accessible " +
+    "through this gateway instance. Each resource includes a namespaced URI (gw:// or gw-skill:// scheme) " +
+    "that can be passed to read-resource.\n\n" +
     "Parameters:\n" +
     "- server (optional): The name of a specific MCP server to get resources from. If not provided, " +
-    "resources from all servers will be returned.";
+    "resources from all connected servers will be returned.";
   readonly schema = {};
+  readonly annotations: ToolAnnotations = {
+    title: "List MCP Resources",
+    readOnlyHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  };
 
   constructor(
     @$inject(TYPES.ResourceAggregationService)
@@ -33,7 +43,7 @@ export class ListResourcesTool implements ITool {
     _args: Record<string, unknown>,
     context: ToolExecutionContext,
   ): Promise<CallToolResult> {
-    const sessionId = context.sessionId || "default";
+    const sessionId = getEffectiveSessionId(context.sessionId);
 
     const result = await this.resourceAggregation.listResources(sessionId);
     const resources = result.resources;

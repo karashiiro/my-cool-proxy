@@ -1,4 +1,4 @@
-import { ConsoleLogger } from "./logger.js";
+import { ConsoleLogger } from "./console-logger.js";
 
 // This script is run in a child process to test stdout/stderr separation
 const logger = new ConsoleLogger();

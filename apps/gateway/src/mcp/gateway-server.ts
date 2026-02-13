@@ -9,13 +9,15 @@ import {
 import type {
   CreateMessageRequest,
   CreateMessageResult,
+  CreateMessageResultWithTools,
   ElicitRequest,
   ElicitResult,
+  LoggingMessageNotification,
 } from "@modelcontextprotocol/sdk/types.js";
 import type {
   IMCPClientManager,
   ILogger,
-  DownstreamCapabilities,
+  ClientCapabilities,
 } from "../types/interfaces.js";
 import { $inject } from "../container/decorators.js";
 import { TYPES } from "../types/index.js";
@@ -24,6 +26,7 @@ import {
   PromptAggregationService,
 } from "@my-cool-proxy/mcp-aggregation";
 import type { IToolRegistry } from "../tools/tool-registry.js";
+import { getEffectiveSessionId } from "../utils/session.js";
 
 /**
  * Gateway server that aggregates multiple MCP servers and provides namespaced access.
@@ -60,7 +63,7 @@ import type { IToolRegistry } from "../tools/tool-registry.js";
  * Receives the client's capabilities so upstream connections can be configured accordingly.
  */
 export type OnDownstreamInitializedCallback = (
-  capabilities: DownstreamCapabilities,
+  capabilities: ClientCapabilities,
 ) => void | Promise<void>;
 
 @injectable()
@@ -95,6 +98,8 @@ export class MCPGatewayServer {
           prompts: {
             listChanged: true,
           },
+          // Enable logging so we can forward log messages from upstream servers
+          logging: {},
         },
         ...(this.instructions && { instructions: this.instructions }),
       },
@@ -132,6 +137,17 @@ export class MCPGatewayServer {
       },
     );
 
+    // Register handler for logging notifications from clients
+    // Forward log messages from upstream servers to downstream clients
+    this.clientPool.setLoggingMessageHandler(
+      (params: LoggingMessageNotification["params"], sessionId: string) => {
+        this.logger.debug(
+          `Forwarding log from upstream (level=${params.level}, logger=${params.logger}) to session ${sessionId}`,
+        );
+        this.server.sendLoggingMessage(params, sessionId);
+      },
+    );
+
     this.setupTools();
   }
 
@@ -144,6 +160,7 @@ export class MCPGatewayServer {
           description: tool.description,
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           inputSchema: tool.schema as any,
+          annotations: tool.annotations,
         },
         async (
           args: Record<string, unknown>,
@@ -162,7 +179,9 @@ export class MCPGatewayServer {
     this.server.server.setRequestHandler(
       ListResourcesRequestSchema,
       async (_request: unknown, { sessionId }: { sessionId?: string }) =>
-        this.resourceAggregation.listResources(sessionId || "default"),
+        this.resourceAggregation.listResources(
+          getEffectiveSessionId(sessionId),
+        ),
     );
 
     this.server.server.setRequestHandler(
@@ -173,14 +192,14 @@ export class MCPGatewayServer {
       ) =>
         this.resourceAggregation.readResource(
           request.params.uri,
-          sessionId || "default",
+          getEffectiveSessionId(sessionId),
         ),
     );
 
     this.server.server.setRequestHandler(
       ListPromptsRequestSchema,
       async (_request: unknown, { sessionId }: { sessionId?: string }) =>
-        this.promptAggregation.listPrompts(sessionId || "default"),
+        this.promptAggregation.listPrompts(getEffectiveSessionId(sessionId)),
     );
 
     this.server.server.setRequestHandler(
@@ -194,7 +213,7 @@ export class MCPGatewayServer {
         this.promptAggregation.getPrompt(
           request.params.name,
           request.params.arguments,
-          sessionId || "default",
+          getEffectiveSessionId(sessionId),
         ),
     );
   }
@@ -212,21 +231,18 @@ export class MCPGatewayServer {
     this.onDownstreamInitialized = callback;
 
     // Hook into the underlying server's initialization completion
-    this.server.server.oninitialized = () => {
+    this.server.server.oninitialized = async () => {
       const clientCaps = this.server.server.getClientCapabilities();
 
-      // Extract the capabilities we care about for proxying
-      const downstreamCaps: DownstreamCapabilities = {
-        sampling: clientCaps?.sampling,
-        elicitation: clientCaps?.elicitation,
-      };
+      // Forward all client capabilities to upstream servers
+      const downstreamCaps: ClientCapabilities = clientCaps || {};
 
       this.logger.debug(
-        `Downstream client initialized with capabilities: sampling=${!!downstreamCaps.sampling}, elicitation=${!!downstreamCaps.elicitation}`,
+        `Downstream client initialized with capabilities: sampling=${!!downstreamCaps.sampling}, elicitation=${!!downstreamCaps.elicitation}, roots=${!!downstreamCaps.roots}`,
       );
 
-      // Call the callback (may be async, but we don't await here)
-      void this.onDownstreamInitialized?.(downstreamCaps);
+      // Call the callback and await it to ensure proper initialization order
+      await this.onDownstreamInitialized?.(downstreamCaps);
     };
   }
 
@@ -234,14 +250,12 @@ export class MCPGatewayServer {
    * Get the downstream client's capabilities after initialization.
    * Returns undefined if the client hasn't initialized yet.
    */
-  getDownstreamCapabilities(): DownstreamCapabilities | undefined {
+  getClientCapabilities(): ClientCapabilities | undefined {
     const clientCaps = this.server.server.getClientCapabilities();
     if (!clientCaps) return undefined;
 
-    return {
-      sampling: clientCaps.sampling,
-      elicitation: clientCaps.elicitation,
-    };
+    // Return all client capabilities
+    return clientCaps;
   }
 
   getServer(): McpServer {
@@ -257,7 +271,7 @@ export class MCPGatewayServer {
    */
   async forwardSamplingRequest(
     params: CreateMessageRequest["params"],
-  ): Promise<CreateMessageResult> {
+  ): Promise<CreateMessageResult | CreateMessageResultWithTools> {
     this.logger.debug(
       `Forwarding sampling request to downstream: ${params.messages.length} message(s), maxTokens=${params.maxTokens}`,
     );

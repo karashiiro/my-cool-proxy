@@ -219,7 +219,8 @@ describe("ExecuteLuaTool", () => {
 
       expect(result.isError).toBe(true);
       expect(logger.error).toHaveBeenCalledWith(
-        expect.stringContaining("Lua script execution failed"),
+        "Lua script execution failed:",
+        expect.any(Error),
       );
     });
 

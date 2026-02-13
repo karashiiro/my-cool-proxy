@@ -1,10 +1,14 @@
 import { injectable } from "inversify";
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import * as z from "zod";
+import type {
+  CallToolResult,
+  ToolAnnotations,
+} from "@modelcontextprotocol/sdk/types.js";
 import { $inject } from "../container/decorators.js";
 import { TYPES } from "../types/index.js";
 import type { ITool, ToolExecutionContext } from "./base-tool.js";
 import { ToolDiscoveryService } from "@my-cool-proxy/mcp-aggregation";
+import { getEffectiveSessionId } from "../utils/session.js";
+import { luaServerNameSchema, luaToolNameSchema } from "./schemas.js";
 
 /**
  * Tool that provides detailed information about a specific tool on an MCP server.
@@ -23,8 +27,14 @@ export class ToolDetailsTool implements ITool {
     "If you need to understand the output structure for efficient data extraction, use inspect-tool-response " +
     "after this (but only for safe/read-only tools).";
   readonly schema = {
-    luaServerName: z.string().describe("The Lua identifier of the MCP server"),
-    luaToolName: z.string().describe("The Lua identifier of the tool"),
+    luaServerName: luaServerNameSchema,
+    luaToolName: luaToolNameSchema,
+  };
+  readonly annotations: ToolAnnotations = {
+    title: "Get Tool Details",
+    readOnlyHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
   };
 
   constructor(
@@ -40,7 +50,7 @@ export class ToolDetailsTool implements ITool {
     return this.toolDiscovery.getToolDetails(
       luaServerName as string,
       luaToolName as string,
-      context.sessionId || "default",
+      getEffectiveSessionId(context.sessionId),
     );
   }
 }

@@ -1,0 +1,125 @@
+import {
+  CreateMessageRequestSchema,
+  ElicitRequestSchema,
+} from "@modelcontextprotocol/sdk/types.js";
+import type {
+  ILogger,
+  IMCPClientManager,
+  ISamplingShim,
+  ClientCapabilities,
+} from "../types/interfaces.js";
+import type { MCPGatewayServer } from "../mcp/gateway-server.js";
+
+/**
+ * Register sampling and elicitation request handlers on upstream clients.
+ * These handlers forward requests from upstream servers to the downstream client
+ * via the gateway server.
+ */
+export function registerProxyHandlers(
+  sessionId: string,
+  clientManager: IMCPClientManager,
+  gatewayServer: MCPGatewayServer,
+  logger: ILogger,
+  capabilities: ClientCapabilities,
+  samplingShim?: ISamplingShim,
+): void {
+  const clients = clientManager.getClientsBySession(sessionId);
+
+  for (const [serverName, clientSession] of clients) {
+    // SECURITY: Only register sampling handlers for trusted servers
+    // This is the second line of defense (after capability filtering)
+    const samplingEnabled = clientSession.getDangerouslyEnableSampling();
+
+    // Register sampling handler ONLY if server is trusted
+    // IMPORTANT: Check samplingShim FIRST - if index.ts passed a shim, it determined
+    // the shim is superior (client either lacks sampling or lacks tools support).
+    if (samplingEnabled && samplingShim) {
+      // Sampling shim: route through ACP agent (shim has enhanced tools support)
+      clientSession.setRequestHandler(
+        CreateMessageRequestSchema,
+        async (request) => {
+          logger.debug(
+            `Received sampling request from upstream server '${serverName}', routing through ACP shim`,
+          );
+          try {
+            const result = await samplingShim.handleSamplingRequest(
+              sessionId,
+              request.params,
+            );
+            return result;
+          } catch (error) {
+            logger.error(
+              `Failed to handle sampling request via shim from '${serverName}'`,
+              error instanceof Error ? error : new Error(String(error)),
+            );
+            throw error;
+          }
+        },
+      );
+      logger.debug(
+        `Registered sampling shim handler for upstream server '${serverName}'`,
+      );
+    } else if (samplingEnabled && capabilities.sampling) {
+      // Native client: forward to downstream (client has full capability)
+      clientSession.setRequestHandler(
+        CreateMessageRequestSchema,
+        async (request) => {
+          logger.debug(
+            `Received sampling request from upstream server '${serverName}', forwarding to downstream`,
+          );
+          try {
+            const result = await gatewayServer.forwardSamplingRequest(
+              request.params,
+            );
+            return result;
+          } catch (error) {
+            logger.error(
+              `Failed to forward sampling request from '${serverName}'`,
+              error instanceof Error ? error : new Error(String(error)),
+            );
+            throw error;
+          }
+        },
+      );
+      logger.debug(
+        `Registered sampling request handler for upstream server '${serverName}'`,
+      );
+    } else if (!samplingEnabled && (capabilities.sampling || samplingShim)) {
+      logger.debug(
+        `NOT registering sampling handler for server '${serverName}' - dangerouslyEnableSampling not enabled`,
+      );
+    }
+
+    // Register elicitation handler if downstream supports it
+    if (capabilities.elicitation) {
+      clientSession.setRequestHandler(ElicitRequestSchema, async (request) => {
+        logger.debug(
+          `Received elicitation request from upstream server '${serverName}', forwarding to downstream`,
+        );
+        try {
+          const result = await gatewayServer.forwardElicitationRequest(
+            request.params,
+          );
+          return result;
+        } catch (error) {
+          logger.error(
+            `Failed to forward elicitation request from '${serverName}'`,
+            error instanceof Error ? error : new Error(String(error)),
+          );
+          throw error;
+        }
+      });
+      logger.debug(
+        `Registered elicitation request handler for upstream server '${serverName}'`,
+      );
+    }
+  }
+
+  const clientCount = clients.size;
+  if (capabilities.sampling || samplingShim || capabilities.elicitation) {
+    logger.info(
+      `Registered proxy handlers on ${clientCount} upstream client(s): ` +
+        `sampling=${!!capabilities.sampling}, samplingShim=${!!samplingShim}, elicitation=${!!capabilities.elicitation}`,
+    );
+  }
+}

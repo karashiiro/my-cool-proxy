@@ -136,6 +136,119 @@ Skills are disabled by default. Enable them in your gateway configuration:
 
 See the [Configuration Guide](../configuration.md#skills) for detailed configuration options.
 
+## Context Injection
+
+Skills are surfaced to AI agents through MCP server instructions, which appear in the system prompt before every conversation turn. This provides agents with metadata about available skills without requiring explicit tool calls.
+
+### How It Works
+
+When the gateway initializes (or when a new HTTP session connects), the skill discovery service scans the skills directory and builds a manifest of available skills. This manifest is injected into the gateway's MCP `instructions` field, which MCP clients automatically surface in the agent's context.
+
+```mermaid
+sequenceDiagram
+    participant Session as Session Init
+    participant Discovery as Skill Discovery
+    participant Preloader as ServerInfoPreloader
+    participant Gateway as Gateway Server
+    participant Client as MCP Client
+
+    Session->>Discovery: discoverSkills()
+    Discovery-->>Session: SkillMetadata[]
+    Session->>Preloader: buildSkillInstructions(skills)
+    Preloader-->>Session: Formatted instructions
+    Session->>Gateway: new MCPGatewayServer(..., instructions)
+    Gateway->>Client: MCP initialize response w/ instructions
+    Note over Client: Instructions appear in agent context
+```
+
+### What Gets Injected
+
+The injected instructions include:
+
+1. **Skill name** - The identifier for `read-resource` calls
+2. **Description** - Tells agents _when_ to load the skill (trigger conditions)
+3. **Usage hints** - How to access skill content and nested resources
+
+```xml
+<available_skills>
+  <skill>
+    <name>code-review</name>
+    <description>Use when reviewing code for quality...</description>
+  </skill>
+</available_skills>
+```
+
+The description field is critical: it determines when agents choose to load a skill. Poorly-written descriptions lead to skills being ignored or loaded at inappropriate times.
+
+### Session-Scoped Discovery
+
+In HTTP mode, skills are re-discovered for each new session. This enables runtime changes without gateway restarts:
+
+1. Create a new skill with `write-gateway-skill`
+2. Next session sees the new skill in its instructions
+3. Existing sessions see the skill via `list-resources` but not in their original instructions
+
+This tradeoff balances discoverability with performance (instruction injection happens once per session).
+
+## Resources vs Tools: The Dual Interface
+
+Skills are exposed through both MCP resources (`gw-skill://` URIs) and gateway tools (`list-resources`, `read-resource`). This is intended to resolve an interoperability problem.
+
+### The Problem: Inconsistent Resource Access
+
+MCP clients handle resources differently; here are some examples:
+
+| Client Behavior         | Example                                                                     |
+| ----------------------- | --------------------------------------------------------------------------- |
+| **Manual attachment**   | User must explicitly add resources to context before the agent can see them |
+| **Built-in discovery**  | Agent has native tools to list and read resources autonomously              |
+| **No resource support** | Client only exposes tools, ignoring the resource protocol entirely          |
+
+This inconsistency means skills-as-pure-resources would only work reliably in some environments. An agent using a "manual attachment" client would never discover skills on its own.
+
+### The Solution: Tool-Based Access
+
+The gateway exposes `list-resources` and `read-resource` as **tools**, not just as MCP resource protocol handlers:
+
+```mermaid
+flowchart LR
+    subgraph Native["MCP Resource Protocol"]
+        R1["resources/list"]
+        R2["resources/read"]
+    end
+
+    subgraph Tools["Gateway Tools"]
+        T1["list-resources tool"]
+        T2["read-resource tool"]
+    end
+
+    subgraph Skills["Skill Resources"]
+        S["gw-skill://..."]
+    end
+
+    Native --> Skills
+    Tools --> Skills
+
+    Agent((Agent))
+    Agent -.->|"Some clients"| Native
+    Agent -->|"All clients"| Tools
+```
+
+Since all MCP clients support tools, agents can **always** discover and load skills by calling the gateway's tools, regardless of how their client handles native resources.
+
+### Complete Skill Interface
+
+| Interface                          | Purpose                                      |
+| ---------------------------------- | -------------------------------------------- |
+| `list-resources` tool              | Discover available skills (works everywhere) |
+| `read-resource` tool               | Load skill content (works everywhere)        |
+| `invoke-gateway-skill-script` tool | Execute bundled scripts                      |
+| `write-gateway-skill` tool         | Create/modify skills (when mutable)          |
+| Native `resources/list`            | For clients with built-in resource support   |
+| Native `resources/read`            | For clients with built-in resource support   |
+
+The native resource protocol handlers exist for clients that _do_ support resources well, but the tools ensure no agent is left behind.
+
 ## Implementation Details
 
 ### Key Components
@@ -177,7 +290,7 @@ flowchart TB
 
 The gateway includes a built-in skill:
 
-- **`writing-gateway-skills`** - Instructions for creating new skills, always available when skills are enabled
+- **`writing-gateway-skills`** - Instructions for creating new skills, available when `skills.mutable: true`
 
 ## Security Considerations
 

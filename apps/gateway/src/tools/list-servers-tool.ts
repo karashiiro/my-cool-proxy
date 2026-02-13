@@ -1,11 +1,15 @@
 import { injectable } from "inversify";
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import type {
+  CallToolResult,
+  ToolAnnotations,
+} from "@modelcontextprotocol/sdk/types.js";
 import { $inject } from "../container/decorators.js";
 import { TYPES } from "../types/index.js";
 import type { ITool, ToolExecutionContext } from "./base-tool.js";
 import type { ServerConfig } from "../types/interfaces.js";
 import { ToolDiscoveryService } from "@my-cool-proxy/mcp-aggregation";
 import { SKILLS_REMINDER_CONTENT_BLOCK } from "../utils/skills.js";
+import { getEffectiveSessionId } from "../utils/session.js";
 
 /**
  * Tool that lists all available MCP servers for the current session.
@@ -23,6 +27,12 @@ export class ListServersTool implements ITool {
     "capabilities you have access to. Returns server names with their Lua identifiers for use in " +
     "subsequent discovery (list-server-tools → tool-details → optionally inspect-tool-response) and execution.";
   readonly schema = {};
+  readonly annotations: ToolAnnotations = {
+    title: "List MCP Servers",
+    readOnlyHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  };
 
   constructor(
     @$inject(TYPES.ToolDiscoveryService)
@@ -36,7 +46,7 @@ export class ListServersTool implements ITool {
     context: ToolExecutionContext,
   ): Promise<CallToolResult> {
     const result = await this.toolDiscovery.listServers(
-      context.sessionId || "default",
+      getEffectiveSessionId(context.sessionId),
     );
 
     // Add skill check note if skills are enabled

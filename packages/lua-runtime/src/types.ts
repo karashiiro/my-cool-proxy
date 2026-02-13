@@ -1,14 +1,6 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 
-/**
- * Minimal logger interface for the lua-runtime package
- */
-export interface ILogger {
-  info(message: string): void;
-  warn(message: string): void;
-  error(message: string, error?: Error): void;
-  debug(message: string): void;
-}
+export type { ILogger } from "@my-cool-proxy/logger";
 
 /**
  * Interface for MCP client sessions that the Lua runtime uses.

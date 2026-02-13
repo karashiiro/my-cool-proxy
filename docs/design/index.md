@@ -138,14 +138,14 @@ sequenceDiagram
 
 ## Key Components
 
-| Component      | File                                | Purpose                                   |
-| -------------- | ----------------------------------- | ----------------------------------------- |
-| Entry Point    | `src/index.ts`                      | Starts HTTP or stdio mode based on config |
-| DI Container   | `src/container/inversify.config.ts` | Wires all dependencies together           |
-| Gateway Server | `src/mcp/gateway-server.ts`         | Main MCP server, registers tools          |
-| Client Manager | `src/mcp/client-manager.ts`         | Manages upstream MCP connections          |
-| Lua Runtime    | `src/lua/runtime.ts`                | Executes user scripts                     |
-| Tool Discovery | `src/mcp/tool-discovery-service.ts` | Powers discovery tools                    |
+| Component      | File                                  | Purpose                                   |
+| -------------- | ------------------------------------- | ----------------------------------------- |
+| Entry Point    | `src/index.ts`                        | Starts HTTP or stdio mode based on config |
+| DI Container   | `src/container/inversify.config.ts`   | Wires all dependencies together           |
+| Gateway Server | `src/mcp/gateway-server.ts`           | Main MCP server, registers tools          |
+| Client Manager | `src/mcp/client-manager.ts`           | Manages upstream MCP connections          |
+| Lua Runtime    | `packages/lua-runtime/src/runtime.ts` | Executes user scripts                     |
+| Tool Discovery | `src/mcp/tool-discovery-service.ts`   | Powers discovery tools                    |
 
 ## Transport Modes
 
@@ -186,4 +186,5 @@ See the [Configuration Guide](../configuration.md) for the full configuration re
 - [Lua Runtime](./lua-runtime.md) - Script execution system
 - [Session Management](./session-management.md) - Session isolation and client management
 - [Resource Namespacing](./resource-namespacing.md) - Resource and prompt aggregation
+- [Sampling](./sampling.md) - Sampling support, security model, and ACP shim
 - [Skills](./skills.md) - Reusable process documents for agents

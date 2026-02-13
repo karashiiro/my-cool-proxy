@@ -304,6 +304,453 @@ describe("loadConfig", () => {
 
     expect(() => loadConfig()).toThrow(/Invalid JSON in config file/);
   });
+
+  describe("dangerouslyEnableSampling validation", () => {
+    it("should accept dangerouslyEnableSampling: true", () => {
+      const validConfig = {
+        port: 3000,
+        host: "localhost",
+        mcpClients: {
+          trusted: {
+            type: "http",
+            url: "http://example.com",
+            dangerouslyEnableSampling: true,
+          },
+        },
+      };
+
+      writeFileSync(testConfigPath, JSON.stringify(validConfig));
+      process.env.CONFIG_PATH = testConfigPath;
+
+      const config = loadConfig();
+      expect(config.mcpClients.trusted?.dangerouslyEnableSampling).toBe(true);
+    });
+
+    it("should accept dangerouslyEnableSampling: false", () => {
+      const validConfig = {
+        port: 3000,
+        host: "localhost",
+        mcpClients: {
+          untrusted: {
+            type: "stdio",
+            command: "node",
+            dangerouslyEnableSampling: false,
+          },
+        },
+      };
+
+      writeFileSync(testConfigPath, JSON.stringify(validConfig));
+      process.env.CONFIG_PATH = testConfigPath;
+
+      const config = loadConfig();
+      expect(config.mcpClients.untrusted?.dangerouslyEnableSampling).toBe(
+        false,
+      );
+    });
+
+    it("should accept omitted dangerouslyEnableSampling (undefined)", () => {
+      const validConfig = {
+        port: 3000,
+        host: "localhost",
+        mcpClients: {
+          server: {
+            type: "http",
+            url: "http://example.com",
+          },
+        },
+      };
+
+      writeFileSync(testConfigPath, JSON.stringify(validConfig));
+      process.env.CONFIG_PATH = testConfigPath;
+
+      const config = loadConfig();
+      expect(
+        config.mcpClients.server?.dangerouslyEnableSampling,
+      ).toBeUndefined();
+    });
+
+    it("should reject dangerouslyEnableSampling as string", () => {
+      const invalidConfig = {
+        port: 3000,
+        host: "localhost",
+        mcpClients: {
+          bad: {
+            type: "http",
+            url: "http://example.com",
+            dangerouslyEnableSampling: "true", // string, not boolean
+          },
+        },
+      };
+
+      writeFileSync(testConfigPath, JSON.stringify(invalidConfig));
+      process.env.CONFIG_PATH = testConfigPath;
+
+      expect(() => loadConfig()).toThrow(
+        /MCP client 'bad' has invalid 'dangerouslyEnableSampling'. Must be a boolean \(true or false\)/,
+      );
+    });
+
+    it("should reject dangerouslyEnableSampling as number", () => {
+      const invalidConfig = {
+        port: 3000,
+        host: "localhost",
+        mcpClients: {
+          bad: {
+            type: "stdio",
+            command: "node",
+            dangerouslyEnableSampling: 1, // number, not boolean
+          },
+        },
+      };
+
+      writeFileSync(testConfigPath, JSON.stringify(invalidConfig));
+      process.env.CONFIG_PATH = testConfigPath;
+
+      expect(() => loadConfig()).toThrow(
+        /MCP client 'bad' has invalid 'dangerouslyEnableSampling'. Must be a boolean \(true or false\)/,
+      );
+    });
+  });
+
+  describe("acp config validation", () => {
+    it("should accept valid acp config with agent", () => {
+      const validConfig = {
+        port: 3000,
+        host: "localhost",
+        mcpClients: {},
+        acp: {
+          agent: {
+            command: "node",
+            args: ["agent.js"],
+            env: { MODEL: "gpt-4" },
+          },
+        },
+      };
+
+      writeFileSync(testConfigPath, JSON.stringify(validConfig));
+      process.env.CONFIG_PATH = testConfigPath;
+
+      const config = loadConfig();
+      expect(config.acp).toEqual(validConfig.acp);
+    });
+
+    it("should accept acp config with only command", () => {
+      const validConfig = {
+        port: 3000,
+        host: "localhost",
+        mcpClients: {},
+        acp: {
+          agent: {
+            command: "my-agent",
+          },
+        },
+      };
+
+      writeFileSync(testConfigPath, JSON.stringify(validConfig));
+      process.env.CONFIG_PATH = testConfigPath;
+
+      const config = loadConfig();
+      expect(config.acp?.agent?.command).toBe("my-agent");
+    });
+
+    it("should accept empty acp config (no agent)", () => {
+      const validConfig = {
+        port: 3000,
+        host: "localhost",
+        mcpClients: {},
+        acp: {},
+      };
+
+      writeFileSync(testConfigPath, JSON.stringify(validConfig));
+      process.env.CONFIG_PATH = testConfigPath;
+
+      const config = loadConfig();
+      expect(config.acp).toEqual({});
+    });
+
+    it("should throw error if acp is not an object", () => {
+      const invalidConfig = {
+        port: 3000,
+        host: "localhost",
+        mcpClients: {},
+        acp: "invalid",
+      };
+
+      writeFileSync(testConfigPath, JSON.stringify(invalidConfig));
+      process.env.CONFIG_PATH = testConfigPath;
+
+      expect(() => loadConfig()).toThrow(
+        /Config 'acp' must be an object if specified/,
+      );
+    });
+
+    it("should throw error if acp.agent is not an object", () => {
+      const invalidConfig = {
+        port: 3000,
+        host: "localhost",
+        mcpClients: {},
+        acp: { agent: "invalid" },
+      };
+
+      writeFileSync(testConfigPath, JSON.stringify(invalidConfig));
+      process.env.CONFIG_PATH = testConfigPath;
+
+      expect(() => loadConfig()).toThrow(
+        /Config 'acp.agent' must be an object if specified/,
+      );
+    });
+
+    it("should throw error if acp.agent is missing command", () => {
+      const invalidConfig = {
+        port: 3000,
+        host: "localhost",
+        mcpClients: {},
+        acp: { agent: { args: ["test"] } },
+      };
+
+      writeFileSync(testConfigPath, JSON.stringify(invalidConfig));
+      process.env.CONFIG_PATH = testConfigPath;
+
+      expect(() => loadConfig()).toThrow(
+        /Config 'acp.agent' must specify 'command' as a string/,
+      );
+    });
+
+    it("should throw error if acp.agent.args is not an array", () => {
+      const invalidConfig = {
+        port: 3000,
+        host: "localhost",
+        mcpClients: {},
+        acp: { agent: { command: "node", args: "invalid" } },
+      };
+
+      writeFileSync(testConfigPath, JSON.stringify(invalidConfig));
+      process.env.CONFIG_PATH = testConfigPath;
+
+      expect(() => loadConfig()).toThrow(
+        /Config 'acp.agent.args' must be an array if specified/,
+      );
+    });
+
+    it("should throw error if acp.agent.args contains non-strings", () => {
+      const invalidConfig = {
+        port: 3000,
+        host: "localhost",
+        mcpClients: {},
+        acp: { agent: { command: "node", args: [123] } },
+      };
+
+      writeFileSync(testConfigPath, JSON.stringify(invalidConfig));
+      process.env.CONFIG_PATH = testConfigPath;
+
+      expect(() => loadConfig()).toThrow(
+        /Config 'acp.agent.args' must contain only strings/,
+      );
+    });
+
+    it("should throw error if acp.agent.env is not an object", () => {
+      const invalidConfig = {
+        port: 3000,
+        host: "localhost",
+        mcpClients: {},
+        acp: { agent: { command: "node", env: "invalid" } },
+      };
+
+      writeFileSync(testConfigPath, JSON.stringify(invalidConfig));
+      process.env.CONFIG_PATH = testConfigPath;
+
+      expect(() => loadConfig()).toThrow(
+        /Config 'acp.agent.env' must be an object if specified/,
+      );
+    });
+
+    it("should throw error if acp.agent.env contains non-string values", () => {
+      const invalidConfig = {
+        port: 3000,
+        host: "localhost",
+        mcpClients: {},
+        acp: { agent: { command: "node", env: { BAD: 123 } } },
+      };
+
+      writeFileSync(testConfigPath, JSON.stringify(invalidConfig));
+      process.env.CONFIG_PATH = testConfigPath;
+
+      expect(() => loadConfig()).toThrow(
+        /Config 'acp.agent.env.BAD' must be a string/,
+      );
+    });
+  });
+
+  describe("logging config validation", () => {
+    it("should accept valid logging config with console level", () => {
+      const validConfig = {
+        port: 3000,
+        host: "localhost",
+        mcpClients: {},
+        logging: {
+          console: { level: "debug" },
+        },
+      };
+
+      writeFileSync(testConfigPath, JSON.stringify(validConfig));
+      process.env.CONFIG_PATH = testConfigPath;
+
+      const config = loadConfig();
+      expect(config.logging?.console?.level).toBe("debug");
+    });
+
+    it("should accept valid logging config with file level", () => {
+      const validConfig = {
+        port: 3000,
+        host: "localhost",
+        mcpClients: {},
+        logging: {
+          file: { level: "warn" },
+        },
+      };
+
+      writeFileSync(testConfigPath, JSON.stringify(validConfig));
+      process.env.CONFIG_PATH = testConfigPath;
+
+      const config = loadConfig();
+      expect(config.logging?.file?.level).toBe("warn");
+    });
+
+    it("should accept valid logging config with both console and file", () => {
+      const validConfig = {
+        port: 3000,
+        host: "localhost",
+        mcpClients: {},
+        logging: {
+          console: { level: "info" },
+          file: { level: "trace" },
+        },
+      };
+
+      writeFileSync(testConfigPath, JSON.stringify(validConfig));
+      process.env.CONFIG_PATH = testConfigPath;
+
+      const config = loadConfig();
+      expect(config.logging?.console?.level).toBe("info");
+      expect(config.logging?.file?.level).toBe("trace");
+    });
+
+    it("should accept empty logging config", () => {
+      const validConfig = {
+        port: 3000,
+        host: "localhost",
+        mcpClients: {},
+        logging: {},
+      };
+
+      writeFileSync(testConfigPath, JSON.stringify(validConfig));
+      process.env.CONFIG_PATH = testConfigPath;
+
+      const config = loadConfig();
+      expect(config.logging).toEqual({});
+    });
+
+    it("should accept all valid log levels", () => {
+      const levels = ["trace", "debug", "info", "warn", "error", "fatal"];
+
+      for (const level of levels) {
+        const validConfig = {
+          port: 3000,
+          host: "localhost",
+          mcpClients: {},
+          logging: {
+            console: { level },
+          },
+        };
+
+        writeFileSync(testConfigPath, JSON.stringify(validConfig));
+        process.env.CONFIG_PATH = testConfigPath;
+
+        const config = loadConfig();
+        expect(config.logging?.console?.level).toBe(level);
+      }
+    });
+
+    it("should throw error if logging is not an object", () => {
+      const invalidConfig = {
+        port: 3000,
+        host: "localhost",
+        mcpClients: {},
+        logging: "invalid",
+      };
+
+      writeFileSync(testConfigPath, JSON.stringify(invalidConfig));
+      process.env.CONFIG_PATH = testConfigPath;
+
+      expect(() => loadConfig()).toThrow(
+        /Config 'logging' must be an object if specified/,
+      );
+    });
+
+    it("should throw error if logging.console is not an object", () => {
+      const invalidConfig = {
+        port: 3000,
+        host: "localhost",
+        mcpClients: {},
+        logging: { console: "invalid" },
+      };
+
+      writeFileSync(testConfigPath, JSON.stringify(invalidConfig));
+      process.env.CONFIG_PATH = testConfigPath;
+
+      expect(() => loadConfig()).toThrow(
+        /Config 'logging.console' must be an object if specified/,
+      );
+    });
+
+    it("should throw error if logging.file is not an object", () => {
+      const invalidConfig = {
+        port: 3000,
+        host: "localhost",
+        mcpClients: {},
+        logging: { file: "invalid" },
+      };
+
+      writeFileSync(testConfigPath, JSON.stringify(invalidConfig));
+      process.env.CONFIG_PATH = testConfigPath;
+
+      expect(() => loadConfig()).toThrow(
+        /Config 'logging.file' must be an object if specified/,
+      );
+    });
+
+    it("should throw error if logging.console.level is invalid", () => {
+      const invalidConfig = {
+        port: 3000,
+        host: "localhost",
+        mcpClients: {},
+        logging: { console: { level: "invalid" } },
+      };
+
+      writeFileSync(testConfigPath, JSON.stringify(invalidConfig));
+      process.env.CONFIG_PATH = testConfigPath;
+
+      expect(() => loadConfig()).toThrow(
+        /Config 'logging.console.level' must be one of: trace, debug, info, warn, error, fatal/,
+      );
+    });
+
+    it("should throw error if logging.file.level is invalid", () => {
+      const invalidConfig = {
+        port: 3000,
+        host: "localhost",
+        mcpClients: {},
+        logging: { file: { level: "verbose" } },
+      };
+
+      writeFileSync(testConfigPath, JSON.stringify(invalidConfig));
+      process.env.CONFIG_PATH = testConfigPath;
+
+      expect(() => loadConfig()).toThrow(
+        /Config 'logging.file.level' must be one of: trace, debug, info, warn, error, fatal/,
+      );
+    });
+  });
 });
 
 describe("mergeEnvConfig", () => {

@@ -1,5 +1,8 @@
 import { injectable } from "inversify";
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import type {
+  CallToolResult,
+  ToolAnnotations,
+} from "@modelcontextprotocol/sdk/types.js";
 import { CallToolResultSchema } from "@modelcontextprotocol/sdk/types.js";
 import * as z from "zod";
 import type {
@@ -11,6 +14,7 @@ import type {
 import { $inject } from "../container/decorators.js";
 import { TYPES } from "../types/index.js";
 import type { ITool, ToolExecutionContext } from "./base-tool.js";
+import { getEffectiveSessionId } from "../utils/session.js";
 
 /**
  * Tool that executes Lua scripts with access to MCP servers.
@@ -62,6 +66,13 @@ export class ExecuteLuaTool implements ITool {
         "Lua script to execute. See tool description for syntax and workflow.",
       ),
   };
+  readonly annotations: ToolAnnotations = {
+    title: "Execute Lua Script",
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: false,
+    openWorldHint: true,
+  };
 
   constructor(
     @$inject(TYPES.LuaRuntime) private luaRuntime: ILuaRuntime,
@@ -81,7 +92,7 @@ export class ExecuteLuaTool implements ITool {
   ): Promise<CallToolResult> {
     const { script } = args;
     const mcpServers = this.clientPool.getClientsBySession(
-      context.sessionId || "default",
+      getEffectiveSessionId(context.sessionId),
     );
 
     try {
@@ -132,7 +143,7 @@ export class ExecuteLuaTool implements ITool {
         ],
       };
     } catch (error) {
-      this.logger.error(`Lua script execution failed: ${error}`);
+      this.logger.error("Lua script execution failed:", error as Error);
       return {
         content: [{ type: "text", text: `Script execution failed:\n${error}` }],
         isError: true,

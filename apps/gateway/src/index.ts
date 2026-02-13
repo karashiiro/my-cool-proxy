@@ -5,10 +5,11 @@ import type { ContainerBindingMap } from "./container/binding-map.js";
 import { TYPES } from "./types/index.js";
 import type {
   ClientConnectionResult,
-  DownstreamCapabilities,
+  ClientCapabilities,
   ICapabilityStore,
   ILogger,
   IMCPClientManager,
+  ISamplingShim,
   IServerInfoPreloader,
   IShutdownHandler,
   ISkillDiscoveryService,
@@ -18,10 +19,7 @@ import { serveHttp } from "@karashiiro/mcp/http";
 import { serveStdio } from "@karashiiro/mcp/stdio";
 import { loadConfig, mergeEnvConfig } from "./utils/config-loader.js";
 import { MCPGatewayServer } from "./mcp/gateway-server.js";
-import {
-  CreateMessageRequestSchema,
-  ElicitRequestSchema,
-} from "@modelcontextprotocol/sdk/types.js";
+import { registerProxyHandlers } from "./handlers/proxy-handlers.js";
 import type { IToolRegistry } from "./tools/tool-registry.js";
 import type {
   ResourceAggregationService,
@@ -30,86 +28,25 @@ import type {
 import { parseArgs } from "./utils/cli-args.js";
 import { getConfigPaths, getPlatformConfigDir } from "./utils/config-paths.js";
 import { ensureServerLogDir, getServerLogPath } from "./utils/log-paths.js";
+import {
+  createSessionTempDir,
+  cleanupSessionTempDir,
+  initializeSamplingShim,
+} from "./utils/index.js";
+import { getDbPath, ensureDbDirectory } from "./utils/db-paths.js";
+import { SQLiteDatabase } from "./stores/sqlite-database.js";
+import { SQLiteEventStore } from "./stores/sqlite-event-store.js";
+import { SQLiteCapabilityStore } from "./stores/sqlite-capability-store.js";
+
+/**
+ * Session inactivity timeout in milliseconds.
+ * Sessions expire after this duration of inactivity.
+ */
+const SESSION_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 interface InitializationResult {
   successful: string[];
   failed: Array<{ name: string; error: string }>;
-}
-
-/**
- * Register sampling and elicitation request handlers on upstream clients.
- * These handlers forward requests from upstream servers to the downstream client
- * via the gateway server.
- */
-function registerProxyHandlers(
-  sessionId: string,
-  clientManager: IMCPClientManager,
-  gatewayServer: MCPGatewayServer,
-  logger: ILogger,
-  capabilities: DownstreamCapabilities,
-): void {
-  const clients = clientManager.getClientsBySession(sessionId);
-
-  for (const [serverName, clientSession] of clients) {
-    // Register sampling handler if downstream supports it
-    if (capabilities.sampling) {
-      clientSession.setRequestHandler(
-        CreateMessageRequestSchema,
-        async (request) => {
-          logger.debug(
-            `Received sampling request from upstream server '${serverName}', forwarding to downstream`,
-          );
-          try {
-            const result = await gatewayServer.forwardSamplingRequest(
-              request.params,
-            );
-            return result;
-          } catch (error) {
-            logger.error(
-              `Failed to forward sampling request from '${serverName}'`,
-              error instanceof Error ? error : new Error(String(error)),
-            );
-            throw error;
-          }
-        },
-      );
-      logger.debug(
-        `Registered sampling request handler for upstream server '${serverName}'`,
-      );
-    }
-
-    // Register elicitation handler if downstream supports it
-    if (capabilities.elicitation) {
-      clientSession.setRequestHandler(ElicitRequestSchema, async (request) => {
-        logger.debug(
-          `Received elicitation request from upstream server '${serverName}', forwarding to downstream`,
-        );
-        try {
-          const result = await gatewayServer.forwardElicitationRequest(
-            request.params,
-          );
-          return result;
-        } catch (error) {
-          logger.error(
-            `Failed to forward elicitation request from '${serverName}'`,
-            error instanceof Error ? error : new Error(String(error)),
-          );
-          throw error;
-        }
-      });
-      logger.debug(
-        `Registered elicitation request handler for upstream server '${serverName}'`,
-      );
-    }
-  }
-
-  const clientCount = clients.size;
-  if (capabilities.sampling || capabilities.elicitation) {
-    logger.info(
-      `Registered proxy handlers on ${clientCount} upstream client(s): ` +
-        `sampling=${!!capabilities.sampling}, elicitation=${!!capabilities.elicitation}`,
-    );
-  }
 }
 
 /**
@@ -126,7 +63,7 @@ async function initializeClientsForSession(
   sessionId: string,
   config: ServerConfig,
   clientManager: IMCPClientManager,
-  clientCapabilities?: DownstreamCapabilities,
+  clientCapabilities?: ClientCapabilities,
 ): Promise<InitializationResult> {
   // Ensure server log directory exists for stdio server stderr redirection
   ensureServerLogDir();
@@ -141,6 +78,7 @@ async function initializeClientsForSession(
           clientConfig.headers,
           clientConfig.allowedTools,
           clientCapabilities,
+          clientConfig.dangerouslyEnableSampling,
         );
       } else if (clientConfig.type === "stdio") {
         // Generate log path for stdio server stderr
@@ -154,6 +92,7 @@ async function initializeClientsForSession(
           clientConfig.allowedTools,
           clientCapabilities,
           stderrLogPath,
+          clientConfig.dangerouslyEnableSampling,
         );
       } else {
         // Exhaustiveness check - TypeScript will error if a new type is added
@@ -211,6 +150,25 @@ async function startHttpMode(
     throw new Error("Port and host are required for HTTP mode");
   }
 
+  // Initialize SQLite persistence for HTTP mode
+  // This provides session persistence across server restarts
+  ensureDbDirectory();
+  const dbPath = getDbPath();
+  const sqliteDb = new SQLiteDatabase(dbPath);
+  logger.info(`Session persistence enabled: ${dbPath}`);
+
+  // Create SQLite-backed capability store (replaces in-memory store for HTTP mode)
+  const capabilityStore: ICapabilityStore = new SQLiteCapabilityStore(
+    sqliteDb,
+    logger,
+  );
+
+  // Rebind capability store in container so other services (like SamplingShim) use SQLite store
+  container.unbind(TYPES.CapabilityStore);
+  container
+    .bind<ICapabilityStore>(TYPES.CapabilityStore)
+    .toConstantValue(capabilityStore);
+
   // Get shared services from DI container
   const clientManager = container.get<IMCPClientManager>(
     TYPES.MCPClientManager,
@@ -224,9 +182,6 @@ async function startHttpMode(
   );
   const shutdownHandler = container.get<IShutdownHandler>(
     TYPES.ShutdownHandler,
-  );
-  const capabilityStore = container.get<ICapabilityStore>(
-    TYPES.CapabilityStore,
   );
   const serverInfoPreloader = container.get<IServerInfoPreloader>(
     TYPES.ServerInfoPreloader,
@@ -250,6 +205,27 @@ async function startHttpMode(
   if (skillsEnabled) {
     skillDiscoveryService.ensureSkillsDirectory();
   }
+
+  // Track session initialization for restoration support
+  // Each session has a promise that resolves when upstream servers are connected
+  const sessionInitPromises = new Map<
+    string,
+    { promise: Promise<void>; resolve: () => void }
+  >();
+
+  // Helper to get or create init promise for a session
+  const getSessionInitPromise = (sessionId: string) => {
+    let entry = sessionInitPromises.get(sessionId);
+    if (!entry) {
+      let resolve: () => void = () => {};
+      const promise = new Promise<void>((r) => {
+        resolve = r;
+      });
+      entry = { promise, resolve };
+      sessionInitPromises.set(sessionId, entry);
+    }
+    return entry;
+  };
 
   // Start HTTP server with per-session factory
   const handle = await serveHttp(
@@ -278,6 +254,11 @@ async function startHttpMode(
         sessionInstructions,
       );
 
+      // Resolve the sampling shim from the container if bound
+      const samplingShim = container.isBound(TYPES.SamplingShim)
+        ? container.get<ISamplingShim>(TYPES.SamplingShim)
+        : undefined;
+
       // Set up callback to initialize upstream clients when downstream client connects
       // This ensures we forward the correct capabilities to upstream servers
       gatewayServer.setOnDownstreamInitialized(async (capabilities) => {
@@ -289,13 +270,32 @@ async function startHttpMode(
         // Store capabilities for this session
         capabilityStore.setCapabilities(sessionId, capabilities);
 
-        // Now initialize upstream MCP clients with the downstream capabilities
+        // Create session-isolated tempdir for sampling shim
+        // Note: roots/list is currently broken in the TS SDK, so we always use tempdir
+        const workingDirectory = createSessionTempDir(sessionId);
+        logger.info(
+          `Session ${sessionId}: Using tempdir as cwd: ${workingDirectory}`,
+        );
+
+        // Store working directory BEFORE initializing shim
+        capabilityStore.setWorkingDirectory(sessionId, workingDirectory);
+
+        // Initialize sampling shim if needed (when client lacks full sampling capability)
+        const { activeShim, upstreamCapabilities } =
+          await initializeSamplingShim(
+            sessionId,
+            capabilities,
+            samplingShim,
+            logger,
+          );
+
+        // Now initialize upstream MCP clients with the (possibly augmented) capabilities
         // This tells upstream servers what requests they can send through the proxy
         const initResult = await initializeClientsForSession(
           sessionId,
           config,
           clientManager,
-          capabilities,
+          upstreamCapabilities,
         );
 
         if (initResult.failed.length > 0) {
@@ -319,13 +319,20 @@ async function startHttpMode(
         );
 
         // Register proxy handlers for sampling/elicitation forwarding
+        // Pass real capabilities (not augmented) so the native path doesn't activate
+        // when only the shim is providing sampling
         registerProxyHandlers(
           sessionId,
           clientManager,
           gatewayServer,
           logger,
           capabilities,
+          activeShim,
         );
+
+        // Signal that this session is fully initialized (upstream servers connected)
+        // This allows restored sessions to wait for completion before accepting requests
+        getSessionInitPromise(sessionId).resolve();
       });
 
       return gatewayServer.getServer();
@@ -334,12 +341,37 @@ async function startHttpMode(
       port: config.port,
       host: config.host,
       sessions: {
+        // Session expires after 5 minutes of inactivity (default is 30 minutes)
+        sessionTtlMs: SESSION_TTL_MS,
+        // SQLite-backed event store for SSE resumability across restarts
+        eventStoreFactory: (sessionId) =>
+          new SQLiteEventStore(sqliteDb, sessionId),
         // Clean up session-scoped state when sessions are closed
         onSessionClosed: async (sessionId) => {
-          logger.debug(`Session ${sessionId} closed, cleaning up...`);
+          logger.info(`Session ${sessionId} closed, cleaning up...`);
           try {
             await clientManager.closeSession(sessionId);
+
+            // Clean up working directory if it's a tempdir
+            const workingDir = capabilityStore.getWorkingDirectory(sessionId);
+            if (workingDir && workingDir.includes("mcp-gateway-")) {
+              // Only clean up if it's one of our tempdirs (contains our prefix)
+              cleanupSessionTempDir(workingDir);
+              logger.info(
+                `Cleaned up tempdir for session ${sessionId}: ${workingDir}`,
+              );
+            }
+
             capabilityStore.deleteCapabilities(sessionId);
+
+            // Clean up sampling shim if active
+            if (container.isBound(TYPES.SamplingShim)) {
+              const shim = container.get<ISamplingShim>(TYPES.SamplingShim);
+              await shim.close(sessionId);
+            }
+
+            // Clean up init promise tracking
+            sessionInitPromises.delete(sessionId);
           } catch (error) {
             // Log but don't re-throw - ensure callback doesn't fail the cleanup
             logger.error(
@@ -347,6 +379,18 @@ async function startHttpMode(
               error instanceof Error ? error : new Error(String(error)),
             );
           }
+        },
+        // Wait for session to be fully initialized after restoration
+        // This ensures upstream servers are connected before accepting requests
+        onSessionRestored: async (sessionId) => {
+          logger.info(
+            `Session ${sessionId} restored, waiting for upstream servers...`,
+          );
+          const entry = getSessionInitPromise(sessionId);
+          await entry.promise;
+          logger.info(
+            `Session ${sessionId} restoration complete, upstream servers ready`,
+          );
         },
       },
     },
@@ -360,6 +404,8 @@ async function startHttpMode(
   process.on("SIGINT", async () => {
     await handle.close();
     await shutdownHandler.shutdown();
+    sqliteDb.close();
+    logger.info("SQLite database closed");
   });
 }
 
@@ -414,6 +460,11 @@ async function startStdioMode(
     }
   }
 
+  // Resolve the sampling shim from the container if bound
+  const samplingShim = container.isBound(TYPES.SamplingShim)
+    ? container.get<ISamplingShim>(TYPES.SamplingShim)
+    : undefined;
+
   // Start stdio server - upstream clients are initialized when downstream connects
   const handle = await serveStdio(() => {
     // Create gateway server FIRST
@@ -437,12 +488,28 @@ async function startStdioMode(
       // Store capabilities
       capabilityStore.setCapabilities(SESSION_ID, capabilities);
 
-      // Initialize upstream MCP clients with downstream capabilities
+      // Create session-isolated tempdir for sampling shim
+      // Note: roots/list is currently broken in the TS SDK, so we always use tempdir
+      const workingDirectory = createSessionTempDir(SESSION_ID);
+      logger.info(`Using tempdir as cwd: ${workingDirectory}`);
+
+      // Store working directory BEFORE initializing shim
+      capabilityStore.setWorkingDirectory(SESSION_ID, workingDirectory);
+
+      // Initialize sampling shim if needed (when client lacks full sampling capability)
+      const { activeShim, upstreamCapabilities } = await initializeSamplingShim(
+        SESSION_ID,
+        capabilities,
+        samplingShim,
+        logger,
+      );
+
+      // Initialize upstream MCP clients with (possibly augmented) capabilities
       const initResult = await initializeClientsForSession(
         SESSION_ID,
         config,
         clientManager,
-        capabilities,
+        upstreamCapabilities,
       );
 
       if (initResult.failed.length > 0) {
@@ -472,6 +539,7 @@ async function startStdioMode(
         gatewayServer,
         logger,
         capabilities,
+        activeShim,
       );
     });
 
@@ -484,6 +552,19 @@ async function startStdioMode(
   process.on("SIGINT", async () => {
     await handle.close();
     await clientManager.close();
+
+    // Clean up working directory if it's a tempdir
+    const workingDir = capabilityStore.getWorkingDirectory(SESSION_ID);
+    if (workingDir && workingDir.includes("mcp-gateway-")) {
+      cleanupSessionTempDir(workingDir);
+      logger.debug(`Cleaned up tempdir: ${workingDir}`);
+    }
+
+    // Clean up sampling shim if active
+    if (samplingShim) {
+      await samplingShim.closeAll();
+    }
+
     logger.info("Shutdown complete");
     process.exit(0);
   });

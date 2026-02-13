@@ -36,6 +36,32 @@ jobs:
       - name: Validate (lint, typecheck, test)
         run: pnpm check
 
+      - name: Pack package
+        working-directory: apps/gateway
+        run: pnpm pack
+
+      - name: Create test directory
+        run: mkdir pack-test-install
+
+      - name: Initialize test package.json
+        working-directory: pack-test-install
+        run: |
+          cat > package.json << 'EOF'
+          {
+            "name": "pack-test",
+            "version": "1.0.0",
+            "type": "module"
+          }
+          EOF
+
+      - name: Install packed tarball
+        working-directory: pack-test-install
+        run: npm install ../apps/gateway/karashiiro-my-cool-proxy-*.tgz
+
+      - name: Test CLI invocation
+        working-directory: pack-test-install
+        run: npx my-cool-proxy --help
+
       - name: Publish to npm
         run: pnpm publish --access public --no-git-checks
         working-directory: apps/gateway

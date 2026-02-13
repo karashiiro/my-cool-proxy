@@ -1,12 +1,16 @@
 import { injectable } from "inversify";
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import * as z from "zod";
+import type {
+  CallToolResult,
+  ToolAnnotations,
+} from "@modelcontextprotocol/sdk/types.js";
 import { $inject } from "../container/decorators.js";
 import { TYPES } from "../types/index.js";
 import type { ITool, ToolExecutionContext } from "./base-tool.js";
 import type { ServerConfig } from "../types/interfaces.js";
 import { ToolDiscoveryService } from "@my-cool-proxy/mcp-aggregation";
 import { SKILLS_REMINDER_CONTENT_BLOCK } from "../utils/skills.js";
+import { getEffectiveSessionId } from "../utils/session.js";
+import { luaServerNameSchema } from "./schemas.js";
 
 /**
  * Tool that lists all tools available on a specific MCP server.
@@ -23,9 +27,15 @@ export class ListServerToolsTool implements ITool {
     "identify which tools might be relevant for your task. Once you've identified relevant tools, use " +
     "tool-details to get complete information before calling them.";
   readonly schema = {
-    luaServerName: z
-      .string()
-      .describe("The Lua identifier of the MCP server to list tools for"),
+    luaServerName: luaServerNameSchema.describe(
+      "The Lua identifier of the MCP server to list tools for",
+    ),
+  };
+  readonly annotations: ToolAnnotations = {
+    title: "List Server Tools",
+    readOnlyHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
   };
 
   constructor(
@@ -42,7 +52,7 @@ export class ListServerToolsTool implements ITool {
     const { luaServerName } = args;
     const result = await this.toolDiscovery.listServerTools(
       luaServerName as string,
-      context.sessionId || "default",
+      getEffectiveSessionId(context.sessionId),
     );
 
     // Add skill check note if skills are enabled

@@ -1,5 +1,12 @@
 import type { MCPClientSession } from "@my-cool-proxy/mcp-client";
+import type { ACPAgentConfig } from "@my-cool-proxy/acp-client";
 import type { SkillMetadata } from "./skill.js";
+import type {
+  ClientCapabilities,
+  LoggingMessageNotification,
+} from "@modelcontextprotocol/sdk/types.js";
+
+export type { ACPAgentConfig, ClientCapabilities };
 
 export interface ILuaRuntime {
   executeScript(
@@ -21,7 +28,8 @@ export interface IMCPClientManager {
     sessionId: string,
     headers?: Record<string, string>,
     allowedTools?: string[],
-    clientCapabilities?: DownstreamCapabilities,
+    clientCapabilities?: ClientCapabilities,
+    dangerouslyEnableSampling?: boolean,
   ): Promise<ClientConnectionResult>;
   addStdioClient(
     name: string,
@@ -30,8 +38,9 @@ export interface IMCPClientManager {
     args?: string[],
     env?: Record<string, string>,
     allowedTools?: string[],
-    clientCapabilities?: DownstreamCapabilities,
+    clientCapabilities?: ClientCapabilities,
     stderrLogPath?: string,
+    dangerouslyEnableSampling?: boolean,
   ): Promise<ClientConnectionResult>;
   getClient(name: string, sessionId: string): Promise<MCPClientSession>;
   getClientsBySession(sessionId: string): Map<string, MCPClientSession>;
@@ -58,13 +67,13 @@ export interface IMCPClientManager {
   setToolListChangedHandler(
     handler: (serverName: string, sessionId: string) => void,
   ): void;
+  setLoggingMessageHandler(
+    handler: (
+      params: LoggingMessageNotification["params"],
+      sessionId: string,
+    ) => void,
+  ): void;
   close(): Promise<void>;
-}
-
-export interface ISessionStore {
-  create(sessionId: string, data: unknown): void;
-  get(sessionId: string): unknown | undefined;
-  delete(sessionId: string): void;
 }
 
 export interface IAuthStrategy {
@@ -78,22 +87,144 @@ export interface AuthInfo {
   expiresAt?: number;
 }
 
-export interface MCPClientConfigHTTP {
+/**
+ * Common configuration options shared by all MCP client types.
+ */
+export interface MCPClientConfigBase {
+  /**
+   * List of tool names to expose from this server.
+   * If undefined, all tools are exposed. If empty array, no tools are exposed.
+   */
+  allowedTools?: string[];
+  /**
+   * DANGEROUS: Enable sampling requests for this server.
+   * Sampling allows servers to request the AI client to create messages,
+   * potentially accessing your system through the downstream client.
+   * Only enable this for servers you fully trust with system access.
+   * Default: false
+   */
+  dangerouslyEnableSampling?: boolean;
+}
+
+export interface MCPClientConfigHTTP extends MCPClientConfigBase {
   type: "http";
   url: string;
   headers?: Record<string, string>;
-  allowedTools?: string[];
 }
 
-export interface MCPClientConfigStdio {
+export interface MCPClientConfigStdio extends MCPClientConfigBase {
   type: "stdio";
   command: string;
   args?: string[];
   env?: Record<string, string>;
-  allowedTools?: string[];
 }
 
 export type MCPClientConfig = MCPClientConfigHTTP | MCPClientConfigStdio;
+
+/**
+ * Configuration for ACP filesystem capabilities.
+ * Controls what filesystem operations ACP agents can perform.
+ * Both options default to false (secure by default).
+ */
+export interface ACPFilesystemConfig {
+  /**
+   * Enable reading text files within the session's working directory.
+   * When enabled, agents can read files but only within their sandbox.
+   * Default: false
+   */
+  readTextFile?: boolean;
+
+  /**
+   * Enable writing text files within the session's working directory.
+   * When enabled, agents can write files but only within their sandbox.
+   * Default: false
+   */
+  writeTextFile?: boolean;
+}
+
+/**
+ * Configuration for auto-approving ACP agent tool calls based on tool kind.
+ * Allows fine-grained control over which tool categories are auto-approved.
+ */
+export interface ACPAllowOwnToolsConfig {
+  /**
+   * DANGEROUS: Auto-approve ALL permission requests regardless of tool kind.
+   * Supersedes toolKinds if set to true.
+   * Default: false
+   */
+  dangerouslyAllowAll?: boolean;
+
+  /**
+   * List of tool kinds to auto-approve (e.g., ["read", "search", "think"]).
+   * Valid values: read, edit, delete, move, search, execute, think, fetch, switch_mode, other
+   * Default: [] (no auto-approval by kind)
+   */
+  toolKinds?: string[];
+}
+
+/**
+ * Configuration for ACP (Agent Client Protocol) features.
+ * Currently supports configuring an ACP agent for sampling shim.
+ */
+export interface ACPConfig {
+  agent?: ACPAgentConfig;
+
+  /**
+   * Filesystem capabilities for ACP agents.
+   * Controls whether agents can read/write files within their session sandbox.
+   * Default: undefined (no filesystem access)
+   */
+  filesystem?: ACPFilesystemConfig;
+
+  /**
+   * Auto-approval settings for ACP agent tool calls.
+   * Allows safe tool kinds to be auto-approved without user intervention.
+   * Default: undefined (no auto-approval)
+   */
+  allowOwnTools?: ACPAllowOwnToolsConfig;
+}
+
+/**
+ * Service that provides sampling capability when the downstream client
+ * does not natively support it, by routing requests through an ACP agent.
+ */
+export interface ISamplingShim {
+  /**
+   * Initialize the shim for a gateway session.
+   * Spawns an ACP agent process and establishes a connection.
+   */
+  initialize(sessionId: string): Promise<void>;
+
+  /**
+   * Handle a sampling request by forwarding it through the ACP agent.
+   * Creates a new ACP session for each request.
+   *
+   * Returns `CreateMessageResult` (single content block) for standard responses,
+   * or `CreateMessageResultWithTools` (content array with tool_use blocks) when
+   * the request includes tools and the model returns tool calls.
+   *
+   * Note: The current ACP-based implementation always returns `CreateMessageResult`
+   * since ACP responses don't contain tool blocks. The union type allows for future
+   * expansion and matches the MCP SDK's `createMessage()` return type.
+   */
+  handleSamplingRequest(
+    sessionId: string,
+    params: import("@modelcontextprotocol/sdk/types.js").CreateMessageRequest["params"],
+  ): Promise<
+    | import("@modelcontextprotocol/sdk/types.js").CreateMessageResult
+    | import("@modelcontextprotocol/sdk/types.js").CreateMessageResultWithTools
+  >;
+
+  /**
+   * Close the ACP agent for a specific session.
+   */
+  close(sessionId: string): Promise<void>;
+
+  /**
+   * Close all ACP agents across all sessions.
+   */
+  closeAll(): Promise<void>;
+}
 
 /**
  * Configuration for the skills feature.
@@ -114,6 +245,40 @@ export interface SkillsConfig {
   mutable?: boolean;
 }
 
+/**
+ * Valid log levels supported by the logger.
+ */
+export type LogLevel = "trace" | "debug" | "info" | "warn" | "error" | "fatal";
+
+/**
+ * Configuration for logging output.
+ * Allows independent log level configuration for console and file outputs.
+ */
+export interface LoggingConfig {
+  /**
+   * Console output configuration.
+   * Console always outputs to stderr using human-readable format.
+   */
+  console?: {
+    /**
+     * Log level for console output.
+     * Default: "info"
+     */
+    level?: LogLevel;
+  };
+  /**
+   * File output configuration.
+   * File output is always enabled at the platform-specific log path.
+   */
+  file?: {
+    /**
+     * Log level for file output.
+     * Default: "trace" (captures all logs)
+     */
+    level?: LogLevel;
+  };
+}
+
 export interface ServerConfig {
   port?: number;
   host?: string;
@@ -124,14 +289,24 @@ export interface ServerConfig {
    * Skills are reusable instruction sets that extend the gateway's capabilities.
    */
   skills?: SkillsConfig;
+  /**
+   * ACP (Agent Client Protocol) configuration.
+   * Enables routing capabilities through an ACP agent when the downstream
+   * client doesn't natively support them.
+   */
+  acp?: ACPConfig;
+  /**
+   * Logging configuration.
+   * Controls log levels for console and file outputs.
+   *
+   * Default behavior (no config):
+   * - Console: "info" level to stderr
+   * - File: "trace" level to platform log directory
+   */
+  logging?: LoggingConfig;
 }
 
-export interface ILogger {
-  info(message: string): void;
-  warn(message: string): void;
-  error(message: string, error?: Error): void;
-  debug(message: string): void;
-}
+export type { ILogger } from "@my-cool-proxy/logger";
 
 export interface ServerInfo {
   luaIdentifier: string;
@@ -168,21 +343,6 @@ export interface ICacheService<T> {
 }
 
 /**
- * Downstream client capabilities that we care about for proxying.
- * These are the capabilities that affect what we can forward to downstream clients.
- */
-export interface DownstreamCapabilities {
-  sampling?: {
-    context?: object;
-    tools?: object;
-  };
-  elicitation?: {
-    form?: object;
-    url?: object;
-  };
-}
-
-/**
  * Store for tracking downstream client capabilities per session.
  * Used to determine what capabilities to advertise to upstream servers.
  */
@@ -190,12 +350,12 @@ export interface ICapabilityStore {
   /**
    * Store capabilities for a session.
    */
-  setCapabilities(sessionId: string, caps: DownstreamCapabilities): void;
+  setCapabilities(sessionId: string, caps: ClientCapabilities): void;
 
   /**
    * Get capabilities for a session.
    */
-  getCapabilities(sessionId: string): DownstreamCapabilities | undefined;
+  getCapabilities(sessionId: string): ClientCapabilities | undefined;
 
   /**
    * Check if a session has a specific capability.
@@ -214,6 +374,18 @@ export interface ICapabilityStore {
    * Remove capabilities for a session (cleanup).
    */
   deleteCapabilities(sessionId: string): void;
+
+  /**
+   * Store the working directory for a session.
+   * This is either a valid local root from the client, or a tempdir.
+   */
+  setWorkingDirectory(sessionId: string, cwd: string): void;
+
+  /**
+   * Get the working directory for a session.
+   * Returns undefined if not set.
+   */
+  getWorkingDirectory(sessionId: string): string | undefined;
 }
 
 /**
@@ -226,6 +398,7 @@ export interface PreloadedServerInfo {
   description?: string;
   version?: string;
   instructions?: string;
+  toolNames?: string[];
 }
 
 /**

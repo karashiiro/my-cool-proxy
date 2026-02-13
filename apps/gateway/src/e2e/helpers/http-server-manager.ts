@@ -6,24 +6,28 @@ import type {
   ILogger,
   IMCPClientManager,
   ICapabilityStore,
+  ISamplingShim,
   ServerConfig,
   MCPClientConfig,
-  DownstreamCapabilities,
+  ClientCapabilities,
 } from "../../types/interfaces.js";
 import { MCPGatewayServer } from "../../mcp/gateway-server.js";
+import { registerProxyHandlers } from "../../handlers/proxy-handlers.js";
 import type {
   ResourceAggregationService,
   PromptAggregationService,
 } from "@my-cool-proxy/mcp-aggregation";
 import type { IToolRegistry } from "../../tools/tool-registry.js";
 import {
-  CreateMessageRequestSchema,
-  ElicitRequestSchema,
-} from "@modelcontextprotocol/sdk/types.js";
+  createSessionTempDir,
+  cleanupSessionTempDir,
+  initializeSamplingShim,
+} from "../../utils/index.js";
 
 export class HttpServerManager {
   private serverHandle: ServerHandle | null = null;
   private clientManager: IMCPClientManager | null = null;
+  private samplingShim: ISamplingShim | null = null;
 
   /**
    * Starts the HTTP gateway server with the provided configuration.
@@ -63,6 +67,12 @@ export class HttpServerManager {
       TYPES.CapabilityStore,
     );
 
+    // Resolve the sampling shim from the container if bound
+    const samplingShim = container.isBound(TYPES.SamplingShim)
+      ? container.get<ISamplingShim>(TYPES.SamplingShim)
+      : undefined;
+    this.samplingShim = samplingShim ?? null;
+
     // Use @karashiiro/mcp's serveHttp with session-aware factory
     this.serverHandle = await serveHttp(
       async (sessionId) => {
@@ -87,12 +97,31 @@ export class HttpServerManager {
           // Store capabilities for this session
           capabilityStore.setCapabilities(sessionId, capabilities);
 
-          // Initialize upstream MCP clients with the downstream capabilities
+          // Create session-isolated tempdir for sampling shim
+          // Note: roots/list is currently broken in the TS SDK, so we always use tempdir
+          const workingDirectory = createSessionTempDir(sessionId);
+          logger.info(
+            `Session ${sessionId}: Using tempdir as cwd: ${workingDirectory}`,
+          );
+
+          // Store working directory BEFORE initializing shim
+          capabilityStore.setWorkingDirectory(sessionId, workingDirectory);
+
+          // Initialize sampling shim if needed (when client lacks full sampling capability)
+          const { activeShim, upstreamCapabilities } =
+            await initializeSamplingShim(
+              sessionId,
+              capabilities,
+              samplingShim,
+              logger,
+            );
+
+          // Initialize upstream MCP clients with the (possibly augmented) capabilities
           await initializeClientsForSession(
             sessionId,
             config,
             clientManager,
-            capabilities,
+            upstreamCapabilities,
           );
 
           // Register proxy handlers for sampling/elicitation forwarding
@@ -102,6 +131,7 @@ export class HttpServerManager {
             gatewayServer,
             logger,
             capabilities,
+            activeShim,
           );
         });
 
@@ -114,7 +144,17 @@ export class HttpServerManager {
           onSessionClosed: async (sessionId) => {
             try {
               await clientManager.closeSession(sessionId);
+
+              // Clean up working directory if it's a tempdir
+              const workingDir = capabilityStore.getWorkingDirectory(sessionId);
+              if (workingDir && workingDir.includes("mcp-gateway-")) {
+                cleanupSessionTempDir(workingDir);
+              }
+
               capabilityStore.deleteCapabilities(sessionId);
+              if (samplingShim) {
+                await samplingShim.close(sessionId);
+              }
             } catch {
               // Ignore cleanup errors
             }
@@ -143,6 +183,11 @@ export class HttpServerManager {
     if (this.clientManager) {
       await this.clientManager.close();
       this.clientManager = null;
+    }
+
+    if (this.samplingShim) {
+      await this.samplingShim.closeAll();
+      this.samplingShim = null;
     }
   }
 
@@ -191,82 +236,6 @@ export class HttpServerManager {
 }
 
 /**
- * Register sampling and elicitation request handlers on upstream clients.
- * These handlers forward requests from upstream servers to the downstream client
- * via the gateway server.
- */
-function registerProxyHandlers(
-  sessionId: string,
-  clientManager: IMCPClientManager,
-  gatewayServer: MCPGatewayServer,
-  logger: ILogger,
-  capabilities: DownstreamCapabilities,
-): void {
-  const clients = clientManager.getClientsBySession(sessionId);
-
-  for (const [serverName, clientSession] of clients) {
-    // Register sampling handler if downstream supports it
-    if (capabilities.sampling) {
-      clientSession.setRequestHandler(
-        CreateMessageRequestSchema,
-        async (request) => {
-          logger.debug(
-            `Received sampling request from upstream server '${serverName}', forwarding to downstream`,
-          );
-          try {
-            const result = await gatewayServer.forwardSamplingRequest(
-              request.params,
-            );
-            return result;
-          } catch (error) {
-            logger.error(
-              `Failed to forward sampling request from '${serverName}'`,
-              error instanceof Error ? error : new Error(String(error)),
-            );
-            throw error;
-          }
-        },
-      );
-      logger.debug(
-        `Registered sampling request handler for upstream server '${serverName}'`,
-      );
-    }
-
-    // Register elicitation handler if downstream supports it
-    if (capabilities.elicitation) {
-      clientSession.setRequestHandler(ElicitRequestSchema, async (request) => {
-        logger.debug(
-          `Received elicitation request from upstream server '${serverName}', forwarding to downstream`,
-        );
-        try {
-          const result = await gatewayServer.forwardElicitationRequest(
-            request.params,
-          );
-          return result;
-        } catch (error) {
-          logger.error(
-            `Failed to forward elicitation request from '${serverName}'`,
-            error instanceof Error ? error : new Error(String(error)),
-          );
-          throw error;
-        }
-      });
-      logger.debug(
-        `Registered elicitation request handler for upstream server '${serverName}'`,
-      );
-    }
-  }
-
-  const clientCount = clients.size;
-  if (capabilities.sampling || capabilities.elicitation) {
-    logger.info(
-      `Registered proxy handlers on ${clientCount} upstream client(s): ` +
-        `sampling=${!!capabilities.sampling}, elicitation=${!!capabilities.elicitation}`,
-    );
-  }
-}
-
-/**
  * Initialize MCP clients for a given session.
  * This is called when a new session is created in HTTP mode.
  */
@@ -274,7 +243,7 @@ async function initializeClientsForSession(
   sessionId: string,
   config: ServerConfig,
   clientManager: IMCPClientManager,
-  capabilities?: DownstreamCapabilities,
+  capabilities?: ClientCapabilities,
 ): Promise<void> {
   const initPromises: Promise<void>[] = [];
 
@@ -301,7 +270,7 @@ async function initializeSingleClient(
   clientConfig: MCPClientConfig,
   sessionId: string,
   clientManager: IMCPClientManager,
-  capabilities?: DownstreamCapabilities,
+  capabilities?: ClientCapabilities,
 ): Promise<void> {
   if (clientConfig.type === "http") {
     await clientManager.addHttpClient(
@@ -311,6 +280,7 @@ async function initializeSingleClient(
       clientConfig.headers,
       clientConfig.allowedTools,
       capabilities,
+      clientConfig.dangerouslyEnableSampling,
     );
   } else if (clientConfig.type === "stdio") {
     await clientManager.addStdioClient(
@@ -321,6 +291,8 @@ async function initializeSingleClient(
       clientConfig.env,
       clientConfig.allowedTools,
       capabilities,
+      undefined, // stderrLogPath - not used in e2e tests
+      clientConfig.dangerouslyEnableSampling,
     );
   }
 }

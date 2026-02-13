@@ -9,12 +9,8 @@ import {
   namespaceGetPromptResultResources,
 } from "@my-cool-proxy/mcp-utilities";
 import { createCache } from "@my-cool-proxy/mcp-client";
-import type {
-  IMCPClientManager,
-  IMCPClientSession,
-  ILogger,
-  ICacheService,
-} from "./types.js";
+import type { IMCPClientManager, ILogger, ICacheService } from "./types.js";
+import { lookupServerOrThrow } from "./utils/server-lookup.js";
 
 export class PromptAggregationService {
   private cache: ICacheService<Prompt[]>;
@@ -100,15 +96,11 @@ export class PromptAggregationService {
     }
 
     const { serverName, originalName } = parsed;
-    const clients = this.clientPool.getClientsBySession(session);
-    const client = clients.get(serverName) as IMCPClientSession | undefined;
-
-    if (!client) {
-      const availableServers = Array.from(clients.keys()).join(", ");
-      throw new Error(
-        `Server '${serverName}' not found in session '${session}'. Available servers: ${availableServers || "none"}`,
-      );
-    }
+    const { client } = lookupServerOrThrow({
+      serverName,
+      sessionId: session,
+      clientPool: this.clientPool,
+    });
 
     try {
       const result = await client.getPrompt({

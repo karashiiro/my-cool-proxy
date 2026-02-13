@@ -16,3 +16,10 @@ export {
 } from "./elicitation-server.js";
 
 export { startStdioStderrServer } from "./stderr-server.js";
+
+export {
+  startHttpSamplingWithToolsServer,
+  startStdioSamplingWithToolsServer,
+} from "./sampling-with-tools-server.js";
+
+export { startHttpLoggingServer } from "./logging-server.js";

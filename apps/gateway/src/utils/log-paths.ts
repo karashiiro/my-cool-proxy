@@ -167,3 +167,17 @@ export const ensureServerLogDir = defaultLogPaths.ensureServerLogDir;
  * getServerLogPath("calculator", "abc123") // => ".../servers/calculator-abc123.log"
  */
 export const getServerLogPath = defaultLogPaths.getServerLogPath;
+
+/**
+ * Get the log file path for the gateway application itself.
+ *
+ * Platform paths:
+ * - Windows: %LOCALAPPDATA%\my-cool-proxy\Log\gateway.log
+ * - macOS: ~/Library/Logs/my-cool-proxy/gateway.log
+ * - Linux: ~/.local/state/my-cool-proxy/gateway.log
+ *
+ * @returns The full path to the gateway log file
+ */
+export function getGatewayLogPath(): string {
+  return resolve(getLogDir(), "gateway.log");
+}

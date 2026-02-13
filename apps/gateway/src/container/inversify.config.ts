@@ -12,6 +12,7 @@ import type {
   ICapabilityStore,
   IServerInfoPreloader,
   ISkillDiscoveryService,
+  ISamplingShim,
 } from "../types/interfaces.js";
 // Import from workspace packages
 import { WasmoonRuntime } from "@my-cool-proxy/lua-runtime";
@@ -23,14 +24,16 @@ import {
   PromptAggregationService,
   type IResourceProvider,
 } from "@my-cool-proxy/mcp-aggregation";
-// Import gateway-specific services
-import { ConsoleLogger } from "../utils/logger.js";
+// Import logger from shared package
+import { ConsoleLogger, type LoggerConfig } from "@my-cool-proxy/logger";
+import { getGatewayLogPath } from "../utils/log-paths.js";
 import { MCPGatewayServer } from "../mcp/gateway-server.js";
 import { ShutdownHandler } from "../handlers/shutdown-handler.js";
 import { CapabilityStore } from "../services/capability-store.js";
 import { ServerInfoPreloader } from "../services/server-info-preloader.js";
 import { SkillDiscoveryService } from "../services/skill-discovery-service.js";
 import { SkillResourceProvider } from "../services/skill-resource-provider.js";
+import { SamplingShim } from "../services/sampling-shim.js";
 import type { ITool } from "../tools/base-tool.js";
 import { ExecuteLuaTool } from "../tools/execute-lua-tool.js";
 import { ListServersTool } from "../tools/list-servers-tool.js";
@@ -53,8 +56,25 @@ export function createContainer(
   // Bind configuration
   container.bind<ServerConfig>(TYPES.ServerConfig).toConstantValue(config);
 
-  // Bind logger (gateway-specific, keeps Inversify decorator)
-  container.bind<ILogger>(TYPES.Logger).to(ConsoleLogger).inSingletonScope();
+  // Build logger configuration from server config
+  // Defaults: console at "info" (or "warn" in CI), file at "trace" (captures everything)
+  const isCIEnv = process.env.CI !== undefined;
+  const defaultConsoleLevel = isCIEnv ? "warn" : "info";
+
+  const loggerConfig: LoggerConfig = {
+    console: { level: config.logging?.console?.level ?? defaultConsoleLevel },
+    file: {
+      level: config.logging?.file?.level ?? "trace",
+      path: getGatewayLogPath(),
+    },
+  };
+
+  // Bind logger (from shared package - use factory binding since ConsoleLogger
+  // is DI-framework-agnostic and doesn't have @injectable() decorator)
+  container
+    .bind<ILogger>(TYPES.Logger)
+    .toDynamicValue(() => new ConsoleLogger(loggerConfig))
+    .inSingletonScope();
 
   // Bind Lua runtime (from package - use factory binding)
   container
@@ -158,6 +178,26 @@ export function createContainer(
     if (skillsMutable) {
       container.bind<ITool>(TYPES.Tool).to(WriteGatewaySkillTool);
     }
+  }
+
+  // Bind sampling shim conditionally when ACP agent is configured
+  if (config.acp?.agent) {
+    container
+      .bind<ISamplingShim>(TYPES.SamplingShim)
+      .toDynamicValue(() => {
+        const logger = container.get<ILogger>(TYPES.Logger);
+        const capabilityStore = container.get<ICapabilityStore>(
+          TYPES.CapabilityStore,
+        );
+        return new SamplingShim(
+          config.acp!.agent!,
+          logger,
+          capabilityStore,
+          config.acp!.filesystem,
+          config.acp!.allowOwnTools,
+        );
+      })
+      .inSingletonScope();
   }
 
   // Bind tool registry and populate it with all registered tools

@@ -1,14 +1,11 @@
 import type { MCPClientSession } from "./client-session.js";
+import type {
+  ClientCapabilities,
+  LoggingMessageNotification,
+} from "@modelcontextprotocol/sdk/types.js";
 
-/**
- * Logger interface required by MCP client components.
- */
-export interface ILogger {
-  info(message: string): void;
-  warn(message: string): void;
-  error(message: string, error?: Error): void;
-  debug(message: string): void;
-}
+export type { ILogger } from "@my-cool-proxy/logger";
+export type { ClientCapabilities };
 
 /**
  * Result of a client connection attempt.
@@ -17,20 +14,6 @@ export interface ClientConnectionResult {
   name: string;
   success: boolean;
   error?: string;
-}
-
-/**
- * Downstream client capabilities for proxying.
- */
-export interface DownstreamCapabilities {
-  sampling?: {
-    context?: object;
-    tools?: object;
-  };
-  elicitation?: {
-    form?: object;
-    url?: object;
-  };
 }
 
 /**
@@ -43,7 +26,7 @@ export interface IMCPClientManager {
     sessionId: string,
     headers?: Record<string, string>,
     allowedTools?: string[],
-    clientCapabilities?: DownstreamCapabilities,
+    clientCapabilities?: ClientCapabilities,
   ): Promise<ClientConnectionResult>;
   addStdioClient(
     name: string,
@@ -52,7 +35,7 @@ export interface IMCPClientManager {
     args?: string[],
     env?: Record<string, string>,
     allowedTools?: string[],
-    clientCapabilities?: DownstreamCapabilities,
+    clientCapabilities?: ClientCapabilities,
     stderrLogPath?: string,
   ): Promise<ClientConnectionResult>;
   getClient(name: string, sessionId: string): Promise<MCPClientSession>;
@@ -67,6 +50,12 @@ export interface IMCPClientManager {
   ): void;
   setToolListChangedHandler(
     handler: (serverName: string, sessionId: string) => void,
+  ): void;
+  setLoggingMessageHandler(
+    handler: (
+      params: LoggingMessageNotification["params"],
+      sessionId: string,
+    ) => void,
   ): void;
   close(): Promise<void>;
 }

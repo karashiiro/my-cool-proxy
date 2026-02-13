@@ -2,12 +2,14 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { createWriteStream, type WriteStream } from "fs";
+import { getErrorMessage } from "@my-cool-proxy/mcp-utilities";
 import type {
   ClientConnectionResult,
   ILogger,
   IMCPClientManager,
-  DownstreamCapabilities,
+  ClientCapabilities,
 } from "./types.js";
+import type { LoggingMessageNotification } from "@modelcontextprotocol/sdk/types.js";
 import { MCPClientSession } from "./client-session.js";
 
 export class MCPClientManager implements IMCPClientManager {
@@ -20,6 +22,10 @@ export class MCPClientManager implements IMCPClientManager {
   ) => void;
   private onPromptListChanged?: (serverName: string, sessionId: string) => void;
   private onToolListChanged?: (serverName: string, sessionId: string) => void;
+  private onLoggingMessage?: (
+    params: LoggingMessageNotification["params"],
+    sessionId: string,
+  ) => void;
 
   constructor(private logger: ILogger) {}
 
@@ -41,13 +47,23 @@ export class MCPClientManager implements IMCPClientManager {
     this.onToolListChanged = handler;
   }
 
+  setLoggingMessageHandler(
+    handler: (
+      params: LoggingMessageNotification["params"],
+      sessionId: string,
+    ) => void,
+  ): void {
+    this.onLoggingMessage = handler;
+  }
+
   async addHttpClient(
     name: string,
     endpoint: string,
     sessionId: string,
     headers?: Record<string, string>,
     allowedTools?: string[],
-    clientCapabilities?: DownstreamCapabilities,
+    clientCapabilities?: ClientCapabilities,
+    dangerouslyEnableSampling?: boolean,
   ): Promise<ClientConnectionResult> {
     const key = `${name}-${sessionId}`;
     if (this.clients.has(key)) {
@@ -61,7 +77,10 @@ export class MCPClientManager implements IMCPClientManager {
       // Build capabilities to advertise to the upstream server
       // These should match what the downstream client supports, so upstream
       // servers know they can send sampling/elicitation requests through us
-      const capsToAdvertise = this.buildClientCapabilities(clientCapabilities);
+      const capsToAdvertise = this.buildClientCapabilities(
+        clientCapabilities,
+        dangerouslyEnableSampling,
+      );
 
       // Create underlying SDK client
       const sdkClient = new Client(
@@ -106,6 +125,10 @@ export class MCPClientManager implements IMCPClientManager {
         this.onToolListChanged
           ? (serverName) => this.onToolListChanged!(serverName, sessionId)
           : undefined,
+        dangerouslyEnableSampling,
+        this.onLoggingMessage
+          ? (params) => this.onLoggingMessage!(params, sessionId)
+          : undefined,
       );
 
       this.clients.set(key, wrappedClient);
@@ -115,16 +138,21 @@ export class MCPClientManager implements IMCPClientManager {
 
       // Log configuration
       if (allowedTools !== undefined) {
-        this.logger.info(
-          `MCP client ${name} configured with tool filter: ${allowedTools.length === 0 ? "all tools blocked" : allowedTools.join(", ")}`,
-        );
+        if (allowedTools.length === 0) {
+          this.logger.warn(
+            `MCP client ${name}: All tools blocked by empty allowedTools array`,
+          );
+        } else {
+          this.logger.info(
+            `MCP client ${name} configured with tool filter: ${allowedTools.join(", ")}`,
+          );
+        }
       }
 
       this.logger.info(`MCP client ${name} connected to ${endpoint}`);
       return { name, success: true };
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
+      const errorMessage = getErrorMessage(error);
       this.logger.error(
         `Failed to connect MCP client ${name} to ${endpoint}: ${errorMessage}`,
       );
@@ -140,8 +168,9 @@ export class MCPClientManager implements IMCPClientManager {
     args?: string[],
     env?: Record<string, string>,
     allowedTools?: string[],
-    clientCapabilities?: DownstreamCapabilities,
+    clientCapabilities?: ClientCapabilities,
     stderrLogPath?: string,
+    dangerouslyEnableSampling?: boolean,
   ): Promise<ClientConnectionResult> {
     const key = `${name}-${sessionId}`;
     if (this.clients.has(key)) {
@@ -159,7 +188,10 @@ export class MCPClientManager implements IMCPClientManager {
 
     try {
       // Build capabilities to advertise to the upstream server
-      const capsToAdvertise = this.buildClientCapabilities(clientCapabilities);
+      const capsToAdvertise = this.buildClientCapabilities(
+        clientCapabilities,
+        dangerouslyEnableSampling,
+      );
 
       // Create underlying SDK client
       const sdkClient = new Client(
@@ -207,6 +239,10 @@ export class MCPClientManager implements IMCPClientManager {
         this.onToolListChanged
           ? (serverName) => this.onToolListChanged!(serverName, sessionId)
           : undefined,
+        dangerouslyEnableSampling,
+        this.onLoggingMessage
+          ? (params) => this.onLoggingMessage!(params, sessionId)
+          : undefined,
       );
 
       this.clients.set(key, wrappedClient);
@@ -216,9 +252,15 @@ export class MCPClientManager implements IMCPClientManager {
 
       // Log configuration
       if (allowedTools !== undefined) {
-        this.logger.info(
-          `MCP client ${name} configured with tool filter: ${allowedTools.length === 0 ? "all tools blocked" : allowedTools.join(", ")}`,
-        );
+        if (allowedTools.length === 0) {
+          this.logger.warn(
+            `MCP client ${name}: All tools blocked by empty allowedTools array`,
+          );
+        } else {
+          this.logger.info(
+            `MCP client ${name} configured with tool filter: ${allowedTools.join(", ")}`,
+          );
+        }
       }
 
       this.logger.info(
@@ -231,8 +273,7 @@ export class MCPClientManager implements IMCPClientManager {
         stderrFileStream.end();
       }
 
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
+      const errorMessage = getErrorMessage(error);
       this.logger.error(
         `Failed to connect MCP client ${name} to stdio process ${command}: ${errorMessage}`,
       );
@@ -242,7 +283,9 @@ export class MCPClientManager implements IMCPClientManager {
   }
 
   async getClient(name: string, sessionId: string): Promise<MCPClientSession> {
-    // TODO: Support creating sessionless clients on-demand
+    // Note: On-demand client creation is not supported. All clients must be
+    // pre-connected via connectClient() before use. This ensures proper session
+    // isolation and lifecycle management.
     const client = this.clients.get(`${name}-${sessionId}`);
     if (!client) {
       throw new Error(`MCP client ${name} not found for session ${sessionId}`);
@@ -306,16 +349,23 @@ export class MCPClientManager implements IMCPClientManager {
       }
     }
 
-    this.logger.debug(`Cleaned up session ${sessionId}`);
+    this.logger.info(`Cleaned up session ${sessionId}`);
   }
 
   /**
    * Build the capabilities object to advertise to upstream servers.
    * These match what the downstream client supports, so upstream servers
    * know they can send sampling/elicitation requests through the proxy.
+   *
+   * SECURITY: Sampling is only advertised if BOTH conditions are met:
+   * 1. Downstream client supports it
+   * 2. Server has dangerouslyEnableSampling=true (explicit trust)
+   *
+   * This prevents untrusted servers from discovering sampling capability exists.
    */
   private buildClientCapabilities(
-    downstreamCaps?: DownstreamCapabilities,
+    downstreamCaps?: ClientCapabilities,
+    dangerouslyEnableSampling?: boolean,
   ): Record<string, unknown> {
     if (!downstreamCaps) {
       // No downstream capabilities known yet - don't advertise any special caps
@@ -324,11 +374,17 @@ export class MCPClientManager implements IMCPClientManager {
 
     const caps: Record<string, unknown> = {};
 
-    // Forward sampling capability if downstream supports it
-    if (downstreamCaps.sampling) {
+    // Forward sampling capability ONLY if both:
+    // 1. Downstream supports it
+    // 2. This server is trusted (dangerouslyEnableSampling=true)
+    if (downstreamCaps.sampling && dangerouslyEnableSampling === true) {
       caps.sampling = downstreamCaps.sampling;
       this.logger.debug(
         `Advertising sampling capability to upstream (context: ${!!downstreamCaps.sampling.context}, tools: ${!!downstreamCaps.sampling.tools})`,
+      );
+    } else if (downstreamCaps.sampling && !dangerouslyEnableSampling) {
+      this.logger.debug(
+        `Sampling capability NOT advertised - dangerouslyEnableSampling not enabled for this server`,
       );
     }
 

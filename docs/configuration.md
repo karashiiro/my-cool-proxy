@@ -248,7 +248,7 @@ If validation fails, the server will exit with a descriptive error message.
 
 ## Gateway Transport Mode
 
-The `transport` field controls how the gateway **exposes itself** to MCP clients.
+The `transport` field controls how the gateway exposes itself to MCP clients.
 
 ### HTTP Mode (Default)
 
@@ -265,14 +265,6 @@ Run the gateway as an HTTP server that clients connect to remotely.
 }
 ```
 
-**Usage:**
-
-```bash
-pnpm dev
-# or for production:
-pnpm build && node dist/index.js
-```
-
 **MCP Client Configuration:**
 
 ```json
@@ -287,7 +279,16 @@ pnpm build && node dist/index.js
 
 ### Stdio Mode
 
-Run the gateway as a stdio-based MCP server that clients launch directly via command-line.
+Run the gateway as a stdio-based MCP server that clients launch directly. This is ideal when:
+
+- You want the MCP client to manage the gateway process's lifecycle
+- You're running everything locally and don't need a persistent server
+- You prefer simpler deployment without managing an HTTP server, or your client doesn't support localhost HTTP (e.g. Claude Desktop)
+
+**Key differences from HTTP mode:**
+
+- Single session only (no multi-client support)
+- All upstream MCP clients initialize at startup (not lazily)
 
 **Configuration:**
 
@@ -298,13 +299,7 @@ Run the gateway as a stdio-based MCP server that clients launch directly via com
 }
 ```
 
-Note: `port` and `host` are optional in stdio mode since the gateway doesn't run an HTTP server.
-
-**Usage:**
-
-```bash
-pnpm build
-```
+Note: The `port` and `host` options are ignored in stdio mode.
 
 **MCP Client Configuration:**
 
@@ -312,14 +307,45 @@ pnpm build
 {
   "mcpServers": {
     "my-cool-proxy": {
-      "command": "node",
-      "args": ["path/to/my-cool-proxy/dist/index.js"]
+      "command": "npx",
+      "args": ["-y", "@karashiiro/my-cool-proxy"]
     }
   }
 }
 ```
 
-**Important:** Stdio mode requires building first - `pnpm dev` won't work properly with stdio since stdout is used for the MCP protocol.
+#### Troubleshooting
+
+**Gateway not starting?**
+
+- Check your MCP client's logs for error messages
+- Verify the path to `dist/index.js` is correct and absolute
+- Ensure you ran `pnpm build` after any code changes
+
+**Config not found?**
+
+- Run `my-cool-proxy --config-path` to see expected location
+- Or set `CONFIG_PATH` environment variable to override it:
+
+```json
+{
+  "mcpServers": {
+    "my-cool-proxy": {
+      "command": "node",
+      "args": ["path/to/my-cool-proxy/dist/index.js"],
+      "env": {
+        "CONFIG_PATH": "/path/to/your/config.json"
+      }
+    }
+  }
+}
+```
+
+**Upstream servers failing to connect?**
+
+- All configured MCP clients must connect successfully at startup in stdio mode
+- Check that commands in your config are correct and dependencies are installed
+- Try running the upstream servers individually first to verify they work
 
 ## MCP Client Transport Types
 
@@ -474,6 +500,135 @@ In this example:
 - `admin-api` exposes additional administrative tools
 - `unrestricted-local` exposes all tools (no filter)
 
+## Sampling Security
+
+**⚠️ SECURITY CRITICAL**: Sampling is a powerful capability that allows MCP servers to request the AI client to create messages. This effectively gives servers access to your system through the downstream client. **Sampling is disabled by default for all servers** to protect you from untrusted code.
+
+### What is Sampling?
+
+Sampling allows an MCP server to send `sampling/createMessage` requests that:
+
+- Execute arbitrary prompts through your AI client
+- Potentially access your filesystem, network, and other system resources
+- Cannot be reliably scoped down by the gateway (the client decides what to allow)
+
+This means **any server with sampling access can potentially interact with your system** in ways the gateway cannot control.
+
+### Security Model
+
+The gateway implements **defense-in-depth** to prevent untrusted servers from using sampling:
+
+1. **Disabled by default**: All servers start without sampling access, even if your client supports it
+2. **Explicit opt-in per server**: You must set `dangerouslyEnableSampling: true` for each trusted server
+3. **Capability filtering**: Untrusted servers won't even know sampling exists (not advertised in capabilities)
+4. **Handler blocking**: Even if a malicious server guesses that sampling exists, no handler will be registered to process its requests
+
+### Configuration
+
+The `dangerouslyEnableSampling` field is an optional boolean in your server configuration.
+
+**Default (secure):**
+
+```json
+{
+  "untrusted-server": {
+    "type": "http",
+    "url": "https://example.com/mcp"
+  }
+}
+```
+
+When `dangerouslyEnableSampling` is not specified (or is `false`), the server **cannot** make sampling requests, even if your client supports sampling.
+
+**Explicitly enabled (use only for trusted servers):**
+
+```json
+{
+  "trusted-server": {
+    "type": "stdio",
+    "command": "node",
+    "args": ["my-trusted-server.js"],
+    "dangerouslyEnableSampling": true
+  }
+}
+```
+
+Only enable sampling for servers you **fully trust with system access**. This server will be able to make `sampling/createMessage` requests that execute through your AI client.
+
+### When to Enable Sampling
+
+Only enable `dangerouslyEnableSampling: true` when **ALL** of these conditions are met:
+
+1. **You trust the server code completely** - You've audited the source code or trust the author
+2. **The server needs sampling** - The functionality you want requires `sampling/createMessage` requests
+3. **You accept the security implications** - You understand the server can access your system through the client
+
+### Mixed Trust Example
+
+```json
+{
+  "mcpClients": {
+    "public-docs": {
+      "type": "http",
+      "url": "https://docs.example.com/mcp",
+      "allowedTools": ["search"]
+    },
+    "my-local-tools": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["./my-server.js"],
+      "dangerouslyEnableSampling": true
+    },
+    "experimental-server": {
+      "type": "http",
+      "url": "https://experimental.example.com/mcp"
+    }
+  }
+}
+```
+
+In this configuration:
+
+- `public-docs`: No sampling access (default-deny), limited to search tool
+- `my-local-tools`: Sampling enabled (trusted local code)
+- `experimental-server`: No sampling access (default-deny), untrusted
+
+### ACP Shim Compatibility
+
+If you configure an ACP shim (for clients that lack native sampling support), the per-server filtering **still applies**:
+
+- The shim is initialized once per session (global resource)
+- Access to the shim is controlled per-server (via `dangerouslyEnableSampling`)
+- Only trusted servers can route requests through the shim
+- Untrusted servers remain blocked, even though the shim exists
+
+This means you can safely use the shim to provide sampling support, and the gateway will ensure only trusted servers can access it.
+
+### Logging
+
+The server logs helpful information about sampling configuration:
+
+**When sampling is blocked:**
+
+```
+Sampling capability NOT advertised - dangerouslyEnableSampling not enabled for this server
+NOT registering sampling handler for server 'untrusted-server' - dangerouslyEnableSampling not enabled
+```
+
+**When sampling is enabled:**
+
+```
+Advertising sampling capability to upstream (context: true, tools: true)
+Registered sampling request handler for upstream server 'trusted-server'
+```
+
+### Summary
+
+- **Default**: Sampling disabled for all servers (safe)
+- **Opt-in**: Set `dangerouslyEnableSampling: true` per server (dangerous)
+- **Trust model**: Only enable for servers you fully trust
+- **Best practice**: Leave disabled unless you have a specific need
+
 ## Skills
 
 Skills are reusable instruction sets that extend the gateway's capabilities. They can include scripts, reference materials, and specialized guidance for specific tasks.
@@ -582,3 +737,330 @@ Agents can create, modify, and use skills.
 ```
 
 Or simply omit the `skills` field entirely - skill-related tools will not be exposed.
+
+## ACP (Agent Client Protocol)
+
+The gateway can use an ACP agent to provide sampling capability when the downstream MCP client does not natively support it. This acts as a "shim" -- upstream MCP servers can send sampling requests even when connected through a client that lacks sampling support.
+
+You can find a list of ACP agents [here](https://agentclientprotocol.com/get-started/agents).
+
+### How It Works
+
+| Client has sampling? | ACP agent configured? | Result                                |
+| -------------------- | --------------------- | ------------------------------------- |
+| Yes                  | Don't care            | Native sampling (existing behavior)   |
+| No                   | Yes                   | ACP agent handles sampling            |
+| No                   | No                    | Sampling disabled (existing behavior) |
+
+When the shim activates:
+
+1. The gateway spawns the configured ACP agent process
+2. Upstream MCP servers are told that sampling is available
+3. When an upstream server sends a sampling request, the gateway converts it to an ACP prompt and forwards it to the agent
+4. The agent's response is converted back to MCP format and returned to the upstream server
+
+Native client sampling always takes priority. If the downstream client supports sampling natively, the ACP agent is not used even if configured.
+
+### Configuration
+
+```json
+{
+  "acp": {
+    "agent": {
+      "command": "node",
+      "args": ["path/to/acp-agent.js"],
+      "env": {
+        "MODEL": "gpt-4"
+      }
+    }
+  }
+}
+```
+
+#### Fields
+
+- **acp** (object, optional): ACP configuration
+  - **agent** (object, optional): ACP agent configuration for the sampling shim
+    - **command** (string, required): Command to execute the ACP agent
+    - **args** (array of strings, optional): Command-line arguments
+    - **env** (object, optional): Environment variables to set for the agent process
+
+### ACP Agent Requirements
+
+The configured agent must:
+
+- Communicate over stdio using the ACP ndjson protocol
+- Implement the ACP `Agent` interface (initialize, newSession, prompt, cancel)
+- Send responses via `sessionUpdate` notifications with `agent_message_chunk` content type
+
+### Lifecycle
+
+- One ACP agent process is spawned per gateway session (long-lived)
+- One ACP session is created per sampling request (short-lived)
+- The agent process is automatically killed when the gateway session closes
+
+### Sampling Parameter Support
+
+The ACP protocol does not expose LLM inference parameters (temperature, max tokens, etc.) at the prompt level -- agents manage their own model configuration internally. This means MCP sampling parameters cannot be forwarded natively to the ACP agent. The shim handles each `CreateMessageRequest` parameter as follows:
+
+#### Mapped to ACP prompt content
+
+| Parameter          | How it's mapped                                                                                                                                                                                                                                            |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`messages`**     | Each message is serialized as a `[Role]: text` content block. Image and audio content is passed through natively when the ACP agent advertises support via `promptCapabilities`; otherwise, it falls back to a text placeholder like `[image: image/png]`. |
+| **`systemPrompt`** | Prepended as a `[System]: {text}` content block before the messages. ACP has no native system prompt field, so this is informational context for the agent.                                                                                                |
+| **`tools`**        | Supported via ephemeral MCP sidecar. Tools are exposed to the ACP agent through a stdio MCP server that proxies tool calls back to the gateway's upstream servers.                                                                                         |
+| **`toolChoice`**   | Supported. `mode: "none"` filters out tools (sidecar not spawned). `mode: "required"` injects a prompt directive instructing the model to use tools. `mode: "auto"` is the default behavior with no special handling.                                      |
+
+#### Included as informational text
+
+These parameters are serialized into a `[Sampling parameters: ...]` text block appended to the prompt. The ACP agent may read and act on them, but is not obligated to. This block is only included when parameters beyond the required `maxTokens` are present.
+
+| Parameter              | Serialized as                   |
+| ---------------------- | ------------------------------- |
+| **`maxTokens`**        | `maxTokens=200`                 |
+| **`temperature`**      | `temperature=0.7`               |
+| **`stopSequences`**    | `stopSequences=["STOP","END"]`  |
+| **`modelPreferences`** | `modelPreferences={...}` (JSON) |
+
+#### Not supported
+
+| Parameter                 | Reason                                                                                                                                                                         |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **`includeContext`**      | No mechanism to inject MCP server context into an ACP session. The spec allows clients to ignore this parameter, and the values `thisServer`/`allServers` are soft-deprecated. |
+| **`metadata`**            | Provider-specific LLM passthrough. ACP agents are not LLM providers, so there is no target for this data.                                                                      |
+| **`task`**                | Task-augmented execution is not supported by the shim.                                                                                                                         |
+| **`_meta.progressToken`** | The shim does not emit progress notifications.                                                                                                                                 |
+
+#### Response mapping
+
+| `CreateMessageResult` field | Value                                                                                                                                                                                                                                                                         |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`role`**                  | Always `"assistant"`                                                                                                                                                                                                                                                          |
+| **`content`**               | Merged from the ACP agent's response content blocks. When the response contains both text and non-text (image/audio) blocks, the first non-text block takes priority since `CreateMessageResult` only supports a single content block. Multiple text blocks are concatenated. |
+| **`model`**                 | Always `"acp-agent"`. The actual model used by the agent is not exposed by the ACP protocol.                                                                                                                                                                                  |
+| **`stopReason`**            | Mapped from ACP stop reasons: `end_turn` to `endTurn`, `max_tokens` to `maxTokens`, `stop_sequence` to `stopSequence`. Unknown reasons default to `endTurn`.                                                                                                                  |
+
+### Security
+
+The gateway connects to the ACP agent with minimal permissions:
+
+- **Client capabilities**: Empty (`{}`) -- the agent cannot request file system access or terminal execution through the gateway
+- **Permission requests**: All denied -- any tool permission requests from the agent are cancelled
+
+This means the ACP agent is sandboxed to pure text/content generation through the shim. The agent may still use its own internal tools and capabilities, but cannot leverage the gateway as a proxy for privileged operations.
+
+### ACP Filesystem Capabilities
+
+By default, ACP agents cannot access the filesystem through the gateway. You can optionally enable sandboxed filesystem access to allow agents to read and write text files within their session's working directory.
+
+**Configuration:**
+
+```json
+{
+  "acp": {
+    "agent": {
+      "command": "node",
+      "args": ["path/to/acp-agent.js"]
+    },
+    "filesystem": {
+      "readTextFile": true,
+      "writeTextFile": true
+    }
+  }
+}
+```
+
+#### Fields
+
+- **filesystem** (object, optional): Filesystem capabilities for ACP agents
+  - **readTextFile** (boolean, optional): Enable reading text files. Default: `false`
+  - **writeTextFile** (boolean, optional): Enable writing text files. Default: `false`
+
+Both capabilities are disabled by default (secure by default). They can be enabled independently.
+
+#### Security Model
+
+When filesystem capabilities are enabled, the gateway enforces strict sandboxing:
+
+| Security Control              | Implementation                                                                               |
+| ----------------------------- | -------------------------------------------------------------------------------------------- |
+| **Session isolation**         | Each session has its own working directory (either from client's roots, or a temp directory) |
+| **Path validation**           | All paths are canonicalized, normalized, and validated against an allowlist                  |
+| **Path traversal prevention** | `..` and other escape attempts are blocked after canonicalization                            |
+| **Symlink attack prevention** | For reads, symlinks are resolved to their real target and re-validated                       |
+| **Parent directory check**    | For writes, the parent directory must exist and be within the sandbox                        |
+| **Audit logging**             | Sandbox violations are logged at `warn` level                                                |
+
+#### Example Sandbox Behavior
+
+| Requested Path    | Working Directory | Result                                    |
+| ----------------- | ----------------- | ----------------------------------------- |
+| `file.txt`        | `/tmp/session-1/` | Allowed: `/tmp/session-1/file.txt`        |
+| `subdir/file.txt` | `/tmp/session-1/` | Allowed: `/tmp/session-1/subdir/file.txt` |
+| `../etc/passwd`   | `/tmp/session-1/` | Rejected: Path traversal attempt          |
+| `/etc/passwd`     | `/tmp/session-1/` | Rejected: Absolute path outside sandbox   |
+| `symlink-to-root` | `/tmp/session-1/` | Rejected: Symlink target outside sandbox  |
+| `file.txt\0.jpg`  | `/tmp/session-1/` | Rejected: Null byte in path               |
+
+#### Use Cases
+
+Enable filesystem capabilities when:
+
+- Running code editing agents that need to modify source files
+- File generation tasks (creating templates, configs, etc.)
+- Document processing within a controlled workspace
+
+Keep filesystem disabled (default) when:
+
+- Using agents for pure text generation or Q&A
+- Running untrusted or experimental agents
+- Minimizing attack surface
+
+### ACP Permission Auto-Approval
+
+The `allowOwnTools` option controls automatic permission approval for ACP agent tool calls based on tool kind.
+
+```json
+{
+  "acp": {
+    "agent": {
+      "command": "npx",
+      "args": ["@zed-industries/claude-code-acp"]
+    },
+    "allowOwnTools": {
+      "toolKinds": ["read", "search", "think"]
+    }
+  }
+}
+```
+
+- **allowOwnTools** (object, optional): Configuration for auto-approving tool permissions
+  - **dangerouslyAllowAll** (boolean, optional): Auto-approve ALL permission requests. **DANGEROUS** - bypasses all safety checks. Default: `false`
+  - **toolKinds** (array, optional): List of tool kinds to auto-approve. Default: `[]`
+
+#### Valid Tool Kinds
+
+| Tool Kind     | Description                                 |
+| ------------- | ------------------------------------------- |
+| `read`        | Reading files or data                       |
+| `edit`        | Modifying existing content                  |
+| `delete`      | Removing files or data                      |
+| `move`        | Moving or renaming files                    |
+| `search`      | Searching through content                   |
+| `execute`     | Running commands or scripts                 |
+| `think`       | Internal reasoning/planning operations      |
+| `fetch`       | Network requests or external data retrieval |
+| `switch_mode` | Changing operational modes                  |
+| `other`       | Uncategorized operations                    |
+
+#### Permission Check Priority
+
+Permission requests are evaluated in this order:
+
+1. **dangerouslyAllowAll** - If true, immediately approve (supersedes all other checks)
+2. **toolKinds** - If tool's kind is in the list, approve
+3. **Sidecar tool tag** - If tool name contains the session's sidecar tag, approve (for sampling-with-tools flow)
+4. **Default deny** - All other requests are denied
+
+#### Example Configurations
+
+**Read-only agent** (safe for exploration):
+
+```json
+{
+  "acp": {
+    "allowOwnTools": {
+      "toolKinds": ["read", "search", "think"]
+    }
+  }
+}
+```
+
+**Full-access agent** (for trusted environments):
+
+```json
+{
+  "acp": {
+    "allowOwnTools": {
+      "dangerouslyAllowAll": true
+    }
+  }
+}
+```
+
+See [Sampling - ACP Permission Auto-Approval](./design/sampling.md#acp-permission-auto-approval) for detailed architecture.
+
+## Session Persistence (HTTP Mode)
+
+In HTTP mode, the gateway automatically persists session state to SQLite, enabling session resumability across server restarts. This is always enabled with zero configuration required.
+
+### What Gets Persisted
+
+| Data Type                | Description                                                                    |
+| ------------------------ | ------------------------------------------------------------------------------ |
+| **Session capabilities** | Client capabilities (sampling, elicitation) stored when the client initializes |
+| **Working directories**  | Session working directory paths for ACP sandboxing                             |
+| **SSE events**           | Server-Sent Events for resumability when clients reconnect                     |
+
+### Database Location
+
+Session data is stored in a SQLite database at the platform-specific data directory:
+
+| Platform    | Path                                                      |
+| ----------- | --------------------------------------------------------- |
+| **Linux**   | `~/.local/share/my-cool-proxy/sessions.db`                |
+| **macOS**   | `~/Library/Application Support/my-cool-proxy/sessions.db` |
+| **Windows** | `%LOCALAPPDATA%\my-cool-proxy\Data\sessions.db`           |
+
+### How It Works
+
+1. **On client connect**: Session capabilities and working directory are stored in SQLite
+2. **On tool calls**: SSE events are persisted for resumability
+3. **On server restart**: Sessions can resume because state is persisted
+4. **On client reconnect**: SSE events are replayed if the client provides `Last-Event-ID`
+5. **On session close**: Session data is cleaned up from the database
+
+### Event Retention
+
+SSE events are retained with a per-session limit of 1000 events. When this limit is exceeded, the oldest events are automatically evicted (FIFO). This prevents unbounded database growth while maintaining recent history for reconnection scenarios.
+
+### Session TTL
+
+Sessions expire after 5 minutes of inactivity. When a session expires:
+
+- Session data is removed from the database
+- Upstream MCP client connections for that session are closed
+- Temporary working directories are cleaned up
+
+### Inspecting the Database
+
+You can inspect the session database using standard SQLite tools:
+
+```bash
+# View all sessions
+sqlite3 ~/.local/share/my-cool-proxy/sessions.db "SELECT * FROM sessions"
+
+# Count SSE events
+sqlite3 ~/.local/share/my-cool-proxy/sessions.db "SELECT COUNT(*) FROM mcp_events"
+
+# View events for a specific session
+sqlite3 ~/.local/share/my-cool-proxy/sessions.db \
+  "SELECT event_id, stream_id FROM mcp_events WHERE session_id = 'your-session-id'"
+```
+
+### Backup and Recovery
+
+The database uses SQLite WAL (Write-Ahead Logging) mode for better concurrent access and crash recovery. To back up the database:
+
+```bash
+# Simple file copy (safe when gateway is stopped)
+cp ~/.local/share/my-cool-proxy/sessions.db ~/backup/sessions.db
+
+# Or use SQLite backup (safe while gateway is running)
+sqlite3 ~/.local/share/my-cool-proxy/sessions.db ".backup ~/backup/sessions.db"
+```
+
+### Stdio Mode
+
+Session persistence is **not used in stdio mode**. Stdio transport has a single fixed session (`default`) that exists only for the lifetime of the process. There's no benefit to persisting state across restarts since the session ID is always the same and the client process also terminates with the gateway.

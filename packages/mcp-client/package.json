@@ -16,7 +16,8 @@
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.25.2"
+    "@modelcontextprotocol/sdk": "^1.25.2",
+    "@my-cool-proxy/logger": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^25.0.3",

@@ -60,6 +60,10 @@ sequenceDiagram
 | **Client Init** | MCP clients created lazily when a session first makes a request             |
 | **Transport**   | Streamable HTTP transport via `@karashiiro/mcp` abstraction                 |
 | **Endpoint**    | Single `/mcp` endpoint handles GET (SSE), POST (messages), DELETE (cleanup) |
+| **Persistence** | Session state persisted to SQLite; survives server restarts                 |
+| **Session TTL** | Sessions expire after 5 minutes of inactivity                               |
+
+See [Session Management - Session Persistence](./session-management.md#session-persistence-http-mode) for details on SQLite persistence.
 
 ### Session ID Handling
 

@@ -6,15 +6,7 @@ import type {
   GetPromptResult,
 } from "@modelcontextprotocol/sdk/types.js";
 
-/**
- * Minimal logger interface
- */
-export interface ILogger {
-  info(message: string): void;
-  warn(message: string): void;
-  error(message: string, error?: Error): void;
-  debug(message: string): void;
-}
+export type { ILogger } from "@my-cool-proxy/logger";
 
 /**
  * Cache service interface

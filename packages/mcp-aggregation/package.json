@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.25.2",
+    "@my-cool-proxy/logger": "workspace:*",
     "@my-cool-proxy/mcp-client": "workspace:*",
     "@my-cool-proxy/mcp-utilities": "workspace:*"
   },

@@ -1,11 +1,16 @@
 import { injectable } from "inversify";
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import type {
+  CallToolResult,
+  ToolAnnotations,
+} from "@modelcontextprotocol/sdk/types.js";
 import * as z from "zod";
+import { getErrorMessage } from "@my-cool-proxy/mcp-utilities";
 import { $inject } from "../container/decorators.js";
 import { TYPES } from "../types/index.js";
 import type { ITool, ToolExecutionContext } from "./base-tool.js";
 import type { ILogger } from "../types/interfaces.js";
 import { ResourceAggregationService } from "@my-cool-proxy/mcp-aggregation";
+import { getEffectiveSessionId } from "../utils/session.js";
 
 /**
  * Tool that reads the contents of a specific MCP resource by its namespaced URI.
@@ -17,14 +22,20 @@ import { ResourceAggregationService } from "@my-cool-proxy/mcp-aggregation";
 export class ReadResourceTool implements ITool {
   readonly name = "read-resource";
   readonly description =
-    "Reads a specific resource from an MCP server, identified by server name and resource URI.\n\n" +
+    "Reads a gateway-proxied resource by its namespaced URI. Only supports URIs with gw:// or gw-skill:// schemes " +
+    "(as returned by list-resources). Routes the request to the appropriate upstream MCP server and returns the content.\n\n" +
     "Parameters:\n" +
-    "- server (required): The name of the MCP server from which to read the resource\n" +
-    "- uri (required): The URI of the resource to read";
+    "- uri (required): The namespaced resource URI (e.g., gw://server-name/original-uri or gw-skill://skill-name/resource-path)";
   readonly schema = {
     uri: z
       .string()
       .describe("The namespaced resource URI (as returned by list-resources)"),
+  };
+  readonly annotations: ToolAnnotations = {
+    title: "Read MCP Resource",
+    readOnlyHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
   };
 
   constructor(
@@ -38,7 +49,7 @@ export class ReadResourceTool implements ITool {
     context: ToolExecutionContext,
   ): Promise<CallToolResult> {
     const uri = args.uri as string;
-    const sessionId = context.sessionId || "default";
+    const sessionId = getEffectiveSessionId(context.sessionId);
 
     if (!uri || typeof uri !== "string") {
       return {
@@ -88,7 +99,7 @@ export class ReadResourceTool implements ITool {
 
       return { content: [{ type: "text", text: blocks.join("\n") }] };
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = getErrorMessage(error);
       this.logger.error(`Failed to read resource '${uri}':`, error as Error);
       return {
         content: [

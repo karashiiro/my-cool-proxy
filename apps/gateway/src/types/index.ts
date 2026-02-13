@@ -5,7 +5,6 @@
 export const TYPES = {
   LuaRuntime: "LuaRuntime",
   MCPClientManager: "MCPClientManager",
-  SessionStore: "SessionStore",
   AuthStrategy: "AuthStrategy",
   ServerConfig: "ServerConfig",
   Logger: "Logger",
@@ -22,4 +21,5 @@ export const TYPES = {
   ServerInfoPreloader: "ServerInfoPreloader",
   SkillDiscoveryService: "SkillDiscoveryService",
   SkillResourceProvider: "SkillResourceProvider",
+  SamplingShim: "SamplingShim",
 } as const;

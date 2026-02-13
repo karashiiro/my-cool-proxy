@@ -1,23 +1,103 @@
-# my-cool-proxy
+# My Cool Proxy
 
 [![NPM Version](https://img.shields.io/npm/v/%40karashiiro%2Fmy-cool-proxy)](https://www.npmjs.com/package/@karashiiro/my-cool-proxy)
 
-MCP gateway server that lets you call multiple MCP servers from Lua scripts.
+My Cool Proxy is a [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server gateway that tries to solve a lot of perceived problems with MCP as it exists today. In no particular order, those are that:
 
-## Overview
+- **Tool descriptions bloat the context window:** This is a problem with how most agents integrate with MCP. Rather than implementing abstractions that enable tools to be loaded as needed, most applications dump all MCP tools into the context at once. To mitigate this, My Cool Proxy wraps tools in a Lua interpreter and exposes higher-level tools for discovering tools incrementally. Refer to [Progressive Disclosure](#progressive-disclosure) for more information.
+- **Tool results bloat the context window:** Rather than using MCP tools, agents could just execute terminal commands and use bash to filter their results - however, this means allowing the agent to perform high-risk actions more frequently. For example, you could allow an agent to use the `gh` CLI to interact with GitHub, but it can then use the `gh` CLI to perform mutating or destructive operations, as well. With the [GitHub MCP Server](https://github.com/github/github-mcp-server/blob/main/docs/remote-server.md#url-path-parameters), you can instead scope things down to read-only tools trivially. MCP allows you to tightly control what tools agents have access to. To assist with this, My Cool Proxy allows you to [further filter](./docs/configuration.md#tool-filtering) the tools exposed to agents.
+- **Most MCP features are unsupported:** Unfortunately, most applications only expose MCP tools to agents, neglecting the other [client](https://modelcontextprotocol.io/docs/learn/client-concepts) and [server](https://modelcontextprotocol.io/docs/learn/server-concepts) features offered by the protocol. My Cool Proxy aims to be a common abstraction layer for as many protocol features as possible, which allows developers to use the full capabilities of MCP in any MCP-compatible application. This is a work in progress - check the [feature support table](#mcp-feature-support-table) for more details.
+- **Managing a config file for multiple agents is a pain:** If you use more than a single MCP-compatible application, you'll quickly run into challenges keeping your MCP server configuration synchronized across them. My Cool Proxy solves this by acting as a single integration point for every server you use, reducing the number of servers to keep in sync down to just one.
 
-This proxy acts as a gateway between AI agents and multiple MCP (Model Context Protocol) servers. Instead of connecting to each MCP server individually, agents connect to this single proxy and gain access to all configured servers through a unified interface.
+## Quick Start
 
-**Progressive Tool Discovery:** Agents start with zero knowledge about what servers or tools are available. They build context progressively:
+### 0. Installation
 
-1. Call `list-servers` - The agent's context now includes names and descriptions of all available MCP servers (e.g., "github", "slack", "database")
-2. Call `list-server-tools(server_name)` - The agent's context expands to include all tool names and descriptions for that specific server
-3. Call `tool-details(server_name, tool_name)` - The agent's context now has complete parameter schemas, return types (if available), and usage examples for a specific tool
-4. Call `execute(lua_script)` - With full context, the agent can write Lua scripts that call the discovered tools
+Install it globally to use it as a CLI tool:
+
+```bash
+npm install -g @karashiiro/my-cool-proxy
+```
+
+Or run it directly via `npx`:
+
+```bash
+npx @karashiiro/my-cool-proxy
+```
+
+### 1. Configure
+
+The gateway **auto-creates a default config** on first run. Just run it once to generate the config file:
+
+```bash
+my-cool-proxy  # Creates config and starts (with no servers)
+
+# Find your config location
+my-cool-proxy --config-path
+```
+
+Then [edit the config](docs/configuration.md) to add your MCP servers.
+
+Example config structure:
+
+```json
+{
+  "port": 3000,
+  "host": "localhost",
+  "mcpClients": {
+    "my-server": {
+      "type": "http",
+      "url": "https://example.com/mcp"
+    }
+  }
+}
+```
+
+**Or**, copy the [example config](./apps/gateway/config.example.json) for a more complete starting point.
+
+### 2. Run
+
+```bash
+# If installed globally
+my-cool-proxy
+
+# If running via npx
+npx @karashiiro/my-cool-proxy
+```
+
+### 3. Connect
+
+Add it to your MCP client config in e.g. Claude Desktop:
+
+```json
+{
+  "mcpServers": {
+    "my-cool-proxy": {
+      "url": "http://localhost:3000/mcp"
+    }
+  }
+}
+```
+
+### 4. Use It
+
+Ask your agent to perform a task that your configured MCP servers can help with, and watch it run!
+
+## Progressive Disclosure
+
+This proxy acts as a gateway between agents and multiple MCP (Model Context Protocol) servers. Instead of connecting to each MCP server individually, agents connect to this single proxy and gain access to all configured servers through a unified interface.
+
+Agents start with minimal knowledge about what servers or tools are available. They build context progressively:
+
+1. Check the server instructions - My Cool Proxy preloads a small prompt with brief excerpts of the configured servers and tools to prime the agent to use them.
+2. Call `list-servers` - The agent's context now includes names and descriptions of all available MCP servers (e.g., "github", "slack", "database")
+3. Call `list-server-tools(server_name)` - The agent's context expands to include all tool names and descriptions for that specific server
+4. Call `tool-details(server_name, tool_name)` - The agent's context now has complete parameter schemas, return types (if available), and usage examples for a specific tool
+5. Call `execute(lua_script)` - With full context, the agent can write Lua scripts that call the discovered tools
 
 Rather than loading all tools and tool descriptions into the context upfront, this defers loading tools until the agent determines those tools are needed.
 
-**Tool Chaining with Lua:** Once an agent knows what tools exist, they can compose complex multi-step workflows in a single `execute()` call. The Lua runtime provides access to all discovered servers as globals, with tools callable as async functions.
+**Tool Chaining with Lua:** Once an agent knows what tools exist, they can compose complex multi-step workflows in a single `execute()` call, saving the context overhead of any intermediate tool results. The Lua runtime provides access to all discovered servers as globals, with tools callable as async functions.
 
 **Sequential tool chaining:**
 
@@ -48,336 +128,36 @@ end
 result({ total = #results, data = results })
 ```
 
-## Installation
-
-### From npm (Recommended)
-
-Install globally to use as a CLI tool:
-
-```bash
-npm install -g @karashiiro/my-cool-proxy
-```
-
-Or run directly without installing:
-
-```bash
-# Using pnpm (recommended)
-pnpm dlx @karashiiro/my-cool-proxy
-
-# Using npx
-npx @karashiiro/my-cool-proxy
-```
-
-### From Source
-
-Clone and build for development:
-
-```bash
-git clone https://github.com/karashiiro/my-cool-proxy.git
-cd my-cool-proxy
-pnpm install
-pnpm build
-```
-
-## Quick Start
-
-### 1. Configure
-
-The gateway **auto-creates a default config** on first run. Just run it once to generate the config file:
-
-```bash
-my-cool-proxy  # Creates config and starts (with no servers)
-```
-
-Then edit the config to add your MCP servers:
-
-```bash
-# Find your config location
-my-cool-proxy --config-path
-
-# Edit to add servers (see docs/configuration.md for all options)
-```
-
-Example config structure:
-
-```json
-{
-  "port": 3000,
-  "host": "localhost",
-  "mcpClients": {
-    "my-server": {
-      "type": "http",
-      "url": "https://example.com/mcp"
-    }
-  }
-}
-```
-
-**Or**, copy the example config for a more complete starting point:
-
-```bash
-# Linux
-mkdir -p ~/.config/my-cool-proxy
-cp config.example.json ~/.config/my-cool-proxy/config.json
-
-# macOS
-mkdir -p ~/Library/Preferences/my-cool-proxy
-cp config.example.json ~/Library/Preferences/my-cool-proxy/config.json
-
-# Windows (PowerShell)
-mkdir "$env:APPDATA\my-cool-proxy"
-Copy-Item config.example.json "$env:APPDATA\my-cool-proxy\config.json"
-```
-
-### 2. Run
-
-```bash
-# If installed globally
-my-cool-proxy
-
-# If running from source
-pnpm dev
-```
-
-### 3. Connect
-
-Add to your MCP client config (e.g., Claude Desktop):
-
-```json
-{
-  "mcpServers": {
-    "my-cool-proxy": {
-      "url": "http://localhost:3000/mcp"
-    }
-  }
-}
-```
-
-### 4. Use It
-
-The proxy exposes these tools:
-
-- `execute` - Run Lua scripts that can call your configured MCP servers
-- `list-servers` - See available servers
-- `list-server-tools` - See tools for a server
-- `tool-details` - Get full tool documentation
-- `inspect-tool-response` - Make a sample call to see response structure
-- `summary-stats` - Get aggregate counts of servers, tools, resources, and prompts
-- `list-resources` - See available resources from all servers
-- `read-resource` - Read a specific resource by its namespaced URI
-- `invoke-gateway-skill-script` - Execute scripts from skill packages (when skills enabled)
-- `write-gateway-skill` - Create or modify skills (when skills mutable)
-
-Example Lua script:
-
-```lua
--- Call a tool and return the result directly
-result(my_server.some_tool({ arg = "value" }):await())
-
--- Or store in a variable first if you need to process it
-local data = my_server.some_tool({ arg = "value" }):await()
-result({ processed = data.something })
-```
-
-### Skills
-
-Skills are reusable process documents that agents can load as MCP resources. When enabled, agents can:
-
-- Discover skills via `list-resources` (look for `gw-skill://` URIs)
-- Read skill content via `read-resource`
-- Execute skill scripts via `invoke-gateway-skill-script`
-
-Skills are disabled by default. See the [Configuration Guide](docs/configuration.md#skills) for setup options.
-
-## MCP Client Transport Types
-
-## Running the Gateway
-
-The gateway supports two modes for how it exposes itself to MCP clients.
-
-### HTTP Mode (Default)
-
-Run the gateway as an HTTP server that clients connect to remotely:
-
-**Configure** - Set `transport: "http"` in config.json (or omit for default):
-
-```json
-{
-  "port": 3000,
-  "host": "localhost",
-  "transport": "http",
-  "mcpClients": { ... }
-}
-```
-
-**Connect from MCP client:**
-
-```json
-{
-  "mcpServers": {
-    "my-cool-proxy": {
-      "url": "http://localhost:3000/mcp"
-    }
-  }
-}
-```
-
-### Stdio Mode
-
-Run the gateway as a stdio-based MCP server that clients launch directly. This is ideal when:
-
-- You want the MCP client to manage the gateway process's lifecycle
-- You're running everything locally and don't need a persistent server
-- You prefer simpler deployment without managing an HTTP server, or your client doesn't support localhost HTTP (e.g. Claude Desktop)
-
-**Key differences from HTTP mode:**
-
-- Single session only (no multi-client support)
-- All upstream MCP clients initialize at startup (not lazily)
-- Must build before running (`pnpm dev` won't work - stdout is used for MCP protocol)
-
-#### 1. Configure
-
-The gateway auto-creates a config on first run, but for stdio mode you'll need to edit it to set `transport: "stdio"`. You can find your config location with `my-cool-proxy --config-path`.
-
-Example config (port and host are ignored in stdio mode):
-
-```json
-{
-  "transport": "stdio",
-  "mcpClients": {
-    "filesystem": {
-      "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-everything"]
-    }
-  }
-}
-```
-
-> **Tip:** Run `my-cool-proxy --config-path` to see exactly where your config should be located.
-
-#### 2. Connect from MCP Client
-
-Add to your MCP client config (e.g., Claude Desktop's `claude_desktop_config.json`):
-
-**If installed globally via npm:**
-
-```json
-{
-  "mcpServers": {
-    "my-cool-proxy": {
-      "command": "my-cool-proxy"
-    }
-  }
-}
-```
-
-**If running from source (macOS/Linux):**
-
-```json
-{
-  "mcpServers": {
-    "my-cool-proxy": {
-      "command": "node",
-      "args": ["/absolute/path/to/my-cool-proxy/dist/index.js"]
-    }
-  }
-}
-```
-
-**If running from source (Windows):**
-
-```json
-{
-  "mcpServers": {
-    "my-cool-proxy": {
-      "command": "node",
-      "args": ["C:\\Users\\yourname\\path\\to\\my-cool-proxy\\dist\\index.js"]
-    }
-  }
-}
-```
-
-#### 3. Restart Your MCP Client
-
-Restart Claude Desktop (or your MCP client) to pick up the new config. The gateway will start automatically when you begin a conversation.
-
-#### Troubleshooting Stdio Mode
-
-**Gateway not starting?**
-
-- Check your MCP client's logs for error messages
-- Verify the path to `dist/index.js` is correct and absolute
-- Ensure you ran `pnpm build` after any code changes
-
-**Config not found?**
-
-- Run `my-cool-proxy --config-path` to see expected location
-- Or set `CONFIG_PATH` environment variable to override:
-
-```json
-{
-  "mcpServers": {
-    "my-cool-proxy": {
-      "command": "node",
-      "args": ["path/to/my-cool-proxy/dist/index.js"],
-      "env": {
-        "CONFIG_PATH": "/path/to/your/config.json"
-      }
-    }
-  }
-}
-```
-
-**Upstream servers failing to connect?**
-
-- All configured MCP clients must connect successfully at startup in stdio mode
-- Check that commands in your config are correct and dependencies are installed
-- Try running the upstream servers individually first to verify they work
-
-#### Server Logs
-
-Stderr output from stdio MCP servers is redirected to log files. Log location varies by platform:
-
-- **Windows:** `%LOCALAPPDATA%\my-cool-proxy\Log\servers\`
-- **macOS:** `~/Library/Logs/my-cool-proxy/servers/`
-- **Linux:** `~/.local/state/my-cool-proxy/servers/`
-
-Each server gets its own log file: `{server-name}-{session-id}.log`. In stdio mode, the session ID is always `default` (e.g., `calculator-default.log`).
-
-These logs are useful for debugging when upstream MCP servers encounter errors or when you want to see what stderr output they produce during operation.
-
-## MCP Client Transport Types
-
-**HTTP** - Connect to remote MCP servers:
-
-```json
-{
-  "type": "http",
-  "url": "https://api.example.com/mcp",
-  "headers": {
-    "Authorization": "Bearer token"
-  }
-}
-```
-
-**Stdio** - Launch local MCP servers:
-
-```json
-{
-  "type": "stdio",
-  "command": "npx",
-  "args": ["-y", "@modelcontextprotocol/server-everything"]
-}
-```
-
-## Documentation
-
-See the [Configuration Guide](docs/configuration.md) for full configuration reference.
-
-## Testing
-
-```bash
-pnpm test
-```
+## Gateway Skills
+
+Gateway Skills are My Cool Proxy's implementation of [Agent Skills](https://agentskills.io) - reusable context documents that agents can load as [MCP Resources](https://modelcontextprotocol.io/specification/2025-11-25/server/resources). When enabled, agents can:
+
+- Discover skills via an automatically-injected prompt in the gateway's server instructions (or via the `list-resources` tool; look for `gw-skill://` URIs)
+- Read skill content via the `read-resource` tool
+- Execute skill scripts via the `invoke-gateway-skill-script` tool
+
+While many agents implement their own skill systems already, these systems are highly fragmented, and it is difficult to reuse the same skills across multiple separate agent applications. While some systems such as [skills.sh](https://skills.sh) solve this by copying skills between applications explicitly, My Cool Proxy solves this by centralizing all skills into its own skill management system and exposing them over MCP. To distinguish these from existing skill systems, My Cool Proxy refers to these as "Gateway Skills."
+
+Gateway skills are disabled by default as they may conflict with existing skill systems built into your agent. See the [Configuration Guide](docs/configuration.md#skills) for setup options.
+
+## Configuration
+
+See the [Configuration Guide](docs/configuration.md) for the full config reference.
+
+## MCP Feature Support Table
+
+| Feature                                                                                             | Supported? | Details                                                                                                                                                                                                                               |
+| --------------------------------------------------------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [Tools](https://modelcontextprotocol.io/specification/2025-11-25/server/tools)                      | ✅         | My Cool Proxy expects tools to be supported at a bare minimum. Fortunately, everything that supports MCP supports tools.                                                                                                              |
+| [Prompts](https://modelcontextprotocol.io/specification/2025-11-25/server/prompts)                  | ⚠️         | My Cool Proxy forwards prompts from your MCP servers to the connected client. However, if your client doesn't support prompts natively, they won't be usable.                                                                         |
+| [Resources](https://modelcontextprotocol.io/specification/2025-11-25/server/resources)              | ✅         | My Cool Proxy both forwards resources from your MCP servers to the connected client and exposes dedicated `read-resource` and `list-resources` tools for agents to load them automatically.                                           |
+| Server Instructions                                                                                 | ✅         | My Cool Proxy loads excerpts of the instructions of connected MCP servers into its own server instructions, and also sends full copies through the `list-servers` tool when invoked.                                                  |
+| Discovery Notifications                                                                             | ✅         | My Cool Proxy listens to the tool/prompt/resource change notifications of connected MCP servers to automatically update its own internal registries, which reflects in subsequent tool calls.                                         |
+| [Completions](https://modelcontextprotocol.io/specification/2025-11-25/server/utilities/completion) | ❌         | Completions are not yet supported (but [will be](https://github.com/karashiiro/my-cool-proxy/issues/26) soon).                                                                                                                        |
+| [Logging](https://modelcontextprotocol.io/specification/2025-11-25/server/utilities/logging)        | ✅         | My Cool Proxy forwards logging notifications to the connected client, and logs them itself as well.                                                                                                                                   |
+| [Roots](https://modelcontextprotocol.io/specification/2025-11-25/client/roots)                      | ❌         | Roots are not yet supported (but [will be](https://github.com/karashiiro/my-cool-proxy/issues/24) soon).                                                                                                                              |
+| [Sampling](https://modelcontextprotocol.io/specification/2025-11-25/client/sampling)                | ✅         | My Cool Proxy supports shimming sampling support over [ACP](https://agentclientprotocol.com/), though this is disabled by default. Refer to the [configuration docs](./docs/configuration.md#sampling-security) for more information. |
+| [Elicitation](https://modelcontextprotocol.io/specification/2025-11-25/client/elicitation)          | ❌         | Elicitation is not yet supported (but [will be](https://github.com/karashiiro/my-cool-proxy/issues/20)).                                                                                                                              |
+| [Progress](https://modelcontextprotocol.io/specification/2025-11-25/basic/utilities/progress)       | ❌         | Progress is not yet supported (but [will be](https://github.com/karashiiro/my-cool-proxy/issues/25)).                                                                                                                                 |
+| [Tasks](https://modelcontextprotocol.io/specification/2025-11-25/basic/utilities/tasks)             | ⚠️         | Calling tools that support tasks is supported, but without leveraging the status updates for anything interesting. Sampling/elicitation tasks are not currently supported.                                                            |
+| [MCP Apps](https://modelcontextprotocol.io/docs/extensions/apps)                                    | ❌         | MCP Apps are not yet supported (but [will be](https://github.com/karashiiro/my-cool-proxy/issues/29)).                                                                                                                                |

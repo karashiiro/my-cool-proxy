@@ -1,9 +1,11 @@
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { getErrorMessage } from "@my-cool-proxy/mcp-utilities";
 import type { ILogger, ICacheService } from "./types.js";
 import {
   ToolListChangedNotificationSchema,
   ResourceListChangedNotificationSchema,
   PromptListChangedNotificationSchema,
+  LoggingMessageNotificationSchema,
   type Implementation,
   type ListResourcesResult,
   type ListPromptsResult,
@@ -13,7 +15,26 @@ import {
   type Request,
   type Notification,
   type Result,
+  type LoggingMessageNotification,
+  type LoggingLevel,
 } from "@modelcontextprotocol/sdk/types.js";
+
+/**
+ * Maps MCP logging levels (RFC 5424 syslog) to pino levels.
+ * MCP has 8 levels; pino has 6. We map conservatively.
+ */
+type PinoLogLevel = "debug" | "info" | "warn" | "error" | "fatal";
+
+const MCP_TO_PINO_LEVEL: Record<LoggingLevel, PinoLogLevel> = {
+  debug: "debug",
+  info: "info",
+  notice: "info", // No pino equivalent, promote to info
+  warning: "warn",
+  error: "error",
+  critical: "error", // Severe but not system-wide
+  alert: "fatal", // Requires immediate action
+  emergency: "fatal", // System is unusable
+};
 import type { RequestHandlerExtra } from "@modelcontextprotocol/sdk/shared/protocol.js";
 import type {
   AnyObjectSchema,
@@ -29,6 +50,7 @@ import { createCache } from "./cache-service.js";
 export class MCPClientSession {
   private client: Client;
   private allowedTools: string[] | undefined;
+  private dangerouslyEnableSampling: boolean;
   private logger: ILogger;
   private serverName: string;
   private toolCache: ICacheService<Tool[]>;
@@ -37,6 +59,9 @@ export class MCPClientSession {
   private onResourceListChanged?: (serverName: string) => void;
   private onPromptListChanged?: (serverName: string) => void;
   private onToolListChanged?: (serverName: string) => void;
+  private onLoggingMessage?: (
+    params: LoggingMessageNotification["params"],
+  ) => void;
 
   constructor(
     client: Client,
@@ -46,14 +71,18 @@ export class MCPClientSession {
     onResourceListChanged?: (serverName: string) => void,
     onPromptListChanged?: (serverName: string) => void,
     onToolListChanged?: (serverName: string) => void,
+    dangerouslyEnableSampling?: boolean,
+    onLoggingMessage?: (params: LoggingMessageNotification["params"]) => void,
   ) {
     this.client = client;
     this.serverName = serverName;
     this.allowedTools = allowedTools;
+    this.dangerouslyEnableSampling = dangerouslyEnableSampling ?? false;
     this.logger = logger;
     this.onResourceListChanged = onResourceListChanged;
     this.onPromptListChanged = onPromptListChanged;
     this.onToolListChanged = onToolListChanged;
+    this.onLoggingMessage = onLoggingMessage;
 
     // Initialize cache instances
     this.toolCache = createCache<Tool[]>(logger);
@@ -81,7 +110,7 @@ export class MCPClientSession {
           }
         } catch (error) {
           this.logger.error(
-            `Server '${this.serverName}': Error handling tool list change notification: ${error instanceof Error ? error.message : String(error)}`,
+            `Server '${this.serverName}': Error handling tool list change notification: ${getErrorMessage(error)}`,
           );
         }
       },
@@ -103,7 +132,7 @@ export class MCPClientSession {
           }
         } catch (error) {
           this.logger.error(
-            `Server '${this.serverName}': Error handling resource list change notification: ${error instanceof Error ? error.message : String(error)}`,
+            `Server '${this.serverName}': Error handling resource list change notification: ${getErrorMessage(error)}`,
           );
         }
       },
@@ -125,11 +154,85 @@ export class MCPClientSession {
           }
         } catch (error) {
           this.logger.error(
-            `Server '${this.serverName}': Error handling prompt list change notification: ${error instanceof Error ? error.message : String(error)}`,
+            `Server '${this.serverName}': Error handling prompt list change notification: ${getErrorMessage(error)}`,
           );
         }
       },
     );
+
+    // Handle notifications/message (logging) notifications
+    this.client.setNotificationHandler(
+      LoggingMessageNotificationSchema,
+      async (notification) => {
+        try {
+          const { level, logger: loggerName, data } = notification.params;
+
+          // Prefix the logger field with server name for source identification
+          const prefixedLogger = loggerName
+            ? `[${this.serverName}] ${loggerName}`
+            : `[${this.serverName}]`;
+
+          // Log to pino at the appropriate level with structured context
+          const pinoLevel = MCP_TO_PINO_LEVEL[level];
+          const logContext = {
+            mcpServer: this.serverName,
+            mcpLogger: loggerName,
+            mcpLevel: level,
+            data,
+          };
+
+          const dataStr = this.formatDataForMessage(data);
+          const message = `MCP log from ${this.serverName}: ${dataStr}`;
+
+          // Call the appropriate logger method based on MCP level
+          switch (pinoLevel) {
+            case "debug":
+              this.logger.debug(logContext, message);
+              break;
+            case "info":
+              this.logger.info(logContext, message);
+              break;
+            case "warn":
+              this.logger.warn(logContext, message);
+              break;
+            case "error":
+              this.logger.error(logContext, message);
+              break;
+            case "fatal":
+              this.logger.fatal(logContext, message);
+              break;
+          }
+
+          // Forward to gateway with prefixed logger, preserving original data
+          if (this.onLoggingMessage) {
+            this.onLoggingMessage({
+              ...notification.params,
+              logger: prefixedLogger,
+            });
+          }
+        } catch (error) {
+          this.logger.error(
+            `Server '${this.serverName}': Error handling logging notification: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+      },
+    );
+  }
+
+  /**
+   * Format log data for inclusion in the human-readable log message.
+   * Truncates long JSON to keep console output readable while full data
+   * is available in the structured context.
+   */
+  private formatDataForMessage(data: unknown): string {
+    if (data === undefined || data === null) return "";
+    if (typeof data === "string") return data;
+    try {
+      const str = JSON.stringify(data);
+      return str.length > 200 ? str.slice(0, 200) + "..." : str;
+    } catch {
+      return "[unserializable data]";
+    }
   }
 
   getServerVersion(): Implementation | undefined {
@@ -284,6 +387,18 @@ export class MCPClientSession {
     return this.client.getPrompt(params);
   }
 
+  /**
+   * Call a tool on the connected MCP server.
+   * @param params Tool call parameters (name and arguments)
+   * @returns The tool call result
+   */
+  async callTool(params: {
+    name: string;
+    arguments?: Record<string, unknown>;
+  }) {
+    return this.client.callTool(params);
+  }
+
   // Pass through other methods we need
   get experimental() {
     return this.client.experimental;
@@ -319,5 +434,13 @@ export class MCPClientSession {
    */
   getServerName(): string {
     return this.serverName;
+  }
+
+  /**
+   * Check if sampling is enabled for this server.
+   * Returns false by default for safety - servers must explicitly opt-in.
+   */
+  getDangerouslyEnableSampling(): boolean {
+    return this.dangerouslyEnableSampling;
   }
 }

@@ -8,6 +8,7 @@ import type {
   ServerListItem,
 } from "./types.js";
 import { MCPFormatterService } from "./mcp-formatter-service.js";
+import { formatServerNotFoundError } from "./utils/error-formatting.js";
 import { inspect } from "node:util";
 
 export class ToolDiscoveryService {
@@ -99,16 +100,15 @@ export class ToolDiscoveryService {
       const client = this.findClientByLuaName(mcpServers, luaServerName);
 
       if (!client) {
-        const availableServers = Array.from(mcpServers.keys()).map((name) =>
-          sanitizeLuaIdentifier(name),
-        );
-        const serverList =
-          availableServers.length > 0 ? availableServers.join(", ") : "none";
         return {
           content: [
             {
               type: "text",
-              text: `Server '${luaServerName}' not found in session '${sessionId || "default"}'.\n\nAvailable servers: ${serverList}`,
+              text: formatServerNotFoundError({
+                serverName: luaServerName,
+                clients: mcpServers,
+                sessionId: sessionId || "default",
+              }),
             },
           ],
           isError: true,
@@ -147,16 +147,14 @@ export class ToolDiscoveryService {
       const client = this.findClientByLuaName(mcpServers, luaServerName);
 
       if (!client) {
-        const availableServers = Array.from(mcpServers.keys()).map((name) =>
-          sanitizeLuaIdentifier(name),
-        );
-        const serverList =
-          availableServers.length > 0 ? availableServers.join(", ") : "none";
         return {
           content: [
             {
               type: "text",
-              text: `Server '${luaServerName}' not found.\n\nAvailable servers: ${serverList}`,
+              text: formatServerNotFoundError({
+                serverName: luaServerName,
+                clients: mcpServers,
+              }),
             },
           ],
           isError: true,
@@ -212,16 +210,14 @@ export class ToolDiscoveryService {
       const client = this.findClientByLuaName(mcpServers, luaServerName);
 
       if (!client) {
-        const availableServers = Array.from(mcpServers.keys()).map((name) =>
-          sanitizeLuaIdentifier(name),
-        );
-        const serverList =
-          availableServers.length > 0 ? availableServers.join(", ") : "none";
         return {
           content: [
             {
               type: "text",
-              text: `Server '${luaServerName}' not found.\n\nAvailable servers: ${serverList}`,
+              text: formatServerNotFoundError({
+                serverName: luaServerName,
+                clients: mcpServers,
+              }),
             },
           ],
           isError: true,
