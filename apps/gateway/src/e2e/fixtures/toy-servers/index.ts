@@ -23,3 +23,8 @@ export {
 } from "./sampling-with-tools-server.js";
 
 export { startHttpLoggingServer } from "./logging-server.js";
+
+export {
+  startHttpRootsTesterServer,
+  startStdioRootsTesterServer,
+} from "./roots-tester-server.js";

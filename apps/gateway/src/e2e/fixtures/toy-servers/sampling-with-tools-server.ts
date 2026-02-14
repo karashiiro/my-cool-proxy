@@ -1,8 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
+import { serveStdio } from "@karashiiro/mcp/stdio";
+import { serveHttp } from "@karashiiro/mcp/http";
 import {
-  isInitializeRequest,
   type CreateMessageRequest,
   type CreateMessageResult,
   type SamplingMessage,
@@ -11,10 +10,7 @@ import {
   type ToolResultContent,
   type ToolUseContent,
 } from "@modelcontextprotocol/sdk/types.js";
-import { serve } from "@hono/node-server";
-import { Hono } from "hono";
 import * as z from "zod";
-import { randomUUID } from "node:crypto";
 
 // Maximum number of tool call rounds to prevent infinite loops
 const MAX_TOOL_ROUNDS = 10;
@@ -855,92 +851,20 @@ function createSamplingWithToolsServer(): McpServer {
 /**
  * Starts the sampling-with-tools server in HTTP mode on the specified port
  */
-export async function startHttpSamplingWithToolsServer(port: number): Promise<{
-  close: () => Promise<void>;
-}> {
-  const transports = new Map<
-    string,
-    WebStandardStreamableHTTPServerTransport
-  >();
-  const servers = new Map<string, McpServer>();
-
-  const app = new Hono();
-  app.all("/mcp", async (c) => {
-    const sessionId = c.req.header("mcp-session-id");
-
-    const rawRequest = c.req.raw;
-    const bodyText = await rawRequest.text();
-    let body: unknown = null;
-    try {
-      body = bodyText ? JSON.parse(bodyText) : null;
-    } catch {
-      // Invalid JSON
-    }
-
-    const recreateRequest = () =>
-      new Request(rawRequest.url, {
-        method: rawRequest.method,
-        headers: rawRequest.headers,
-        body: bodyText || undefined,
-      });
-
-    if (!sessionId && body && isInitializeRequest(body)) {
-      const newSessionId = randomUUID();
-      const transport = new WebStandardStreamableHTTPServerTransport({
-        sessionIdGenerator: () => newSessionId,
-      });
-      const server = createSamplingWithToolsServer();
-      await server.connect(transport);
-
-      transports.set(newSessionId, transport);
-      servers.set(newSessionId, server);
-
-      return transport.handleRequest(recreateRequest());
-    }
-
-    if (sessionId) {
-      const transport = transports.get(sessionId);
-      if (!transport) {
-        return c.text("Session not found", 404);
-      }
-      return transport.handleRequest(recreateRequest());
-    }
-
-    return c.text("Bad request - missing session ID", 400);
-  });
-
-  const httpServer = serve({
-    fetch: app.fetch,
+export async function startHttpSamplingWithToolsServer(port: number) {
+  return serveHttp(() => createSamplingWithToolsServer(), {
     port,
-    hostname: "localhost",
+    host: "localhost",
+    endpoint: "/mcp",
+    sessions: {},
   });
-
-  return {
-    close: async () => {
-      for (const server of servers.values()) {
-        await server.close();
-      }
-      transports.clear();
-      servers.clear();
-
-      await new Promise<void>((resolve, reject) => {
-        httpServer.close((err) => (err ? reject(err) : resolve()));
-      });
-    },
-  };
 }
 
 /**
  * Starts the sampling-with-tools server in stdio mode
  */
-export async function startStdioSamplingWithToolsServer(): Promise<never> {
-  const server = createSamplingWithToolsServer();
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-
-  return new Promise(() => {
-    // Never resolves - keeps the process running forever
-  });
+export async function startStdioSamplingWithToolsServer() {
+  return serveStdio(() => createSamplingWithToolsServer());
 }
 
 // If this file is run directly, check for --http flag
@@ -957,14 +881,11 @@ if (process.argv[1]) {
       console.log(
         `Starting sampling-with-tools server in HTTP mode on port ${port}...`,
       );
-      startHttpSamplingWithToolsServer(port)
-        .then(() => {
-          console.log(`Server running at http://localhost:${port}/mcp`);
-        })
-        .catch(console.error);
+      await startHttpSamplingWithToolsServer(port);
+      console.log(`Server running at http://localhost:${port}/mcp`);
     } else {
       // Default to stdio mode
-      startStdioSamplingWithToolsServer().catch(console.error);
+      await startStdioSamplingWithToolsServer();
     }
   }
 }

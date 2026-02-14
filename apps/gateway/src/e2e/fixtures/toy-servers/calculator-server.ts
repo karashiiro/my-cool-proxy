@@ -1,11 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
-import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
-import { serve } from "@hono/node-server";
-import { Hono } from "hono";
+import { serveStdio } from "@karashiiro/mcp/stdio";
+import { serveHttp } from "@karashiiro/mcp/http";
 import * as z from "zod";
-import { randomUUID } from "node:crypto";
 
 /**
  * Creates a calculator MCP server with basic math tools
@@ -124,103 +120,20 @@ function createCalculatorServer(): McpServer {
 /**
  * Starts the calculator server in HTTP mode on the specified port
  */
-export async function startHttpCalculatorServer(port: number): Promise<{
-  close: () => Promise<void>;
-}> {
-  // Track transports and servers per session
-  const transports = new Map<
-    string,
-    WebStandardStreamableHTTPServerTransport
-  >();
-  const servers = new Map<string, McpServer>();
-
-  // Create HTTP server with Hono
-  const app = new Hono();
-  app.all("/mcp", async (c) => {
-    const sessionId = c.req.header("mcp-session-id");
-
-    // Parse body to check if it's an initialize request
-    const rawRequest = c.req.raw;
-    const bodyText = await rawRequest.text();
-    let body: unknown = null;
-    try {
-      body = bodyText ? JSON.parse(bodyText) : null;
-    } catch {
-      // Invalid JSON
-    }
-
-    // Helper to recreate request (since we consumed the body)
-    const recreateRequest = () =>
-      new Request(rawRequest.url, {
-        method: rawRequest.method,
-        headers: rawRequest.headers,
-        body: bodyText || undefined,
-      });
-
-    // New session: no session ID and initialize request
-    if (!sessionId && body && isInitializeRequest(body)) {
-      const newSessionId = randomUUID();
-      const transport = new WebStandardStreamableHTTPServerTransport({
-        sessionIdGenerator: () => newSessionId,
-      });
-      const server = createCalculatorServer();
-      await server.connect(transport);
-
-      transports.set(newSessionId, transport);
-      servers.set(newSessionId, server);
-
-      return transport.handleRequest(recreateRequest());
-    }
-
-    // Existing session
-    if (sessionId) {
-      const transport = transports.get(sessionId);
-      if (!transport) {
-        return c.text("Session not found", 404);
-      }
-      return transport.handleRequest(recreateRequest());
-    }
-
-    // Invalid request (no session ID, not an initialize request)
-    return c.text("Bad request - missing session ID", 400);
-  });
-
-  const httpServer = serve({
-    fetch: app.fetch,
+export async function startHttpCalculatorServer(port: number) {
+  return serveHttp(() => createCalculatorServer(), {
     port,
-    hostname: "localhost",
+    host: "localhost",
+    endpoint: "/mcp",
+    sessions: {},
   });
-
-  return {
-    close: async () => {
-      // Close all servers and transports
-      for (const server of servers.values()) {
-        await server.close();
-      }
-      transports.clear();
-      servers.clear();
-
-      await new Promise<void>((resolve, reject) => {
-        httpServer.close((err) => (err ? reject(err) : resolve()));
-      });
-    },
-  };
 }
 
 /**
  * Starts the calculator server in stdio mode (for use as child process)
- * This function does not return - it runs the server on stdin/stdout
  */
-export async function startStdioCalculatorServer(): Promise<never> {
-  const server = createCalculatorServer();
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-
-  // Keep process alive indefinitely
-  // The transport handles stdin/stdout, we just need to prevent exit
-  return new Promise(() => {
-    // Never resolves - keeps the process running forever
-  });
+export async function startStdioCalculatorServer() {
+  return serveStdio(() => createCalculatorServer());
 }
 
 // If this file is run directly, check for --http flag
@@ -235,14 +148,11 @@ if (process.argv[1]) {
       // HTTP mode: use port from args or default to 3002
       const port = parseInt(process.argv[httpIndex + 1] ?? "3002", 10);
       console.log(`Starting calculator server in HTTP mode on port ${port}...`);
-      startHttpCalculatorServer(port)
-        .then(() => {
-          console.log(`Server running at http://localhost:${port}/mcp`);
-        })
-        .catch(console.error);
+      await startHttpCalculatorServer(port);
+      console.log(`Server running at http://localhost:${port}/mcp`);
     } else {
       // Default to stdio mode
-      startStdioCalculatorServer().catch(console.error);
+      await startStdioCalculatorServer();
     }
   }
 }
