@@ -396,6 +396,14 @@ export class MCPClientManager implements IMCPClientManager {
       );
     }
 
+    // Forward roots capability if downstream supports it
+    if (downstreamCaps.roots) {
+      caps.roots = downstreamCaps.roots;
+      this.logger.debug(
+        `Advertising roots capability to upstream (listChanged: ${!!downstreamCaps.roots.listChanged})`,
+      );
+    }
+
     return caps;
   }
 

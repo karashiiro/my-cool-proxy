@@ -430,6 +430,14 @@ export class MCPClientSession {
   }
 
   /**
+   * Send a roots/list_changed notification to the upstream server.
+   * This notifies the server that the client's root URIs have changed.
+   */
+  async sendRootsListChanged(): Promise<void> {
+    await this.client.sendRootsListChanged();
+  }
+
+  /**
    * Get the name of the server this client is connected to.
    */
   getServerName(): string {

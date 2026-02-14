@@ -1,6 +1,7 @@
 import {
   CreateMessageRequestSchema,
   ElicitRequestSchema,
+  ListRootsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import type {
   ILogger,
@@ -113,13 +114,40 @@ export function registerProxyHandlers(
         `Registered elicitation request handler for upstream server '${serverName}'`,
       );
     }
+
+    // Register roots handler if downstream supports it
+    if (capabilities.roots) {
+      clientSession.setRequestHandler(ListRootsRequestSchema, async () => {
+        logger.debug(
+          `Received roots/list request from upstream server '${serverName}', forwarding to downstream`,
+        );
+        try {
+          const result = await gatewayServer.forwardListRootsRequest();
+          return result;
+        } catch (error) {
+          logger.error(
+            `Failed to forward roots/list request from '${serverName}'`,
+            error instanceof Error ? error : new Error(String(error)),
+          );
+          throw error;
+        }
+      });
+      logger.debug(
+        `Registered roots/list request handler for upstream server '${serverName}'`,
+      );
+    }
   }
 
   const clientCount = clients.size;
-  if (capabilities.sampling || samplingShim || capabilities.elicitation) {
+  if (
+    capabilities.sampling ||
+    samplingShim ||
+    capabilities.elicitation ||
+    capabilities.roots
+  ) {
     logger.info(
       `Registered proxy handlers on ${clientCount} upstream client(s): ` +
-        `sampling=${!!capabilities.sampling}, samplingShim=${!!samplingShim}, elicitation=${!!capabilities.elicitation}`,
+        `sampling=${!!capabilities.sampling}, samplingShim=${!!samplingShim}, elicitation=${!!capabilities.elicitation}, roots=${!!capabilities.roots}`,
     );
   }
 }

@@ -98,7 +98,6 @@ export class HttpServerManager {
           capabilityStore.setCapabilities(sessionId, capabilities);
 
           // Create session-isolated tempdir for sampling shim
-          // Note: roots/list is currently broken in the TS SDK, so we always use tempdir
           const workingDirectory = createSessionTempDir(sessionId);
           logger.info(
             `Session ${sessionId}: Using tempdir as cwd: ${workingDirectory}`,
@@ -124,7 +123,7 @@ export class HttpServerManager {
             upstreamCapabilities,
           );
 
-          // Register proxy handlers for sampling/elicitation forwarding
+          // Register proxy handlers for sampling/elicitation/roots forwarding
           registerProxyHandlers(
             sessionId,
             clientManager,
@@ -133,6 +132,11 @@ export class HttpServerManager {
             capabilities,
             activeShim,
           );
+
+          // Register roots/list_changed notification forwarding if downstream supports it
+          if (capabilities.roots?.listChanged) {
+            gatewayServer.registerRootsNotificationForwarding(sessionId);
+          }
         });
 
         return gatewayServer.getServer();
