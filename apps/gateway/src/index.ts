@@ -288,6 +288,13 @@ async function startHttpMode(
             logger,
           );
 
+        // Register roots provider so the sampling shim can resolve client roots as cwd
+        if (capabilities.roots && samplingShim) {
+          samplingShim.setRootsProvider(sessionId, () =>
+            gatewayServer.forwardListRootsRequest(),
+          );
+        }
+
         // Now initialize upstream MCP clients with the (possibly augmented) capabilities
         // This tells upstream servers what requests they can send through the proxy
         const initResult = await initializeClientsForSession(
@@ -506,6 +513,13 @@ async function startStdioMode(
         samplingShim,
         logger,
       );
+
+      // Register roots provider so the sampling shim can resolve client roots as cwd
+      if (capabilities.roots && samplingShim) {
+        samplingShim.setRootsProvider(SESSION_ID, () =>
+          gatewayServer.forwardListRootsRequest(),
+        );
+      }
 
       // Initialize upstream MCP clients with (possibly augmented) capabilities
       const initResult = await initializeClientsForSession(

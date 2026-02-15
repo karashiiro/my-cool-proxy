@@ -218,6 +218,17 @@ export interface ISamplingShim {
   >;
 
   /**
+   * Register a callback that retrieves roots from the downstream client.
+   * Called per-session so the shim can resolve a project root as cwd.
+   */
+  setRootsProvider(
+    sessionId: string,
+    provider: () => Promise<
+      import("@modelcontextprotocol/sdk/types.js").ListRootsResult
+    >,
+  ): void;
+
+  /**
    * Close the ACP agent for a specific session.
    */
   close(sessionId: string): Promise<void>;
