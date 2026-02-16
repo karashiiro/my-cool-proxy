@@ -700,10 +700,15 @@ describe("MCPGatewayServer - execute tool", () => {
         arguments: { script },
       });
 
-      expect(result.content).toEqual([
-        { type: "text", text: "Tool failed: invalid input" },
-      ]);
+      // The runtime now throws on isError: true, which execute-lua-tool
+      // catches and wraps as a script execution failure
       expect(result.isError).toBe(true);
+      expect(result.content).toHaveLength(1);
+      const text = (result.content as Array<{ type: string; text: string }>)[0]
+        ?.text;
+      expect(text).toContain("Script execution failed");
+      expect(text).toContain("Tool failed: invalid input");
+      expect(text).toContain("isError: true");
     });
   });
 
