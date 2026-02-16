@@ -213,6 +213,26 @@ describe("ExecuteLuaTool", () => {
       expect(logger.error).toHaveBeenCalled();
     });
 
+    it("should surface isError tool call failures as script execution errors", async () => {
+      const error = new Error(
+        "Tool 'api.bad-tool' returned an error (isError: true):\nRate limit exceeded",
+      );
+      luaRuntime.executeScript.mockRejectedValue(error);
+
+      const result = await tool.execute(
+        { script: "result(api.bad_tool({}):await())" },
+        { sessionId: "test" },
+      );
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0]?.type).toBe("text");
+      if (result.content[0]?.type === "text") {
+        expect(result.content[0].text).toContain("Script execution failed");
+        expect(result.content[0].text).toContain("Rate limit exceeded");
+        expect(result.content[0].text).toContain("isError");
+      }
+    });
+
     it("should handle runtime errors during tool calls", async () => {
       const error = new Error("Tool 'nonexistent' not found");
       luaRuntime.executeScript.mockRejectedValue(error);

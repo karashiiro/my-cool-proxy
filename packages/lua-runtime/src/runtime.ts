@@ -192,6 +192,21 @@ Common issues:
                 result,
               );
 
+              // Validate isError flag - throw so agents can't silently
+              // extract error context as if it were successful data
+              if (namespacedResult.isError) {
+                const errorText = namespacedResult.content
+                  .filter(
+                    (c): c is { type: "text"; text: string } =>
+                      c.type === "text",
+                  )
+                  .map((c) => c.text)
+                  .join("\n");
+                throw new Error(
+                  `Tool '${originalServerName}.${originalToolName}' returned an error (isError: true):\n${errorText}`,
+                );
+              }
+
               if (namespacedResult.structuredContent) {
                 // Directly return structured content as Lua table
                 return namespacedResult.structuredContent;

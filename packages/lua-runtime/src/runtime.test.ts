@@ -784,6 +784,250 @@ describe("WasmoonRuntime", () => {
     });
   });
 
+  describe("isError validation", () => {
+    it("should throw when a tool call returns isError: true", async () => {
+      const { server, client } = await createTestServer("api", [
+        {
+          name: "failing-tool",
+          description: "A tool that returns an error",
+          handler: async () => ({
+            content: [
+              {
+                type: "text" as const,
+                text: "Something went wrong: invalid input",
+              },
+            ],
+            isError: true,
+          }),
+        },
+      ]);
+
+      cleanupFns.push(async () => {
+        await client.close();
+        await server.close();
+      });
+
+      const servers = new Map([["api", client]]);
+
+      const script = `
+        local data = api.failing_tool({}):await()
+        result(data)
+      `;
+
+      await expect(
+        runtime.executeScript(script, servers, createMockGatewayBuiltins()),
+      ).rejects.toThrow(/isError/);
+    });
+
+    it("should include tool result content in the error when isError is true", async () => {
+      const { server, client } = await createTestServer("api", [
+        {
+          name: "bad-tool",
+          description: "Returns error",
+          handler: async () => ({
+            content: [{ type: "text" as const, text: "Rate limit exceeded" }],
+            isError: true,
+          }),
+        },
+      ]);
+
+      cleanupFns.push(async () => {
+        await client.close();
+        await server.close();
+      });
+
+      const servers = new Map([["api", client]]);
+
+      const script = `
+        local data = api.bad_tool({}):await()
+        result(data)
+      `;
+
+      const error = await runtime
+        .executeScript(script, servers, createMockGatewayBuiltins())
+        .catch((err) => err);
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain("Rate limit exceeded");
+      expect((error as Error).message).toContain("api");
+      expect((error as Error).message).toContain("bad-tool");
+    });
+
+    it("should concatenate multiple text content blocks in the error message", async () => {
+      const { server, client } = await createTestServer("api", [
+        {
+          name: "multi-error",
+          description: "Returns error with multiple text blocks",
+          handler: async () => ({
+            content: [
+              { type: "text" as const, text: "Error: validation failed" },
+              { type: "text" as const, text: "Field 'name' is required" },
+              { type: "text" as const, text: "Field 'email' must be valid" },
+            ],
+            isError: true,
+          }),
+        },
+      ]);
+
+      cleanupFns.push(async () => {
+        await client.close();
+        await server.close();
+      });
+
+      const servers = new Map([["api", client]]);
+
+      const script = `
+        result(api.multi_error({}):await())
+      `;
+
+      const error = await runtime
+        .executeScript(script, servers, createMockGatewayBuiltins())
+        .catch((err) => err);
+
+      expect(error).toBeInstanceOf(Error);
+      const message = (error as Error).message;
+      expect(message).toContain("validation failed");
+      expect(message).toContain("Field 'name' is required");
+      expect(message).toContain("Field 'email' must be valid");
+    });
+
+    it("should handle isError with empty content array", async () => {
+      const { server, client } = await createTestServer("api", [
+        {
+          name: "empty-error",
+          description: "Returns error with no content",
+          handler: async () => ({
+            content: [],
+            isError: true,
+          }),
+        },
+      ]);
+
+      cleanupFns.push(async () => {
+        await client.close();
+        await server.close();
+      });
+
+      const servers = new Map([["api", client]]);
+
+      const script = `
+        result(api.empty_error({}):await())
+      `;
+
+      await expect(
+        runtime.executeScript(script, servers, createMockGatewayBuiltins()),
+      ).rejects.toThrow(/isError/);
+    });
+
+    it("should filter non-text content blocks when building error message", async () => {
+      const { server, client } = await createTestServer("api", [
+        {
+          name: "mixed-error",
+          description: "Returns error with mixed content types",
+          handler: async () => ({
+            content: [
+              { type: "text" as const, text: "Something broke" },
+              {
+                type: "image" as const,
+                data: "iVBORw0KGgo=",
+                mimeType: "image/png",
+              },
+              { type: "text" as const, text: "See attached screenshot" },
+            ],
+            isError: true,
+          }),
+        },
+      ]);
+
+      cleanupFns.push(async () => {
+        await client.close();
+        await server.close();
+      });
+
+      const servers = new Map([["api", client]]);
+
+      const script = `
+        result(api.mixed_error({}):await())
+      `;
+
+      const error = await runtime
+        .executeScript(script, servers, createMockGatewayBuiltins())
+        .catch((err) => err);
+
+      expect(error).toBeInstanceOf(Error);
+      const message = (error as Error).message;
+      expect(message).toContain("Something broke");
+      expect(message).toContain("See attached screenshot");
+      // Should not contain base64 image data
+      expect(message).not.toContain("iVBORw0KGgo=");
+    });
+
+    it("should throw on isError even when structuredContent is present", async () => {
+      const { server, client } = await createTestServer("api", [
+        {
+          name: "structured-error",
+          description: "Returns error with structuredContent",
+          handler: async () => ({
+            content: [
+              { type: "text" as const, text: "Structured error occurred" },
+            ],
+            structuredContent: {
+              errorCode: "E_VALIDATION",
+              details: { field: "name", reason: "required" },
+            },
+            isError: true,
+          }),
+        },
+      ]);
+
+      cleanupFns.push(async () => {
+        await client.close();
+        await server.close();
+      });
+
+      const servers = new Map([["api", client]]);
+
+      const script = `
+        result(api.structured_error({}):await())
+      `;
+
+      await expect(
+        runtime.executeScript(script, servers, createMockGatewayBuiltins()),
+      ).rejects.toThrow(/isError/);
+    });
+
+    it("should not throw when isError is false", async () => {
+      const { server, client } = await createTestServer("api", [
+        {
+          name: "good-tool",
+          description: "Returns success",
+          handler: async () => ({
+            content: [{ type: "text" as const, text: '{"ok": true}' }],
+            isError: false,
+          }),
+        },
+      ]);
+
+      cleanupFns.push(async () => {
+        await client.close();
+        await server.close();
+      });
+
+      const servers = new Map([["api", client]]);
+
+      const script = `
+        result(api.good_tool({}):await())
+      `;
+
+      const result = await runtime.executeScript(
+        script,
+        servers,
+        createMockGatewayBuiltins(),
+      );
+      expect(result).toEqual({ ok: true });
+    });
+  });
+
   describe("error handling", () => {
     it("should throw error for invalid Lua syntax", async () => {
       const script = `
