@@ -20,6 +20,7 @@ describe("initializeSamplingShim", () => {
     mockShim = {
       initialize: vi.fn().mockResolvedValue(undefined),
       handleSamplingRequest: vi.fn(),
+      setRootsProvider: vi.fn(),
       close: vi.fn(),
       closeAll: vi.fn(),
     };

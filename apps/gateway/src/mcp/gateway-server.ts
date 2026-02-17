@@ -5,6 +5,7 @@ import {
   ReadResourceRequestSchema,
   ListPromptsRequestSchema,
   GetPromptRequestSchema,
+  RootsListChangedNotificationSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import type {
   CreateMessageRequest,
@@ -12,6 +13,7 @@ import type {
   CreateMessageResultWithTools,
   ElicitRequest,
   ElicitResult,
+  ListRootsResult,
   LoggingMessageNotification,
 } from "@modelcontextprotocol/sdk/types.js";
 import type {
@@ -71,6 +73,14 @@ export class MCPGatewayServer {
   private server: McpServer;
   private serverId = "my-cool-proxy";
   private onDownstreamInitialized?: OnDownstreamInitializedCallback;
+
+  /**
+   * Tracks the downstream request ID during tool execution.
+   * Used to route server-to-client requests (like roots/list) through the
+   * active POST response stream instead of the standalone GET SSE stream,
+   * which may be disconnected depending on the client implementation.
+   */
+  private activeDownstreamRequestId?: string | number;
 
   constructor(
     @$inject(TYPES.ToolRegistry) private toolRegistry: IToolRegistry,
@@ -164,8 +174,18 @@ export class MCPGatewayServer {
         },
         async (
           args: Record<string, unknown>,
-          context: { sessionId?: string },
-        ) => tool.execute(args, context),
+          // The SDK passes the full RequestHandlerExtra here, which includes
+          // requestId — we capture it so forwardListRootsRequest can route
+          // through the POST response stream rather than the standalone GET SSE.
+          context: { sessionId?: string; requestId?: string | number },
+        ) => {
+          this.activeDownstreamRequestId = context.requestId;
+          try {
+            return await tool.execute(args, context);
+          } finally {
+            this.activeDownstreamRequestId = undefined;
+          }
+        },
       );
 
       this.logger.info(`Registered tool: ${tool.name}`);
@@ -317,5 +337,71 @@ export class MCPGatewayServer {
       );
       throw error;
     }
+  }
+
+  /**
+   * Forward a roots/list request from an upstream server to the downstream client.
+   * This is called when an upstream MCP server sends a roots/list request.
+   *
+   * @returns The list of roots from the downstream client
+   */
+  async forwardListRootsRequest(): Promise<ListRootsResult> {
+    this.logger.debug(`Forwarding roots/list request to downstream`);
+
+    try {
+      // Pass relatedRequestId so the transport routes through the active POST
+      // response stream. Without this, the request goes to the standalone GET
+      // SSE stream which may be disconnected (e.g. Claude Code doesn't maintain one).
+      const options =
+        this.activeDownstreamRequestId !== undefined
+          ? { relatedRequestId: this.activeDownstreamRequestId }
+          : undefined;
+      const result = await this.server.server.listRoots(undefined, options);
+      this.logger.debug(
+        `Roots/list request completed: ${result.roots.length} root(s)`,
+      );
+      return result;
+    } catch (error) {
+      this.logger.error(
+        `Failed to forward roots/list request to downstream`,
+        error instanceof Error ? error : new Error(String(error)),
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Register a handler that forwards roots/list_changed notifications from the
+   * downstream client to all upstream servers in the given session.
+   *
+   * @param sessionId The session ID to look up upstream clients for
+   */
+  registerRootsNotificationForwarding(sessionId: string): void {
+    this.server.server.setNotificationHandler(
+      RootsListChangedNotificationSchema,
+      async () => {
+        this.logger.debug(
+          `Received roots/list_changed from downstream, forwarding to upstream clients (session: ${sessionId})`,
+        );
+
+        const clients = this.clientPool.getClientsBySession(sessionId);
+        for (const [serverName, clientSession] of clients) {
+          try {
+            await clientSession.sendRootsListChanged();
+            this.logger.debug(
+              `Sent roots/list_changed to upstream server '${serverName}'`,
+            );
+          } catch (error) {
+            this.logger.warn(
+              `Failed to send roots/list_changed to upstream server '${serverName}': ${error instanceof Error ? error.message : String(error)}`,
+            );
+          }
+        }
+      },
+    );
+
+    this.logger.debug(
+      `Registered roots/list_changed notification forwarding for session ${sessionId}`,
+    );
   }
 }

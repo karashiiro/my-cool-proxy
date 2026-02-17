@@ -66,19 +66,18 @@ flowchart TB
         PromptAgg["Prompt Aggregation"]
     end
 
-    subgraph Discovery["Tool Discovery & Resources"]
+    subgraph Discovery["Tool Discovery"]
         ListServers["list-servers"]
         ListTools["list-server-tools"]
         ToolDetails["tool-details"]
         Inspect["inspect-tool-response"]
         Execute["execute"]
-        ListResources["list-resources"]
-        ReadResource["read-resource"]
     end
 
     subgraph Runtime["Lua Runtime"]
         Wasmoon["Wasmoon Engine"]
         ServerGlobals["MCP Server Globals"]
+        GatewayBuiltins["_gateway Builtins"]
     end
 
     subgraph Clients["Client Management"]

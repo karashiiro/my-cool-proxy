@@ -5,7 +5,7 @@
  * @param schema - The JSON Schema object to format
  * @returns Array of formatted lines
  */
-export function formatSchema(schema: unknown): string[] {
+export function formatSchema(schema: unknown, indent: number = 1): string[] {
   const lines: string[] = [];
 
   if (!schema || typeof schema !== "object") {
@@ -13,13 +13,15 @@ export function formatSchema(schema: unknown): string[] {
   }
 
   const schemaObj = schema as {
-    type?: string;
+    type?: string | string[];
     properties?: Record<string, unknown>;
     required?: string[];
     description?: string;
   };
 
   const required = new Set(schemaObj.required || []);
+  const pad = "  ".repeat(indent);
+  const descPad = "  ".repeat(indent + 1);
 
   if (schemaObj.properties) {
     for (const [fieldName, fieldSchema] of Object.entries(
@@ -29,14 +31,31 @@ export function formatSchema(schema: unknown): string[] {
       const fieldType = getSchemaType(fieldSchema);
       const requiredLabel = isRequired ? "required" : "optional";
 
-      lines.push(`  ${fieldName} (${fieldType}, ${requiredLabel})`);
+      lines.push(`${pad}${fieldName} (${fieldType}, ${requiredLabel})`);
 
-      const fieldSchemaObj = fieldSchema as { description?: string };
+      const fieldSchemaObj = fieldSchema as {
+        description?: string;
+        properties?: Record<string, unknown>;
+        items?: { properties?: Record<string, unknown> };
+      };
       if (fieldSchemaObj.description) {
-        lines.push(`    ${fieldSchemaObj.description}`);
+        lines.push(`${descPad}${fieldSchemaObj.description}`);
       }
 
-      lines.push("");
+      // Recursively expand nested object properties
+      if (fieldSchemaObj.properties) {
+        const nested = formatSchema(fieldSchema, indent + 1);
+        if (nested.length > 0) {
+          lines.push(...nested);
+        }
+      } else if (fieldSchemaObj.items && fieldSchemaObj.items.properties) {
+        // Expand array item properties too
+        lines.push(`${descPad}Item properties:`);
+        const nested = formatSchema(fieldSchemaObj.items, indent + 2);
+        if (nested.length > 0) {
+          lines.push(...nested);
+        }
+      }
     }
   }
 
@@ -56,24 +75,40 @@ export function getSchemaType(schema: unknown): string {
   }
 
   const schemaObj = schema as {
-    type?: string;
+    type?: string | string[];
     items?: unknown;
     properties?: Record<string, unknown>;
     enum?: string[];
   };
 
-  if (schemaObj.type === "array" && schemaObj.items) {
+  // Normalize type — JSON Schema allows type to be an array (e.g. ["null", "object"])
+  const types = Array.isArray(schemaObj.type)
+    ? schemaObj.type
+    : schemaObj.type
+      ? [schemaObj.type]
+      : [];
+  const nonNullTypes = types.filter((t) => t !== "null");
+  const isNullable = types.includes("null");
+  const primaryType = nonNullTypes[0];
+
+  if (primaryType === "array" && schemaObj.items) {
     const itemType = getSchemaType(schemaObj.items);
-    return `array<${itemType}>`;
+    const base = `array<${itemType}>`;
+    return isNullable ? `${base} | null` : base;
   }
 
-  if (schemaObj.type === "object" && schemaObj.properties) {
-    return "object";
+  if (primaryType === "object" && schemaObj.properties) {
+    return isNullable ? "object | null" : "object";
   }
 
   if (schemaObj.enum) {
     return `enum: ${schemaObj.enum.join(" | ")}`;
   }
 
-  return schemaObj.type || "unknown";
+  // For union types without special handling, join with pipe
+  if (types.length > 1) {
+    return types.join(" | ");
+  }
+
+  return primaryType || "unknown";
 }

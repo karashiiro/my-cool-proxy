@@ -1,5 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { serveStdio } from "@karashiiro/mcp/stdio";
 import * as z from "zod";
 
 /**
@@ -75,13 +75,11 @@ function createStderrServer(): McpServer {
  * Starts the stderr test server in stdio mode.
  * Writes to stderr on startup to verify logging is captured.
  */
-export async function startStdioStderrServer(): Promise<never> {
+export async function startStdioStderrServer() {
   // Write startup message to stderr
   process.stderr.write("[stderr-test] Server starting up...\n");
 
-  const server = createStderrServer();
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
+  const handle = await serveStdio(() => createStderrServer());
 
   // Write ready message to stderr
   process.stderr.write(
@@ -89,20 +87,18 @@ export async function startStdioStderrServer(): Promise<never> {
   );
 
   // Handle shutdown signals
-  const handleShutdown = () => {
+  const handleShutdown = async () => {
     process.stderr.write(
       "[stderr-test] Server shutting down (received signal)\n",
     );
+    await handle.close();
     process.exit(0);
   };
 
   process.on("SIGINT", handleShutdown);
   process.on("SIGTERM", handleShutdown);
 
-  // Keep process alive indefinitely
-  return new Promise(() => {
-    // Never resolves - keeps the process running forever
-  });
+  return handle;
 }
 
 // If this file is run directly, start in stdio mode
@@ -112,6 +108,6 @@ if (process.argv[1]) {
   const mainFile = process.argv[1];
 
   if (currentFile === mainFile) {
-    startStdioStderrServer().catch(console.error);
+    await startStdioStderrServer();
   }
 }

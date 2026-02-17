@@ -31,17 +31,73 @@ export interface IMCPClientSession {
 }
 
 /**
+ * Interface for gateway built-in functions that are injected into the Lua runtime.
+ * These provide access to gateway functionality from within Lua scripts.
+ */
+export interface IGatewayBuiltins {
+  /**
+   * List all available resources across connected MCP servers.
+   */
+  listResources(): Promise<unknown>;
+
+  /**
+   * Read a specific resource by its namespaced URI.
+   * @param uri The namespaced resource URI (gw:// or gw-skill://)
+   */
+  readResource(uri: string): Promise<unknown>;
+
+  /**
+   * List all available prompts across connected MCP servers.
+   */
+  listPrompts(): Promise<unknown>;
+
+  /**
+   * Get a specific prompt by its namespaced name.
+   * @param name The namespaced prompt name (server-name/prompt-name)
+   * @param args Optional arguments to pass to the prompt
+   */
+  getPrompt(name: string, args?: Record<string, string>): Promise<unknown>;
+
+  /**
+   * Get gateway summary statistics (server counts, tool counts, etc.).
+   */
+  summaryStats(): Promise<unknown>;
+
+  /**
+   * Execute a script from a skill's scripts/ directory.
+   * Only available when skills are enabled.
+   */
+  invokeSkillScript?(
+    skillName: string,
+    script: string,
+    args?: string[],
+  ): Promise<unknown>;
+
+  /**
+   * Create or modify a gateway skill.
+   * Only available when skills are enabled and mutable.
+   */
+  writeSkill?(
+    skillName: string,
+    content?: string,
+    files?: Array<{ path: string; content: string }>,
+  ): Promise<unknown>;
+}
+
+/**
  * Interface for Lua runtime implementations
  */
 export interface ILuaRuntime {
   /**
-   * Execute a Lua script with injected MCP servers
+   * Execute a Lua script with injected MCP servers and gateway builtins
    * @param script The Lua source code to execute
    * @param mcpServers Map of server name to client session
+   * @param gatewayBuiltins Gateway built-in functions to inject
    * @returns The result returned by calling result() in Lua
    */
   executeScript(
     script: string,
     mcpServers: Map<string, IMCPClientSession>,
+    gatewayBuiltins: IGatewayBuiltins,
   ): Promise<unknown>;
 }

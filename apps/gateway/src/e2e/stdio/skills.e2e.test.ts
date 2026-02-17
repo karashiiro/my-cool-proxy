@@ -221,23 +221,28 @@ A second test skill.
     });
   });
 
-  describe("read-resource Tool", () => {
-    it("should read skill via read-resource tool", async () => {
+  describe("_gateway.read_resource() builtin", () => {
+    it("should read skill via _gateway.read_resource() Lua builtin", async () => {
       const result = await gatewayClient.callTool({
-        name: "read-resource",
-        arguments: { uri: "gw-skill://test-skill" },
+        name: "execute",
+        arguments: {
+          script: `result(_gateway.read_resource({ uri = "gw-skill://test-skill" }):await())`,
+        },
       });
 
       const content = result.content as TextContent[];
       expect(content).toHaveLength(1);
       expect(content[0]?.type).toBe("text");
+      // The builtin returns structured data with contents array
       expect(content[0]?.text).toContain("# Test Skill");
     });
 
-    it("should read nested skill resource via read-resource tool", async () => {
+    it("should read nested skill resource via _gateway.read_resource() Lua builtin", async () => {
       const result = await gatewayClient.callTool({
-        name: "read-resource",
-        arguments: { uri: "gw-skill://test-skill/scripts/example.py" },
+        name: "execute",
+        arguments: {
+          script: `result(_gateway.read_resource({ uri = "gw-skill://test-skill/scripts/example.py" }):await())`,
+        },
       });
 
       const content = result.content as TextContent[];

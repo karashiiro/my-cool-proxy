@@ -11,12 +11,13 @@ vi.mock("@my-cool-proxy/acp-client", () => ({
   ACPClient: vi.fn(),
 }));
 
-// Mock the mappers and tempdir utilities
+// Mock the mappers, tempdir utilities, and root utils
 vi.mock("../utils/index.js", () => ({
   mapMcpToAcpPrompt: vi.fn(),
   mapAcpToMcpResult: vi.fn(),
   createSessionTempDir: vi.fn((sessionId: string) => `/tmp/test-${sessionId}`),
   cleanupSessionTempDir: vi.fn(),
+  findValidLocalRoot: vi.fn(),
 }));
 
 const createMockLogger = (): ILogger => ({
@@ -208,6 +209,170 @@ describe("SamplingShim", () => {
       await expect(
         shim.handleSamplingRequest("nonexistent", params),
       ).rejects.toThrow(/not initialized/);
+    });
+  });
+
+  describe("roots-based cwd resolution", () => {
+    const params: CreateMessageRequest["params"] = {
+      messages: [{ role: "user", content: { type: "text", text: "Hello" } }],
+      maxTokens: 100,
+    };
+
+    it("should use client root as cwd when roots provider returns a valid local root", async () => {
+      vi.mocked(mappers.findValidLocalRoot).mockReturnValue(
+        "/Users/test/my-project",
+      );
+
+      const shim = new SamplingShim(
+        agentConfig,
+        createMockLogger(),
+        createMockCapabilityStore() as never,
+      );
+      await shim.initialize("session-1");
+
+      shim.setRootsProvider("session-1", async () => ({
+        roots: [{ uri: "file:///Users/test/my-project" }],
+      }));
+
+      await shim.handleSamplingRequest("session-1", params);
+
+      expect(mappers.findValidLocalRoot).toHaveBeenCalledWith([
+        { uri: "file:///Users/test/my-project" },
+      ]);
+      expect(mockAcpClient.createSession).toHaveBeenCalledWith(
+        "/Users/test/my-project",
+        [],
+        undefined,
+      );
+    });
+
+    it("should fall back to tempdir when roots provider returns no valid local paths", async () => {
+      vi.mocked(mappers.findValidLocalRoot).mockReturnValue(undefined);
+
+      const shim = new SamplingShim(
+        agentConfig,
+        createMockLogger(),
+        createMockCapabilityStore() as never,
+      );
+      await shim.initialize("session-1");
+
+      shim.setRootsProvider("session-1", async () => ({
+        roots: [{ uri: "https://example.com/repo" }],
+      }));
+
+      await shim.handleSamplingRequest("session-1", params);
+
+      expect(mockAcpClient.createSession).toHaveBeenCalledWith(
+        "/tmp/test-session-1",
+        [],
+        undefined,
+      );
+    });
+
+    it("should fall back to tempdir when roots provider times out", async () => {
+      vi.useFakeTimers();
+
+      const shim = new SamplingShim(
+        agentConfig,
+        createMockLogger(),
+        createMockCapabilityStore() as never,
+      );
+      await shim.initialize("session-1");
+
+      shim.setRootsProvider(
+        "session-1",
+        () => new Promise(() => {}), // never resolves
+      );
+
+      const requestPromise = shim.handleSamplingRequest("session-1", params);
+
+      // Advance past the 5s timeout
+      await vi.advanceTimersByTimeAsync(6_000);
+
+      const result = await requestPromise;
+
+      expect(result).toEqual({
+        role: "assistant",
+        content: { type: "text", text: "agent response" },
+        model: "acp-agent",
+        stopReason: "endTurn",
+      });
+      expect(mockAcpClient.createSession).toHaveBeenCalledWith(
+        "/tmp/test-session-1",
+        [],
+        undefined,
+      );
+
+      vi.useRealTimers();
+    });
+
+    it("should fall back to tempdir when roots provider throws an error", async () => {
+      const shim = new SamplingShim(
+        agentConfig,
+        createMockLogger(),
+        createMockCapabilityStore() as never,
+      );
+      await shim.initialize("session-1");
+
+      shim.setRootsProvider("session-1", async () => {
+        throw new Error("Client disconnected");
+      });
+
+      await shim.handleSamplingRequest("session-1", params);
+
+      expect(mockAcpClient.createSession).toHaveBeenCalledWith(
+        "/tmp/test-session-1",
+        [],
+        undefined,
+      );
+    });
+
+    it("should use tempdir when no roots provider is set", async () => {
+      const shim = new SamplingShim(
+        agentConfig,
+        createMockLogger(),
+        createMockCapabilityStore() as never,
+      );
+      await shim.initialize("session-1");
+
+      await shim.handleSamplingRequest("session-1", params);
+
+      expect(mockAcpClient.createSession).toHaveBeenCalledWith(
+        "/tmp/test-session-1",
+        [],
+        undefined,
+      );
+    });
+
+    it("should clean up roots provider on close", async () => {
+      vi.mocked(mappers.findValidLocalRoot).mockReturnValue(
+        "/Users/test/my-project",
+      );
+
+      const shim = new SamplingShim(
+        agentConfig,
+        createMockLogger(),
+        createMockCapabilityStore() as never,
+      );
+      await shim.initialize("session-1");
+
+      shim.setRootsProvider("session-1", async () => ({
+        roots: [{ uri: "file:///Users/test/my-project" }],
+      }));
+
+      await shim.close("session-1");
+
+      // Re-initialize and verify roots provider is gone (falls back to tempdir)
+      vi.mocked(mappers.findValidLocalRoot).mockClear();
+      await shim.initialize("session-1");
+      await shim.handleSamplingRequest("session-1", params);
+
+      expect(mappers.findValidLocalRoot).not.toHaveBeenCalled();
+      expect(mockAcpClient.createSession).toHaveBeenCalledWith(
+        "/tmp/test-session-1",
+        [],
+        undefined,
+      );
     });
   });
 

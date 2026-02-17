@@ -5,6 +5,7 @@ import type {
   IMCPClientSession,
   ILogger,
   ILuaRuntime,
+  IGatewayBuiltins,
   ServerListItem,
 } from "./types.js";
 import { MCPFormatterService } from "./mcp-formatter-service.js";
@@ -257,9 +258,22 @@ export class ToolDiscoveryService {
       this.logger.debug(`Generated inspection script: ${luaScript}`);
 
       // Execute through the Lua runtime to get the same result structure as execute tool
+      // Use a no-op gateway builtins since inspect-tool-response only needs MCP server tools
+      const noOpBuiltins: IGatewayBuiltins = {
+        listResources: async () => ({ resources: [] }),
+        readResource: async () => ({ contents: [] }),
+        summaryStats: async () => ({
+          servers: { connected: 0, failed: 0, total: 0 },
+          tools: 0,
+          resources: 0,
+          prompts: 0,
+        }),
+      };
+
       const response = await this.luaRuntime.executeScript(
         luaScript,
         mcpServers,
+        noOpBuiltins,
       );
 
       // Format the response for display

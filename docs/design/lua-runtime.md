@@ -11,12 +11,14 @@ flowchart TB
     subgraph Input
         Script["Lua Script"]
         Servers["MCP Server Clients"]
+        Builtins["Gateway Builtins"]
     end
 
     subgraph Runtime["Wasmoon Runtime"]
         Engine["Lua Engine"]
         Sandbox["Sandboxed Globals"]
         ServerTables["Server Tables"]
+        GatewayTable["_gateway Table"]
         ResultFn["result() Function"]
     end
 
@@ -26,8 +28,10 @@ flowchart TB
 
     Script --> Engine
     Servers --> ServerTables
+    Builtins --> GatewayTable
     Engine --> Sandbox
     ServerTables --> Engine
+    GatewayTable --> Engine
     ResultFn --> Engine
     Engine --> Result
 ```
@@ -36,11 +40,12 @@ flowchart TB
 
 ```mermaid
 flowchart TB
-    Start["executeScript(script, servers)"] --> CreateEngine["Create Wasmoon Engine"]
+    Start["executeScript(script, servers, builtins)"] --> CreateEngine["Create Wasmoon Engine"]
     CreateEngine --> RemoveGlobals["Remove Dangerous Globals"]
     RemoveGlobals --> AddResult["Add result() Function"]
     AddResult --> InjectServers["Inject MCP Servers"]
-    InjectServers --> Execute["Execute Script"]
+    InjectServers --> InjectBuiltins["Inject _gateway Builtins"]
+    InjectBuiltins --> Execute["Execute Script"]
     Execute --> CheckResult{"result() called?"}
     CheckResult -->|Yes| Return["Return captured value"]
     CheckResult -->|No| Error["Throw error"]
@@ -54,9 +59,10 @@ flowchart TB
 2. **Sandbox** - Remove dangerous globals (`os`, `io`, `require`, etc.)
 3. **Add result()** - Register callback to capture return value
 4. **Inject Servers** - Create Lua tables for each MCP server
-5. **Execute** - Run the user's script
-6. **Capture Result** - Return whatever was passed to `result()`
-7. **Cleanup** - Close the engine
+5. **Inject Builtins** - Create `_gateway` table with builtin functions
+6. **Execute** - Run the user's script
+7. **Capture Result** - Return whatever was passed to `result()`
+8. **Cleanup** - Close the engine
 
 ## Security Sandboxing
 
@@ -76,6 +82,7 @@ Scripts can only:
 
 - Use basic Lua operations (math, strings, tables)
 - Call MCP server tools through injected globals
+- Use gateway builtins through the `_gateway` global table
 - Return results via the `result()` function
 
 ## MCP Server Injection
@@ -132,6 +139,43 @@ sequenceDiagram
     Func->>Func: Parse/structure result
     Func-->>Script: Lua table or value
 ```
+
+## Gateway Builtins
+
+The `_gateway` global table provides built-in functions for accessing gateway functionality. The underscore prefix indicates a reserved/internal table, preventing collision if a user registers an MCP server named "gateway".
+
+### Available Builtins
+
+| Function                                                    | Description                                           |
+| ----------------------------------------------------------- | ----------------------------------------------------- |
+| `_gateway.list_resources()`                                 | List all available resources across connected servers |
+| `_gateway.read_resource({ uri = "..." })`                   | Read a resource by its namespaced URI                 |
+| `_gateway.summary_stats()`                                  | Get gateway statistics (server/tool/resource counts)  |
+| `_gateway.invoke_skill_script({ skillName, script, args })` | Execute a skill script (when skills enabled)          |
+| `_gateway.write_skill({ skillName, content, files })`       | Create/modify a skill (when skills mutable)           |
+
+### Usage Example
+
+```lua
+-- List all resources including skills
+local resources = _gateway.list_resources():await()
+for _, resource in ipairs(resources.resources) do
+    print(resource.name .. " - " .. resource.uri)
+end
+
+-- Read a skill
+local skill = _gateway.read_resource({ uri = "gw-skill://code-review" }):await()
+print(skill.contents[1].text)
+
+-- Get gateway stats
+local stats = _gateway.summary_stats():await()
+print("Connected servers: " .. stats.servers.connected)
+print("Total tools: " .. stats.tools)
+```
+
+### Conditional Builtins
+
+The skill-related builtins (`invoke_skill_script`, `write_skill`) are only available when skills are enabled in the gateway configuration. If you try to call them when disabled, they simply won't exist on the `_gateway` table.
 
 ## The Promise/Await Pattern
 

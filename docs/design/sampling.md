@@ -161,7 +161,7 @@ flowchart TB
 | `SamplingShim`        | Thin orchestrator; lifecycle management           |
 | `mapMcpToAcpPrompt()` | Convert MCP sampling params to ACP content blocks |
 | `mapAcpToMcpResult()` | Convert ACP response to MCP CreateMessageResult   |
-| `CapabilityStore`     | Track working directories per session             |
+| `CapabilityStore`     | Track working directories per session (fallback)  |
 | `ACPClient`           | Long-lived connection to agent process            |
 | `ACPClientSession`    | Short-lived session per sampling request          |
 
@@ -169,6 +169,7 @@ flowchart TB
 
 ```mermaid
 sequenceDiagram
+    participant Downstream as Downstream Client
     participant Upstream as Upstream Server
     participant Gateway as Gateway
     participant Shim as SamplingShim
@@ -178,6 +179,11 @@ sequenceDiagram
 
     Upstream->>Gateway: sampling/createMessage
     Gateway->>Shim: handleSamplingRequest()
+
+    Shim->>Gateway: roots/list (via provider)
+    Gateway->>Downstream: roots/list
+    Downstream-->>Gateway: ListRootsResult
+    Gateway-->>Shim: cwd (root or tempdir fallback)
 
     Shim->>Mapper: mapMcpToAcpPrompt(params)
     Mapper-->>Shim: ContentBlock[]
@@ -217,7 +223,7 @@ stateDiagram-v2
 
 - **One ACPClient per gateway session** - Long-lived agent process
 - **One ACPClientSession per sampling request** - Short-lived, isolated
-- **Working directory** - Stored in CapabilityStore (client root or tempdir)
+- **Working directory** - Resolved lazily per request via `roots/list` on the downstream client. If the client advertises roots, the first valid local root is used as cwd (giving the agent access to the real project directory). Falls back to a session tempdir if roots/list fails, times out (5s), or returns no valid local paths.
 
 ## MCP ↔ ACP Mapping
 

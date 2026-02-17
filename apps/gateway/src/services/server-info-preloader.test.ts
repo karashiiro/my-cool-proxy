@@ -46,7 +46,7 @@ describe("ServerInfoPreloader", () => {
       );
       expect(result).toContain("</skill>");
       expect(result).toContain("gw-skill://");
-      expect(result).toContain("read-resource");
+      expect(result).toContain("_gateway.read_resource");
     });
 
     it("should format multiple skills correctly", () => {
@@ -126,7 +126,7 @@ describe("ServerInfoPreloader", () => {
       expect(result).toContain("<description></description>");
     });
 
-    it("should include guidance about read-resource with skill URIs", () => {
+    it("should include guidance about loading skills via Lua builtins", () => {
       const skills: SkillMetadata[] = [
         {
           name: "test",
@@ -137,7 +137,6 @@ describe("ServerInfoPreloader", () => {
 
       const result = preloader.buildSkillInstructions(skills);
 
-      expect(result).toContain("`read-resource`");
       expect(result).toContain("`gw-skill://{skill-name}`");
       expect(result).toContain("skill instructions");
     });

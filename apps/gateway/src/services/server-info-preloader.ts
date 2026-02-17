@@ -192,8 +192,12 @@ The following skills are available as MCP resources with the \`gw-skill://\` URI
 ${skillsXml}
 </available_skills>
 
-Use \`read-resource\` with \`gw-skill://{skill-name}\` to load skill instructions.
+Use \`gw-skill://{skill-name}\` to load skill instructions.
 Use \`gw-skill://{skill-name}/{path}\` to load nested resources (scripts/, references/, assets/).
+
+Within Lua scripts, use the \`_gateway\` builtins:
+- \`_gateway.read_resource({ uri = "gw-skill://{skill-name}" }):await()\` to load skill content
+- \`_gateway.list_resources():await()\` to discover all available resources including skills
 
 <CRITICAL>
 STRONGLY consider if there are relevant skills that may assist you in the current task.

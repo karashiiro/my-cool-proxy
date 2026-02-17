@@ -17,6 +17,7 @@ import type {
   ILuaRuntime,
   IMCPClientManager,
   ServerConfig,
+  ISkillDiscoveryService,
 } from "../types/interfaces.js";
 import * as z from "zod";
 import { MCPClientSession } from "@my-cool-proxy/mcp-client";
@@ -60,6 +61,14 @@ const createMockClientManager = (
   close: vi.fn(),
 });
 
+// Mock skill discovery service
+const createMockSkillDiscoveryService = (): ISkillDiscoveryService => ({
+  discoverSkills: vi.fn().mockResolvedValue([]),
+  getSkillContent: vi.fn().mockResolvedValue(null),
+  getSkillResource: vi.fn().mockResolvedValue(null),
+  ensureSkillsDirectory: vi.fn(),
+});
+
 // Helper to create a tool registry with all tools
 const createToolRegistry = (
   luaRuntime: ILuaRuntime,
@@ -74,9 +83,26 @@ const createToolRegistry = (
     new MCPFormatterService(),
   );
 
+  // Create mock aggregation services for ExecuteLuaTool
+  const resourceAggregation = new ResourceAggregationService(
+    clientManager,
+    logger,
+    [],
+  );
+  const promptAggregation = new PromptAggregationService(clientManager, logger);
+  const skillDiscoveryService = createMockSkillDiscoveryService();
+
   const registry = new ToolRegistry();
   registry.register(
-    new ExecuteLuaTool(luaRuntime, clientManager, logger, config),
+    new ExecuteLuaTool(
+      luaRuntime,
+      clientManager,
+      logger,
+      config,
+      resourceAggregation,
+      promptAggregation,
+      skillDiscoveryService,
+    ),
   );
   registry.register(new ListServersTool(toolDiscovery, config));
   registry.register(new ListServerToolsTool(toolDiscovery, config));
@@ -674,10 +700,15 @@ describe("MCPGatewayServer - execute tool", () => {
         arguments: { script },
       });
 
-      expect(result.content).toEqual([
-        { type: "text", text: "Tool failed: invalid input" },
-      ]);
+      // The runtime now throws on isError: true, which execute-lua-tool
+      // catches and wraps as a script execution failure
       expect(result.isError).toBe(true);
+      expect(result.content).toHaveLength(1);
+      const text = (result.content as Array<{ type: string; text: string }>)[0]
+        ?.text;
+      expect(text).toContain("Script execution failed");
+      expect(text).toContain("Tool failed: invalid input");
+      expect(text).toContain("isError: true");
     });
   });
 

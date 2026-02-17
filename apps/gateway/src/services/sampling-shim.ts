@@ -20,7 +20,12 @@ import type {
   ACPFilesystemConfig,
   ACPAllowOwnToolsConfig,
 } from "../types/interfaces.js";
-import { mapMcpToAcpPrompt, mapAcpToMcpResult } from "../utils/index.js";
+import type { ListRootsResult } from "@modelcontextprotocol/sdk/types.js";
+import {
+  mapMcpToAcpPrompt,
+  mapAcpToMcpResult,
+  findValidLocalRoot,
+} from "../utils/index.js";
 import { $inject } from "../container/decorators.js";
 import { TYPES } from "../types/index.js";
 import { ToolCallbackServer } from "./tool-callback-server.js";
@@ -43,6 +48,7 @@ const require = createRequire(import.meta.url);
 @injectable()
 export class SamplingShim implements ISamplingShim {
   private clients = new Map<string, ACPClient>();
+  private rootsProviders = new Map<string, () => Promise<ListRootsResult>>();
 
   constructor(
     private readonly agentConfig: ACPAgentConfig,
@@ -94,10 +100,61 @@ export class SamplingShim implements ISamplingShim {
     this.logger.info(`Sampling shim initialized for session ${sessionId}`);
   }
 
+  setRootsProvider(
+    sessionId: string,
+    provider: () => Promise<ListRootsResult>,
+  ): void {
+    this.rootsProviders.set(sessionId, provider);
+  }
+
+  /** Timeout for roots/list requests (ms). Keeps sampling fast when the client is slow. */
+  private static readonly ROOTS_TIMEOUT_MS = 5_000;
+
+  /**
+   * Resolve the working directory for a sampling request.
+   * Tries roots/list first (if provider available), falls back to capability store.
+   * A timeout ensures a slow/unresponsive downstream client doesn't block sampling.
+   */
+  private async resolveWorkingDirectory(
+    sessionId: string,
+  ): Promise<string | undefined> {
+    const provider = this.rootsProviders.get(sessionId);
+    if (provider) {
+      try {
+        const rootsResult = await Promise.race([
+          provider(),
+          new Promise<never>((_, reject) =>
+            setTimeout(
+              () => reject(new Error("roots/list timed out")),
+              SamplingShim.ROOTS_TIMEOUT_MS,
+            ),
+          ),
+        ]);
+        const localRoot = findValidLocalRoot(rootsResult.roots);
+        if (localRoot) {
+          this.logger.info(
+            `Session ${sessionId}: Using client root as cwd: ${localRoot}`,
+          );
+          return localRoot;
+        }
+        this.logger.debug(
+          `Session ${sessionId}: No valid local root found, falling back to tempdir`,
+        );
+      } catch (error) {
+        this.logger.warn(
+          { error: error instanceof Error ? error.message : String(error) },
+          `Session ${sessionId}: Failed to fetch roots, falling back to tempdir`,
+        );
+      }
+    }
+
+    return this.capabilityStore.getWorkingDirectory(sessionId);
+  }
+
   /**
    * Handle a sampling request by forwarding it through the ACP agent.
    * Creates a new ACP session for each request (short-lived, isolated).
-   * Uses the working directory stored in CapabilityStore (client root or tempdir).
+   * Uses the working directory from client roots (preferred) or tempdir (fallback).
    *
    * SPEC-COMPLIANT SAMPLING-WITH-TOOLS:
    * When tools are provided, the agent may attempt to call them. Instead of
@@ -113,7 +170,7 @@ export class SamplingShim implements ISamplingShim {
     params: CreateMessageRequest["params"],
   ): Promise<CreateMessageResult | CreateMessageResultWithTools> {
     const client = this.clients.get(sessionId);
-    const cwd = this.capabilityStore.getWorkingDirectory(sessionId);
+    const cwd = await this.resolveWorkingDirectory(sessionId);
 
     if (!client) {
       throw new Error(`Sampling shim not initialized for session ${sessionId}`);
@@ -234,6 +291,8 @@ export class SamplingShim implements ISamplingShim {
   async close(sessionId: string): Promise<void> {
     const client = this.clients.get(sessionId);
 
+    this.rootsProviders.delete(sessionId);
+
     if (client) {
       this.logger.debug(`Closing sampling shim for session ${sessionId}`);
       await client.close();
@@ -264,5 +323,6 @@ export class SamplingShim implements ISamplingShim {
 
     await Promise.all(closePromises);
     this.clients.clear();
+    this.rootsProviders.clear();
   }
 }

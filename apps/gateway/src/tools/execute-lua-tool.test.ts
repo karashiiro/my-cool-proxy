@@ -36,7 +36,7 @@ describe("ExecuteLuaTool", () => {
       expect(tool.description).toContain("SCRIPT SYNTAX");
       expect(tool.description).toContain(":await()");
       expect(tool.description).toContain("result()");
-      expect(tool.description).toContain("OPTIMIZATION");
+      expect(tool.description).toContain("ALWAYS loop to fetch all pages");
     });
 
     it("should have schema with required script parameter", () => {
@@ -61,6 +61,11 @@ describe("ExecuteLuaTool", () => {
       expect(luaRuntime.executeScript).toHaveBeenCalledWith(
         'result(server.tool({arg = "value"}):await())',
         mockServers,
+        expect.objectContaining({
+          listResources: expect.any(Function),
+          readResource: expect.any(Function),
+          summaryStats: expect.any(Function),
+        }),
       );
     });
 
@@ -124,9 +129,7 @@ describe("ExecuteLuaTool", () => {
       expect(result.content).toHaveLength(1);
       expect(result.content[0]?.type).toBe("text");
       if (result.content[0]?.type === "text") {
-        expect(result.content[0].text).toContain(
-          JSON.stringify(objectResult, null, 2),
-        );
+        expect(result.content[0].text).toContain(JSON.stringify(objectResult));
       }
       expect(result.structuredContent).toEqual(objectResult);
     });
@@ -208,6 +211,26 @@ describe("ExecuteLuaTool", () => {
       expect(logger.error).toHaveBeenCalled();
     });
 
+    it("should surface isError tool call failures as script execution errors", async () => {
+      const error = new Error(
+        "Tool 'api.bad-tool' returned an error (isError: true):\nRate limit exceeded",
+      );
+      luaRuntime.executeScript.mockRejectedValue(error);
+
+      const result = await tool.execute(
+        { script: "result(api.bad_tool({}):await())" },
+        { sessionId: "test" },
+      );
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0]?.type).toBe("text");
+      if (result.content[0]?.type === "text") {
+        expect(result.content[0].text).toContain("Script execution failed");
+        expect(result.content[0].text).toContain("Rate limit exceeded");
+        expect(result.content[0].text).toContain("isError");
+      }
+    });
+
     it("should handle runtime errors during tool calls", async () => {
       const error = new Error("Tool 'nonexistent' not found");
       luaRuntime.executeScript.mockRejectedValue(error);
@@ -239,6 +262,11 @@ describe("ExecuteLuaTool", () => {
       expect(luaRuntime.executeScript).toHaveBeenCalledWith(
         "result({})",
         expect.any(Map),
+        expect.objectContaining({
+          listResources: expect.any(Function),
+          readResource: expect.any(Function),
+          summaryStats: expect.any(Function),
+        }),
       );
     });
 
@@ -254,7 +282,7 @@ describe("ExecuteLuaTool", () => {
       expect(result.content).toHaveLength(1);
       expect(result.content[0]).toEqual({
         type: "text",
-        text: JSON.stringify(arrayResult, null, 2),
+        text: JSON.stringify(arrayResult),
       });
       // Arrays should NOT be in structuredContent (MCP schema violation)
       expect(result.structuredContent).toBeUndefined();
@@ -271,7 +299,7 @@ describe("ExecuteLuaTool", () => {
 
       expect(result.content[0]).toEqual({
         type: "text",
-        text: JSON.stringify(arrayResult, null, 2),
+        text: JSON.stringify(arrayResult),
       });
       expect(result.structuredContent).toBeUndefined();
     });

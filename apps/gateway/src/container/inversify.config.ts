@@ -40,11 +40,6 @@ import { ListServersTool } from "../tools/list-servers-tool.js";
 import { ListServerToolsTool } from "../tools/list-server-tools-tool.js";
 import { ToolDetailsTool } from "../tools/tool-details-tool.js";
 import { InspectToolResponseTool } from "../tools/inspect-tool-response-tool.js";
-import { SummaryStatsTool } from "../tools/summary-stats-tool.js";
-import { ListResourcesTool } from "../tools/list-resources-tool.js";
-import { ReadResourceTool } from "../tools/read-resource-tool.js";
-import { InvokeGatewaySkillScriptTool } from "../tools/invoke-gateway-skill-script-tool.js";
-import { WriteGatewaySkillTool } from "../tools/write-gateway-skill-tool.js";
 import type { IToolRegistry } from "../tools/tool-registry.js";
 import { ToolRegistry } from "../tools/tool-registry.js";
 
@@ -152,32 +147,22 @@ export function createContainer(
     .inSingletonScope();
 
   // Bind core tools (always available)
+  // Note: list-resources, read-resource, summary-stats, invoke-gateway-skill-script,
+  // and write-gateway-skill are now Lua builtins in the _gateway table, not MCP tools.
   container.bind<ITool>(TYPES.Tool).to(ExecuteLuaTool);
   container.bind<ITool>(TYPES.Tool).to(ListServersTool);
   container.bind<ITool>(TYPES.Tool).to(ListServerToolsTool);
   container.bind<ITool>(TYPES.Tool).to(ToolDetailsTool);
   container.bind<ITool>(TYPES.Tool).to(InspectToolResponseTool);
-  container.bind<ITool>(TYPES.Tool).to(SummaryStatsTool);
-  container.bind<ITool>(TYPES.Tool).to(ListResourcesTool);
-  container.bind<ITool>(TYPES.Tool).to(ReadResourceTool);
 
-  // Bind skill-related services conditionally based on config
-  const skillsEnabled = config.skills?.enabled === true;
-  const skillsMutable = config.skills?.mutable === true;
-
-  if (skillsEnabled) {
-    // Bind skill resource provider (exposes skills as MCP resources)
+  // Bind skill resource provider conditionally (exposes skills as MCP resources)
+  // The skill tools are now Lua builtins, but we still need the resource provider
+  // for native MCP resource access (resources/list, resources/read)
+  if (config.skills?.enabled === true) {
     container
       .bind<IResourceProvider>(TYPES.SkillResourceProvider)
       .to(SkillResourceProvider)
       .inSingletonScope();
-
-    // Bind skill tools
-    container.bind<ITool>(TYPES.Tool).to(InvokeGatewaySkillScriptTool);
-
-    if (skillsMutable) {
-      container.bind<ITool>(TYPES.Tool).to(WriteGatewaySkillTool);
-    }
   }
 
   // Bind sampling shim conditionally when ACP agent is configured

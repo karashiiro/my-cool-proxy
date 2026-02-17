@@ -164,31 +164,25 @@ describe("inversify.config", () => {
   });
 
   describe("core tools", () => {
-    it("should register all core tools", () => {
+    it("should register all core MCP tools", () => {
       const container = createContainer(createMinimalConfig());
 
       const tools = container.getAll<ITool>(TYPES.Tool);
       const toolNames = tools.map((t) => t.name);
 
-      // Core tools that should always be present
+      // Core MCP tools that should always be present
+      // Note: summary-stats, list-resources, read-resource, invoke-gateway-skill-script,
+      // and write-gateway-skill are now Lua builtins (_gateway.* functions), not MCP tools
       expect(toolNames).toContain("execute");
       expect(toolNames).toContain("list-servers");
       expect(toolNames).toContain("list-server-tools");
       expect(toolNames).toContain("tool-details");
       expect(toolNames).toContain("inspect-tool-response");
-      expect(toolNames).toContain("summary-stats");
-      expect(toolNames).toContain("list-resources");
-      expect(toolNames).toContain("read-resource");
-    });
 
-    it("should NOT include skill tools when skills disabled", () => {
-      const container = createContainer(
-        createMinimalConfig({ skills: { enabled: false } }),
-      );
-
-      const tools = container.getAll<ITool>(TYPES.Tool);
-      const toolNames = tools.map((t) => t.name);
-
+      // These should NOT be MCP tools anymore
+      expect(toolNames).not.toContain("summary-stats");
+      expect(toolNames).not.toContain("list-resources");
+      expect(toolNames).not.toContain("read-resource");
       expect(toolNames).not.toContain("invoke-gateway-skill-script");
       expect(toolNames).not.toContain("write-gateway-skill");
     });
@@ -207,44 +201,16 @@ describe("inversify.config", () => {
         expect(registryTool?.name).toBe(tool.name);
       }
     });
+
+    it("should have exactly 5 MCP tools", () => {
+      const container = createContainer(createMinimalConfig());
+
+      const tools = container.getAll<ITool>(TYPES.Tool);
+      expect(tools.length).toBe(5);
+    });
   });
 
   describe("conditional bindings - skills", () => {
-    it("should bind skill tools when skills.enabled is true", () => {
-      const container = createContainer(
-        createMinimalConfig({ skills: { enabled: true } }),
-      );
-
-      const tools = container.getAll<ITool>(TYPES.Tool);
-      const toolNames = tools.map((t) => t.name);
-
-      expect(toolNames).toContain("invoke-gateway-skill-script");
-    });
-
-    it("should NOT bind write-gateway-skill when skills.mutable is false", () => {
-      const container = createContainer(
-        createMinimalConfig({ skills: { enabled: true, mutable: false } }),
-      );
-
-      const tools = container.getAll<ITool>(TYPES.Tool);
-      const toolNames = tools.map((t) => t.name);
-
-      expect(toolNames).toContain("invoke-gateway-skill-script");
-      expect(toolNames).not.toContain("write-gateway-skill");
-    });
-
-    it("should bind write-gateway-skill when skills.mutable is true", () => {
-      const container = createContainer(
-        createMinimalConfig({ skills: { enabled: true, mutable: true } }),
-      );
-
-      const tools = container.getAll<ITool>(TYPES.Tool);
-      const toolNames = tools.map((t) => t.name);
-
-      expect(toolNames).toContain("invoke-gateway-skill-script");
-      expect(toolNames).toContain("write-gateway-skill");
-    });
-
     it("should bind SkillResourceProvider when skills enabled", () => {
       const container = createContainer(
         createMinimalConfig({ skills: { enabled: true } }),
@@ -259,6 +225,22 @@ describe("inversify.config", () => {
       );
 
       expect(container.isBound(TYPES.SkillResourceProvider)).toBe(false);
+    });
+
+    it("should still have same 5 MCP tools regardless of skills config", () => {
+      // Skills tools are now Lua builtins, not MCP tools
+      const containerDisabled = createContainer(
+        createMinimalConfig({ skills: { enabled: false } }),
+      );
+      const containerEnabled = createContainer(
+        createMinimalConfig({ skills: { enabled: true, mutable: true } }),
+      );
+
+      const toolsDisabled = containerDisabled.getAll<ITool>(TYPES.Tool);
+      const toolsEnabled = containerEnabled.getAll<ITool>(TYPES.Tool);
+
+      expect(toolsDisabled.length).toBe(5);
+      expect(toolsEnabled.length).toBe(5);
     });
   });
 

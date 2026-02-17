@@ -118,6 +118,61 @@ describe("MCPFormatterService", () => {
       expect(result).toContain("x = 42");
       expect(result).toContain("y = 42");
     });
+
+    it("should include output field names in usage example when output schema exists", () => {
+      const tool = {
+        name: "get-user",
+        outputSchema: {
+          type: "object",
+          properties: {
+            login: { type: "string" },
+            id: { type: "integer" },
+            email: { type: "string" },
+          },
+        },
+      };
+
+      const result = formatter.formatToolDetails("github", "get_user", tool);
+
+      expect(result).toContain(
+        "-- Output fields: res.login, res.id, res.email",
+      );
+    });
+
+    it("should truncate output fields when there are more than 6", () => {
+      const tool = {
+        name: "get-user",
+        outputSchema: {
+          type: "object",
+          properties: {
+            f1: { type: "string" },
+            f2: { type: "string" },
+            f3: { type: "string" },
+            f4: { type: "string" },
+            f5: { type: "string" },
+            f6: { type: "string" },
+            f7: { type: "string" },
+            f8: { type: "string" },
+          },
+        },
+      };
+
+      const result = formatter.formatToolDetails("server", "tool", tool);
+
+      expect(result).toContain("res.f6, ...");
+      expect(result).not.toContain("res.f7");
+    });
+
+    it("should not include output field comment when no output schema", () => {
+      const tool = {
+        name: "do-thing",
+        inputSchema: { type: "object", properties: {} },
+      };
+
+      const result = formatter.formatToolDetails("server", "do_thing", tool);
+
+      expect(result).not.toContain("Output fields");
+    });
   });
 
   describe("generateExampleArgs", () => {

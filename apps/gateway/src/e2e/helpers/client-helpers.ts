@@ -3,7 +3,9 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import {
   CreateMessageRequestSchema,
   ElicitRequestSchema,
+  ListRootsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
+import type { Root } from "@modelcontextprotocol/sdk/types.js";
 
 /**
  * Configuration for creating an MCP test client
@@ -105,6 +107,12 @@ export interface CapableClientConfig extends ClientConfig {
   mockElicitationResponse?: Record<string, unknown>;
   /** Mock elicitation action (accept/decline/cancel) */
   mockElicitationAction?: "accept" | "decline" | "cancel";
+  /** Whether to enable roots capability */
+  roots?: boolean;
+  /** Whether to enable roots listChanged capability */
+  rootsListChanged?: boolean;
+  /** Mock roots to return for roots/list requests */
+  mockRoots?: Root[];
 }
 
 /**
@@ -130,6 +138,12 @@ export async function createCapableGatewayClient(
   if (config.elicitation) {
     capabilities.elicitation = {
       form: {},
+    };
+  }
+
+  if (config.roots) {
+    capabilities.roots = {
+      ...(config.rootsListChanged !== false && { listChanged: true }),
     };
   }
 
@@ -170,6 +184,17 @@ export async function createCapableGatewayClient(
         },
         model: "mock-model",
         stopReason: "endTurn",
+      };
+    });
+  }
+
+  // Register roots handler if enabled
+  if (config.roots) {
+    client.setRequestHandler(ListRootsRequestSchema, async () => {
+      return {
+        roots: config.mockRoots || [
+          { uri: "file:///test/project", name: "Test Project" },
+        ],
       };
     });
   }

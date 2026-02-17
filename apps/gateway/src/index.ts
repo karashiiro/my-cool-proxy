@@ -264,14 +264,13 @@ async function startHttpMode(
       gatewayServer.setOnDownstreamInitialized(async (capabilities) => {
         logger.info(
           `Session ${sessionId}: Downstream client initialized with capabilities: ` +
-            `sampling=${!!capabilities.sampling}, elicitation=${!!capabilities.elicitation}`,
+            `sampling=${!!capabilities.sampling}, elicitation=${!!capabilities.elicitation}, roots=${!!capabilities.roots}`,
         );
 
         // Store capabilities for this session
         capabilityStore.setCapabilities(sessionId, capabilities);
 
         // Create session-isolated tempdir for sampling shim
-        // Note: roots/list is currently broken in the TS SDK, so we always use tempdir
         const workingDirectory = createSessionTempDir(sessionId);
         logger.info(
           `Session ${sessionId}: Using tempdir as cwd: ${workingDirectory}`,
@@ -288,6 +287,13 @@ async function startHttpMode(
             samplingShim,
             logger,
           );
+
+        // Register roots provider so the sampling shim can resolve client roots as cwd
+        if (capabilities.roots && samplingShim) {
+          samplingShim.setRootsProvider(sessionId, () =>
+            gatewayServer.forwardListRootsRequest(),
+          );
+        }
 
         // Now initialize upstream MCP clients with the (possibly augmented) capabilities
         // This tells upstream servers what requests they can send through the proxy
@@ -318,7 +324,7 @@ async function startHttpMode(
           `Session ${sessionId}: ${initResult.successful.length} server(s) connected successfully`,
         );
 
-        // Register proxy handlers for sampling/elicitation forwarding
+        // Register proxy handlers for sampling/elicitation/roots forwarding
         // Pass real capabilities (not augmented) so the native path doesn't activate
         // when only the shim is providing sampling
         registerProxyHandlers(
@@ -329,6 +335,11 @@ async function startHttpMode(
           capabilities,
           activeShim,
         );
+
+        // Register roots/list_changed notification forwarding if downstream supports it
+        if (capabilities.roots?.listChanged) {
+          gatewayServer.registerRootsNotificationForwarding(sessionId);
+        }
 
         // Signal that this session is fully initialized (upstream servers connected)
         // This allows restored sessions to wait for completion before accepting requests
@@ -482,14 +493,13 @@ async function startStdioMode(
     gatewayServer.setOnDownstreamInitialized(async (capabilities) => {
       logger.info(
         `Downstream client initialized with capabilities: ` +
-          `sampling=${!!capabilities.sampling}, elicitation=${!!capabilities.elicitation}`,
+          `sampling=${!!capabilities.sampling}, elicitation=${!!capabilities.elicitation}, roots=${!!capabilities.roots}`,
       );
 
       // Store capabilities
       capabilityStore.setCapabilities(SESSION_ID, capabilities);
 
       // Create session-isolated tempdir for sampling shim
-      // Note: roots/list is currently broken in the TS SDK, so we always use tempdir
       const workingDirectory = createSessionTempDir(SESSION_ID);
       logger.info(`Using tempdir as cwd: ${workingDirectory}`);
 
@@ -503,6 +513,13 @@ async function startStdioMode(
         samplingShim,
         logger,
       );
+
+      // Register roots provider so the sampling shim can resolve client roots as cwd
+      if (capabilities.roots && samplingShim) {
+        samplingShim.setRootsProvider(SESSION_ID, () =>
+          gatewayServer.forwardListRootsRequest(),
+        );
+      }
 
       // Initialize upstream MCP clients with (possibly augmented) capabilities
       const initResult = await initializeClientsForSession(
@@ -532,7 +549,7 @@ async function startStdioMode(
         `${initResult.successful.length} server(s) connected successfully`,
       );
 
-      // Register proxy handlers for sampling/elicitation forwarding
+      // Register proxy handlers for sampling/elicitation/roots forwarding
       registerProxyHandlers(
         SESSION_ID,
         clientManager,
@@ -541,6 +558,11 @@ async function startStdioMode(
         capabilities,
         activeShim,
       );
+
+      // Register roots/list_changed notification forwarding if downstream supports it
+      if (capabilities.roots?.listChanged) {
+        gatewayServer.registerRootsNotificationForwarding(SESSION_ID);
+      }
     });
 
     return gatewayServer.getServer();
