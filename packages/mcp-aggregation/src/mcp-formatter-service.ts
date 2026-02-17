@@ -139,6 +139,20 @@ export class MCPFormatterService {
     }
 
     lines.push("  }):await();");
+
+    const outputFields = this.getOutputFieldNames(tool.outputSchema);
+    if (outputFields.length > 0) {
+      const maxFields = 6;
+      const truncated = outputFields.length > maxFields;
+      const fieldList = outputFields
+        .slice(0, maxFields)
+        .map((f) => `res.${f}`)
+        .join(", ");
+      lines.push(
+        `  -- Output fields: ${fieldList}${truncated ? ", ..." : ""}`,
+      );
+    }
+
     lines.push("  result(res);");
     lines.push("");
 
@@ -173,6 +187,19 @@ export class MCPFormatterService {
     }
 
     return args;
+  }
+
+  private getOutputFieldNames(schema: unknown): string[] {
+    if (!schema || typeof schema !== "object") {
+      return [];
+    }
+
+    const schemaObj = schema as { properties?: Record<string, unknown> };
+    if (!schemaObj.properties) {
+      return [];
+    }
+
+    return Object.keys(schemaObj.properties);
   }
 
   private getExampleValue(type?: string): string {
