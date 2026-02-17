@@ -68,23 +68,28 @@ SCRIPT SYNTAX:
 - Call result() to return a value from your script
 - Example: result(server_name.tool_name({ arg = "value" }):await())
 
+Most list/search tools paginate results. ALWAYS loop to fetch all pages — a single call typically returns only partial data:
+\`\`\`lua
+local all_items = {}
+local page = 1
+while true do
+  local res = my_server.list_things({ page = page, perPage = 100 }):await()
+  for _, item in ipairs(res.items) do
+    table.insert(all_items, { name = item.name, id = item.id })
+  end
+  if not res.hasNextPage then break end
+  page = page + 1
+end
+result(all_items)
+\`\`\`
+
 GATEWAY BUILTINS:
 The \`_gateway\` global table provides built-in functions:
 - _gateway.list_resources():await() - List all available resources across connected servers
 - _gateway.read_resource({ uri = "..." }):await() - Read a resource by its namespaced URI (gw:// or gw-skill://)
 - _gateway.list_prompts():await() - List all available prompts across connected servers
 - _gateway.get_prompt({ name = "...", arguments = {...} }):await() - Get a prompt by namespaced name (server-name/prompt-name)
-- _gateway.summary_stats():await() - Get gateway statistics (server/tool/resource/prompt counts)
-
-OPTIMIZATION:
-1. Combine multiple tool calls into a single script to avoid returning large intermediate results
-2. ALWAYS paginate exhaustively when responses include pagination indicators (total_count, hasMore, nextCursor, page, etc.)
-   - Use a while loop to fetch ALL pages, not just the first page
-   - Only skip pagination if the user explicitly requests partial/sample results
-   - Process and aggregate data across all pages in Lua before returning
-3. Process responses in Lua to extract only needed fields before returning - Lua processing is cheap,
-   but returning large JSON objects wastes tokens
-4. Example: Instead of returning raw responses, extract specific fields into a summary table`;
+- _gateway.summary_stats():await() - Get gateway statistics (server/tool/resource/prompt counts)`;
 
 const SKILLS_NOTE = `
 
@@ -165,7 +170,7 @@ export class ExecuteLuaTool implements ITool {
       if (result !== null && typeof result === "object") {
         const textContent = {
           type: "text" as const,
-          text: JSON.stringify(result, null, 2),
+          text: JSON.stringify(result),
         };
 
         // structuredContent must be a Record, not an array

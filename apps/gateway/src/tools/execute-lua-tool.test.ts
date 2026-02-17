@@ -36,7 +36,7 @@ describe("ExecuteLuaTool", () => {
       expect(tool.description).toContain("SCRIPT SYNTAX");
       expect(tool.description).toContain(":await()");
       expect(tool.description).toContain("result()");
-      expect(tool.description).toContain("OPTIMIZATION");
+      expect(tool.description).toContain("ALWAYS loop to fetch all pages");
     });
 
     it("should have schema with required script parameter", () => {
@@ -130,7 +130,7 @@ describe("ExecuteLuaTool", () => {
       expect(result.content[0]?.type).toBe("text");
       if (result.content[0]?.type === "text") {
         expect(result.content[0].text).toContain(
-          JSON.stringify(objectResult, null, 2),
+          JSON.stringify(objectResult),
         );
       }
       expect(result.structuredContent).toEqual(objectResult);
@@ -284,7 +284,7 @@ describe("ExecuteLuaTool", () => {
       expect(result.content).toHaveLength(1);
       expect(result.content[0]).toEqual({
         type: "text",
-        text: JSON.stringify(arrayResult, null, 2),
+        text: JSON.stringify(arrayResult),
       });
       // Arrays should NOT be in structuredContent (MCP schema violation)
       expect(result.structuredContent).toBeUndefined();
@@ -301,7 +301,7 @@ describe("ExecuteLuaTool", () => {
 
       expect(result.content[0]).toEqual({
         type: "text",
-        text: JSON.stringify(arrayResult, null, 2),
+        text: JSON.stringify(arrayResult),
       });
       expect(result.structuredContent).toBeUndefined();
     });
