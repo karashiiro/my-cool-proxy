@@ -148,9 +148,7 @@ export class MCPFormatterService {
         .slice(0, maxFields)
         .map((f) => `res.${f}`)
         .join(", ");
-      lines.push(
-        `  -- Output fields: ${fieldList}${truncated ? ", ..." : ""}`,
-      );
+      lines.push(`  -- Output fields: ${fieldList}${truncated ? ", ..." : ""}`);
     }
 
     lines.push("  result(res);");

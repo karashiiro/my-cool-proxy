@@ -5,10 +5,7 @@
  * @param schema - The JSON Schema object to format
  * @returns Array of formatted lines
  */
-export function formatSchema(
-  schema: unknown,
-  indent: number = 1,
-): string[] {
+export function formatSchema(schema: unknown, indent: number = 1): string[] {
   const lines: string[] = [];
 
   if (!schema || typeof schema !== "object") {
@@ -51,10 +48,7 @@ export function formatSchema(
         if (nested.length > 0) {
           lines.push(...nested);
         }
-      } else if (
-        fieldSchemaObj.items &&
-        fieldSchemaObj.items.properties
-      ) {
+      } else if (fieldSchemaObj.items && fieldSchemaObj.items.properties) {
         // Expand array item properties too
         lines.push(`${descPad}Item properties:`);
         const nested = formatSchema(fieldSchemaObj.items, indent + 2);
@@ -62,7 +56,6 @@ export function formatSchema(
           lines.push(...nested);
         }
       }
-
     }
   }
 

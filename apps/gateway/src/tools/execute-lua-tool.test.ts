@@ -129,9 +129,7 @@ describe("ExecuteLuaTool", () => {
       expect(result.content).toHaveLength(1);
       expect(result.content[0]?.type).toBe("text");
       if (result.content[0]?.type === "text") {
-        expect(result.content[0].text).toContain(
-          JSON.stringify(objectResult),
-        );
+        expect(result.content[0].text).toContain(JSON.stringify(objectResult));
       }
       expect(result.structuredContent).toEqual(objectResult);
     });
