@@ -138,7 +138,8 @@ export class MCPFormatterService {
       lines.push("    -- No required parameters");
     }
 
-    lines.push("  }):await(); result(res)");
+    lines.push("  }):await();");
+    lines.push("  result(res);");
     lines.push("");
 
     return lines.join("\n");
