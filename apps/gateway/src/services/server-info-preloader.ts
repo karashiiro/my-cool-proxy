@@ -77,7 +77,7 @@ export class ServerInfoPreloader implements IServerInfoPreloader {
           await sdkClient.close();
 
           this.logger.info(
-            `Preloaded info for server '${name}': ${serverVersion?.name || "unnamed"} v${serverVersion?.version || "unknown"} (${toolNames.length} tools)`,
+            `Preloaded info for server '${name}': ${serverVersion?.name || "unnamed"} ${serverVersion?.version || "unknown"} (${toolNames.length} tools)`,
           );
 
           return {
