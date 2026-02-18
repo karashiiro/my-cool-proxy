@@ -138,6 +138,7 @@ export async function createCapableGatewayClient(
   if (config.elicitation) {
     capabilities.elicitation = {
       form: {},
+      url: {},
     };
   }
 

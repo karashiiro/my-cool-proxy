@@ -111,6 +111,34 @@ describe("Elicitation Proxy E2E (HTTP Mode)", () => {
       assertTextContains(result, "test-user-input");
     });
 
+    it("should list ask_user_url tool", async () => {
+      const result = await gatewayClient.callTool({
+        name: "list-server-tools",
+        arguments: { luaServerName: "elicitation_test_server" },
+      });
+
+      assertTextContains(result, "ask_user_url");
+    });
+
+    it("should proxy URL-mode elicitation request from upstream to downstream", async () => {
+      const script = `
+        local res = elicitation_test_server.ask_user_url({
+          prompt = "Please authenticate",
+          url = "https://example.com/auth"
+        }):await()
+        result(res)
+      `;
+
+      const result = await gatewayClient.callTool({
+        name: "execute",
+        arguments: { script },
+      });
+
+      // The result should indicate the user accepted the URL elicitation
+      assertTextContains(result, "User accepted URL elicitation");
+      assertTextContains(result, "https://example.com/auth");
+    });
+
     it("should reject elicitation response that doesn't match schema", async () => {
       // The default mock response has { response: "test-user-input" }
       // But ask_user_details requires { name: string, ... }
