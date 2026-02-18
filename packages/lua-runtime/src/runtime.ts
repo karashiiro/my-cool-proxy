@@ -32,7 +32,7 @@ export class WasmoonRuntime implements ILuaRuntime {
     gatewayBuiltins: IGatewayBuiltins,
     onProgress?: (progress: number, total?: number, message?: string) => void,
   ): Promise<unknown> {
-    this.logger.debug(`Executing Lua script:\n${script}`);
+    this.logger.info(`Executing Lua script:\n${script}`);
 
     let finalResult: unknown;
     const engine = await this.createEngine((result: unknown) => {
