@@ -103,6 +103,11 @@ const createToolRegistry = (
     logger,
     routingService,
   );
+  const completionAggregation = new CompletionAggregationService(
+    clientManager,
+    logger,
+    routingService,
+  );
   const skillDiscoveryService = createMockSkillDiscoveryService();
 
   const registry = new ToolRegistry();
@@ -116,6 +121,7 @@ const createToolRegistry = (
       promptAggregation,
       skillDiscoveryService,
       routingService,
+      completionAggregation,
     ),
   );
   registry.register(new ListServersTool(toolDiscovery, config));

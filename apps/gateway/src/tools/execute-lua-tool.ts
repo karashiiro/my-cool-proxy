@@ -6,6 +6,7 @@ import { dirname } from "path";
 import { parse as parseYaml } from "yaml";
 import type {
   CallToolResult,
+  CompleteRequest,
   ToolAnnotations,
 } from "@modelcontextprotocol/sdk/types.js";
 import { CallToolResultSchema } from "@modelcontextprotocol/sdk/types.js";
@@ -13,6 +14,7 @@ import * as z from "zod";
 import {
   ResourceAggregationService,
   PromptAggregationService,
+  CompletionAggregationService,
   type IResourceRoutingService,
 } from "@my-cool-proxy/mcp-aggregation";
 import { getErrorMessage } from "@my-cool-proxy/mcp-utilities";
@@ -84,10 +86,11 @@ result(all_items)
 GATEWAY BUILTINS:
 The \`_gateway\` global table provides built-in functions:
 - _gateway.list_resources():await() - List all available resources across connected servers
-- _gateway.list_resource_templates():await() - List all available resource templates across connected servers
+- _gateway.list_resource_templates():await() - List all available resource templates. Use _gateway.complete() to discover valid values for template variables
 - _gateway.read_resource({ uri = "..." }):await() - Read a resource by its URI (original upstream URI or gw-skill://)
 - _gateway.list_prompts():await() - List all available prompts across connected servers
-- _gateway.get_prompt({ name = "...", arguments = {...} }):await() - Get a prompt by namespaced name (server-name/prompt-name)
+- _gateway.get_prompt({ name = "...", arguments = {...} }):await() - Get a prompt by namespaced name (server-name/prompt-name). Use _gateway.complete() to discover valid values for prompt arguments
+- _gateway.complete({ ref = {...}, argument = { name = "...", value = "..." }, context = { arguments = {...} } }):await() - Get completions for a resource template variable (ref.type = "ref/resource", ref.uri = template URI) or prompt argument (ref.type = "ref/prompt", ref.name = namespaced prompt name). Pass partial value for fuzzy matching. Use context.arguments to provide other already-resolved variables for context-aware suggestions
 - _gateway.summary_stats():await() - Get gateway statistics (server/tool/resource/prompt counts)`;
 
 const SKILLS_NOTE = `
@@ -133,6 +136,8 @@ export class ExecuteLuaTool implements ITool {
     private skillDiscoveryService: ISkillDiscoveryService,
     @$inject(TYPES.ResourceRoutingService)
     private routingService: IResourceRoutingService,
+    @$inject(TYPES.CompletionAggregationService)
+    private completionAggregation: CompletionAggregationService,
   ) {
     this.description =
       this.config.skills?.enabled === true
@@ -401,6 +406,29 @@ export class ExecuteLuaTool implements ITool {
         } catch (error) {
           this.logger.error("Failed to gather summary stats:", error as Error);
           return { error: `Failed to gather summary stats: ${error}` };
+        }
+      },
+
+      complete: async (params: {
+        ref: { type: string; uri?: string; name?: string };
+        argument: { name: string; value: string };
+        context?: { arguments?: Record<string, string> };
+      }) => {
+        if (!params?.ref || !params?.argument) {
+          return { error: "Missing required parameters: ref and argument" };
+        }
+
+        try {
+          // Cast from loose Lua types to the expected discriminated union —
+          // Lua passes untyped data, the aggregation service validates it.
+          return await this.completionAggregation.complete(
+            params as CompleteRequest["params"],
+            sessionId,
+          );
+        } catch (error) {
+          const message = getErrorMessage(error);
+          this.logger.error(`Failed to complete:`, error as Error);
+          return { error: `Failed to complete: ${message}` };
         }
       },
     };

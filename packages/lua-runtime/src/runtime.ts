@@ -320,6 +320,17 @@ Common issues:
       return builtins.getPrompt(name, args?.arguments);
     };
 
+    gatewayTable["complete"] = async (args: {
+      ref: { type: string; uri?: string; name?: string };
+      argument: { name: string; value: string };
+      context?: { arguments?: Record<string, string> };
+    }) => {
+      this.logger.debug(
+        `Calling _gateway.complete({ ref.type = "${args?.ref?.type}" })`,
+      );
+      return builtins.complete(args);
+    };
+
     // Conditional builtins (only when skills are enabled)
     if (builtins.invokeSkillScript) {
       const invokeSkillScript = builtins.invokeSkillScript;

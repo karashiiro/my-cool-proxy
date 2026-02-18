@@ -24,6 +24,9 @@ const createMockGatewayBuiltins = (): IGatewayBuiltins => ({
   listPrompts: vi.fn().mockResolvedValue({ prompts: [] }),
   getPrompt: vi.fn().mockResolvedValue({ messages: [] }),
   summaryStats: vi.fn().mockResolvedValue({ servers: 0, tools: 0 }),
+  complete: vi
+    .fn()
+    .mockResolvedValue({ completion: { values: [], hasMore: false } }),
 });
 
 /**
@@ -1428,6 +1431,45 @@ describe("WasmoonRuntime", () => {
       await expect(
         runtime.executeScript(script, servers, builtins),
       ).resolves.not.toThrow();
+    });
+  });
+
+  describe("gateway complete builtin", () => {
+    it("should call complete builtin with ref and argument params", async () => {
+      const builtins = createMockGatewayBuiltins();
+      const mockComplete = vi.fn().mockResolvedValue({
+        completion: { values: ["us-east-1", "us-west-2"], hasMore: false },
+      });
+      builtins.complete = mockComplete;
+
+      const script = `
+        local res = _gateway.complete({
+          ref = { type = "ref/resource", uri = "deployment://{region}/{service}" },
+          argument = { name = "region", value = "us" }
+        }):await()
+        result(res)
+      `;
+
+      const result = await runtime.executeScript(script, new Map(), builtins);
+
+      expect(mockComplete).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ref: expect.objectContaining({
+            type: "ref/resource",
+            uri: "deployment://{region}/{service}",
+          }),
+          argument: expect.objectContaining({
+            name: "region",
+            value: "us",
+          }),
+        }),
+      );
+
+      const typed = result as {
+        completion: { values: string[]; hasMore: boolean };
+      };
+      expect(typed.completion.values).toContain("us-east-1");
+      expect(typed.completion.values).toContain("us-west-2");
     });
   });
 });

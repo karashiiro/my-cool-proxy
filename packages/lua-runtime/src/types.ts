@@ -69,6 +69,16 @@ export interface IGatewayBuiltins {
   summaryStats(): Promise<unknown>;
 
   /**
+   * Get completions for a resource template variable or prompt argument.
+   * @param params The completion request params (ref + argument + optional context)
+   */
+  complete(params: {
+    ref: { type: string; uri?: string; name?: string };
+    argument: { name: string; value: string };
+    context?: { arguments?: Record<string, string> };
+  }): Promise<unknown>;
+
+  /**
    * Execute a script from a skill's scripts/ directory.
    * Only available when skills are enabled.
    */
