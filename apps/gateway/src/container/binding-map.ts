@@ -8,6 +8,7 @@ import type {
   IServerInfoPreloader,
   ISkillDiscoveryService,
   ISamplingShim,
+  ISkillOperationsService,
 } from "../types/interfaces.js";
 import type { MCPGatewayServer } from "../mcp/gateway-server.js";
 import type {
@@ -46,4 +47,5 @@ export interface ContainerBindingMap {
   SkillDiscoveryService: ISkillDiscoveryService;
   SkillResourceProvider: IResourceProvider;
   SamplingShim: ISamplingShim;
+  SkillOperationsService: ISkillOperationsService;
 }

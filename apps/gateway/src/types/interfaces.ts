@@ -439,6 +439,23 @@ export interface IServerInfoPreloader {
   buildSkillInstructions(skills: SkillMetadata[]): string;
 }
 
+/**
+ * Service for executing and writing gateway skills.
+ * Encapsulates skill script execution and skill file writing logic.
+ */
+export interface ISkillOperationsService {
+  executeSkillScript(
+    skillName: string,
+    script: string,
+    scriptArgs: string[],
+  ): Promise<unknown>;
+  writeSkillFiles(
+    skillName: string,
+    content?: string,
+    files?: Array<{ path: string; content: string }>,
+  ): Promise<unknown>;
+}
+
 // Re-export skill types for convenience
 export type { ISkillDiscoveryService } from "./skill.js";
 export type { SkillMetadata };

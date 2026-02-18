@@ -13,6 +13,7 @@ import type {
   IServerInfoPreloader,
   ISkillDiscoveryService,
   ISamplingShim,
+  ISkillOperationsService,
 } from "../types/interfaces.js";
 // Import from workspace packages
 import { WasmoonRuntime } from "@my-cool-proxy/lua-runtime";
@@ -35,6 +36,7 @@ import { ShutdownHandler } from "../handlers/shutdown-handler.js";
 import { CapabilityStore } from "../services/capability-store.js";
 import { ServerInfoPreloader } from "../services/server-info-preloader.js";
 import { SkillDiscoveryService } from "../services/skill-discovery-service.js";
+import { SkillOperationsService } from "../services/skill-operations-service.js";
 import { SkillResourceProvider } from "../services/skill-resource-provider.js";
 import { SamplingShim } from "../services/sampling-shim.js";
 import type { ITool } from "../tools/base-tool.js";
@@ -273,6 +275,12 @@ export function createContainer(
   container
     .bind<ISkillDiscoveryService>(TYPES.SkillDiscoveryService)
     .to(SkillDiscoveryService)
+    .inSingletonScope();
+
+  // Bind skill operations service for executing and writing gateway skills
+  container
+    .bind<ISkillOperationsService>(TYPES.SkillOperationsService)
+    .to(SkillOperationsService)
     .inSingletonScope();
 
   return container;

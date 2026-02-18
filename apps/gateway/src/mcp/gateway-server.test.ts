@@ -18,6 +18,7 @@ import type {
   IMCPClientManager,
   ServerConfig,
   ISkillDiscoveryService,
+  ISkillOperationsService,
 } from "../types/interfaces.js";
 import * as z from "zod";
 import { MCPClientSession } from "@my-cool-proxy/mcp-client";
@@ -72,6 +73,12 @@ const createMockSkillDiscoveryService = (): ISkillDiscoveryService => ({
   ensureSkillsDirectory: vi.fn(),
 });
 
+// Mock skill operations service
+const createMockSkillOperationsService = (): ISkillOperationsService => ({
+  executeSkillScript: vi.fn().mockResolvedValue({ success: true }),
+  writeSkillFiles: vi.fn().mockResolvedValue({ success: true }),
+});
+
 // Helper to create a tool registry with all tools
 const createToolRegistry = (
   luaRuntime: ILuaRuntime,
@@ -109,6 +116,7 @@ const createToolRegistry = (
     routingService,
   );
   const skillDiscoveryService = createMockSkillDiscoveryService();
+  const skillOperationsService = createMockSkillOperationsService();
 
   const registry = new ToolRegistry();
   registry.register(
@@ -122,6 +130,7 @@ const createToolRegistry = (
       skillDiscoveryService,
       routingService,
       completionAggregation,
+      skillOperationsService,
     ),
   );
   registry.register(new ListServersTool(toolDiscovery, config));
