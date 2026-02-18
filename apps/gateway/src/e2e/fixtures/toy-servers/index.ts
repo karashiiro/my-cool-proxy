@@ -28,3 +28,8 @@ export {
   startHttpRootsTesterServer,
   startStdioRootsTesterServer,
 } from "./roots-tester-server.js";
+
+export {
+  startHttpCompletionsServer,
+  startStdioCompletionsServer,
+} from "./completions-server.js";

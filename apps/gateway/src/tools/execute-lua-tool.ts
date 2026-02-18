@@ -13,11 +13,9 @@ import * as z from "zod";
 import {
   ResourceAggregationService,
   PromptAggregationService,
+  type IResourceRoutingService,
 } from "@my-cool-proxy/mcp-aggregation";
-import {
-  parseResourceUri,
-  getErrorMessage,
-} from "@my-cool-proxy/mcp-utilities";
+import { getErrorMessage } from "@my-cool-proxy/mcp-utilities";
 import type {
   ILuaRuntime,
   IMCPClientManager,
@@ -86,7 +84,8 @@ result(all_items)
 GATEWAY BUILTINS:
 The \`_gateway\` global table provides built-in functions:
 - _gateway.list_resources():await() - List all available resources across connected servers
-- _gateway.read_resource({ uri = "..." }):await() - Read a resource by its namespaced URI (gw:// or gw-skill://)
+- _gateway.list_resource_templates():await() - List all available resource templates across connected servers
+- _gateway.read_resource({ uri = "..." }):await() - Read a resource by its URI (original upstream URI or gw-skill://)
 - _gateway.list_prompts():await() - List all available prompts across connected servers
 - _gateway.get_prompt({ name = "...", arguments = {...} }):await() - Get a prompt by namespaced name (server-name/prompt-name)
 - _gateway.summary_stats():await() - Get gateway statistics (server/tool/resource/prompt counts)`;
@@ -132,6 +131,8 @@ export class ExecuteLuaTool implements ITool {
     private promptAggregation: PromptAggregationService,
     @$inject(TYPES.SkillDiscoveryService)
     private skillDiscoveryService: ISkillDiscoveryService,
+    @$inject(TYPES.ResourceRoutingService)
+    private routingService: IResourceRoutingService,
   ) {
     this.description =
       this.config.skills?.enabled === true
@@ -219,36 +220,37 @@ export class ExecuteLuaTool implements ITool {
           return { resources: [], message: "No resources available." };
         }
 
-        // Group resources by server name (extracted from the namespaced URI)
-        const byServer = new Map<
-          string,
-          Array<{
-            name: string;
-            uri: string;
-            description?: string;
-            mimeType?: string;
-          }>
-        >();
-        for (const resource of resources) {
-          const parsed = parseResourceUri(resource.uri);
-          const serverName = parsed?.serverName ?? "unknown";
-          const group = byServer.get(serverName);
-          if (group) {
-            group.push(resource);
-          } else {
-            byServer.set(serverName, [resource]);
-          }
-        }
-
         // Return structured data
         return {
           totalResources: resources.length,
-          serverCount: byServer.size,
           resources: resources.map((r) => ({
             name: r.name,
             uri: r.uri,
             description: r.description,
             mimeType: r.mimeType,
+          })),
+        };
+      },
+
+      listResourceTemplates: async () => {
+        const result =
+          await this.resourceAggregation.listResourceTemplates(sessionId);
+        const templates = result.resourceTemplates;
+
+        if (templates.length === 0) {
+          return {
+            resourceTemplates: [],
+            message: "No resource templates available.",
+          };
+        }
+
+        return {
+          totalTemplates: templates.length,
+          resourceTemplates: templates.map((t) => ({
+            name: t.name,
+            uriTemplate: t.uriTemplate,
+            description: t.description,
+            mimeType: t.mimeType,
           })),
         };
       },
@@ -401,6 +403,11 @@ export class ExecuteLuaTool implements ITool {
           return { error: `Failed to gather summary stats: ${error}` };
         }
       },
+    };
+
+    // Add resource URI registration callback for tool result routing
+    builtins.registerResourceUri = (uri: string, serverName: string) => {
+      this.routingService.registerEncounteredUri(sessionId, uri, serverName);
     };
 
     // Add skill-related builtins conditionally

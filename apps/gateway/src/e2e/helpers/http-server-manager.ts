@@ -16,6 +16,7 @@ import { registerProxyHandlers } from "../../handlers/proxy-handlers.js";
 import type {
   ResourceAggregationService,
   PromptAggregationService,
+  CompletionAggregationService,
 } from "@my-cool-proxy/mcp-aggregation";
 import type { IToolRegistry } from "../../tools/tool-registry.js";
 import {
@@ -61,6 +62,9 @@ export class HttpServerManager {
     const promptAggregation = container.get<PromptAggregationService>(
       TYPES.PromptAggregationService,
     );
+    const completionAggregation = container.get<CompletionAggregationService>(
+      TYPES.CompletionAggregationService,
+    );
 
     const clientManager = this.clientManager;
     const capabilityStore = container.get<ICapabilityStore>(
@@ -84,6 +88,7 @@ export class HttpServerManager {
           logger,
           resourceAggregation,
           promptAggregation,
+          completionAggregation,
         );
 
         // Set up callback to initialize upstream clients when downstream client connects

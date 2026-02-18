@@ -261,6 +261,7 @@ export class ToolDiscoveryService {
       // Use a no-op gateway builtins since inspect-tool-response only needs MCP server tools
       const noOpBuiltins: IGatewayBuiltins = {
         listResources: async () => ({ resources: [] }),
+        listResourceTemplates: async () => ({ resourceTemplates: [] }),
         readResource: async () => ({ contents: [] }),
         summaryStats: async () => ({
           servers: { connected: 0, failed: 0, total: 0 },

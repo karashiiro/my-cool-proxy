@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { PromptAggregationService } from "./prompt-aggregation-service.js";
 import type { IMCPClientManager, IMCPClientSession, ILogger } from "./types.js";
+import type { IResourceRoutingService } from "./resource-routing-service.js";
 import type {
   Prompt,
   GetPromptResult,
@@ -13,6 +14,16 @@ const createMockLogger = (): ILogger => ({
   error: vi.fn(),
   debug: vi.fn(),
   fatal: vi.fn(),
+});
+
+// Mock routing service factory
+const createMockRoutingService = (): IResourceRoutingService => ({
+  registerUri: vi.fn(),
+  registerTemplate: vi.fn(),
+  registerEncounteredUri: vi.fn(),
+  getServerForUri: vi.fn(),
+  invalidateSession: vi.fn(),
+  deleteSession: vi.fn(),
 });
 
 // Mock client session factory
@@ -30,6 +41,8 @@ function createMockClientSession(options: {
       .mockResolvedValue(options.promptResult ?? { messages: [] }),
     getServerVersion: vi.fn().mockReturnValue({}),
     getInstructions: vi.fn().mockReturnValue(undefined),
+    listResourceTemplates: vi.fn().mockResolvedValue([]),
+    complete: vi.fn().mockResolvedValue({ completion: { values: [] } }),
   };
 }
 
@@ -37,15 +50,21 @@ describe("PromptAggregationService", () => {
   let service: PromptAggregationService;
   let mockClientManager: IMCPClientManager;
   let mockLogger: ILogger;
+  let mockRoutingService: IResourceRoutingService;
 
   beforeEach(() => {
     mockLogger = createMockLogger();
+    mockRoutingService = createMockRoutingService();
     mockClientManager = {
       getClientsBySession: vi.fn().mockReturnValue(new Map()),
       getFailedServers: vi.fn().mockReturnValue(new Map()),
     };
 
-    service = new PromptAggregationService(mockClientManager, mockLogger);
+    service = new PromptAggregationService(
+      mockClientManager,
+      mockLogger,
+      mockRoutingService,
+    );
   });
 
   afterEach(() => {
@@ -206,6 +225,165 @@ describe("PromptAggregationService", () => {
         name: "nested/prompt/name",
         arguments: undefined,
       });
+    });
+
+    it("should register resource URIs from prompt result for routing", async () => {
+      const mockResult: GetPromptResult = {
+        messages: [
+          {
+            role: "user",
+            content: {
+              type: "resource_link",
+              uri: "file:///docs/README.md",
+            } as GetPromptResult["messages"][0]["content"],
+          },
+        ],
+      };
+      const mockClient = createMockClientSession({ promptResult: mockResult });
+
+      const clientsMap = new Map([["docs-server", mockClient]]);
+      vi.mocked(mockClientManager.getClientsBySession).mockReturnValue(
+        clientsMap,
+      );
+
+      const result = await service.getPrompt(
+        "docs-server/my-prompt",
+        undefined,
+        "session-123",
+      );
+
+      // Should register the resource URI for future routing
+      expect(mockRoutingService.registerEncounteredUri).toHaveBeenCalledWith(
+        "session-123",
+        "file:///docs/README.md",
+        "docs-server",
+      );
+
+      // Result should be returned unchanged (no gw:// namespacing)
+      const content = result.messages[0]?.content as { uri?: string };
+      expect(content?.uri).toBe("file:///docs/README.md");
+    });
+
+    it("should register resource URIs from embedded resource content blocks", async () => {
+      const mockResult: GetPromptResult = {
+        messages: [
+          {
+            role: "user",
+            content: {
+              type: "resource",
+              resource: {
+                uri: "file:///data/config.json",
+                mimeType: "application/json",
+                text: '{"key": "value"}',
+              },
+            } as GetPromptResult["messages"][0]["content"],
+          },
+        ],
+      };
+      const mockClient = createMockClientSession({ promptResult: mockResult });
+
+      const clientsMap = new Map([["config-server", mockClient]]);
+      vi.mocked(mockClientManager.getClientsBySession).mockReturnValue(
+        clientsMap,
+      );
+
+      await service.getPrompt(
+        "config-server/my-prompt",
+        undefined,
+        "session-123",
+      );
+
+      expect(mockRoutingService.registerEncounteredUri).toHaveBeenCalledWith(
+        "session-123",
+        "file:///data/config.json",
+        "config-server",
+      );
+    });
+
+    it("should register URIs from both resource_link and embedded resource in same result", async () => {
+      const mockResult: GetPromptResult = {
+        messages: [
+          {
+            role: "user",
+            content: {
+              type: "resource_link",
+              uri: "file:///link.md",
+            } as GetPromptResult["messages"][0]["content"],
+          },
+          {
+            role: "assistant",
+            content: {
+              type: "resource",
+              resource: {
+                uri: "file:///embedded.json",
+                mimeType: "application/json",
+                text: "{}",
+              },
+            } as GetPromptResult["messages"][0]["content"],
+          },
+        ],
+      };
+      const mockClient = createMockClientSession({ promptResult: mockResult });
+
+      const clientsMap = new Map([["multi-server", mockClient]]);
+      vi.mocked(mockClientManager.getClientsBySession).mockReturnValue(
+        clientsMap,
+      );
+
+      await service.getPrompt(
+        "multi-server/my-prompt",
+        undefined,
+        "session-123",
+      );
+
+      expect(mockRoutingService.registerEncounteredUri).toHaveBeenCalledTimes(
+        2,
+      );
+      expect(mockRoutingService.registerEncounteredUri).toHaveBeenCalledWith(
+        "session-123",
+        "file:///link.md",
+        "multi-server",
+      );
+      expect(mockRoutingService.registerEncounteredUri).toHaveBeenCalledWith(
+        "session-123",
+        "file:///embedded.json",
+        "multi-server",
+      );
+    });
+
+    it("should not register URIs for text-only message content", async () => {
+      const mockResult: GetPromptResult = {
+        messages: [
+          {
+            role: "user",
+            content: {
+              type: "text",
+              text: "Just a plain text message",
+            },
+          },
+          {
+            role: "assistant",
+            content: {
+              type: "text",
+              text: "Another plain text response",
+            },
+          },
+        ],
+      };
+      const mockClient = createMockClientSession({ promptResult: mockResult });
+
+      const clientsMap = new Map([["text-server", mockClient]]);
+      vi.mocked(mockClientManager.getClientsBySession).mockReturnValue(
+        clientsMap,
+      );
+
+      await service.getPrompt(
+        "text-server/my-prompt",
+        undefined,
+        "session-123",
+      );
+
+      expect(mockRoutingService.registerEncounteredUri).not.toHaveBeenCalled();
     });
   });
 

@@ -367,6 +367,108 @@ describe("MCPClientSession", () => {
     });
   });
 
+  describe("resource template list caching", () => {
+    it("should list resource templates when no pagination", async () => {
+      const mockResponse = {
+        resourceTemplates: [
+          {
+            uriTemplate: "deployment://{region}/{service}",
+            name: "deployment",
+          },
+          {
+            uriTemplate: "log://{date}",
+            name: "log",
+          },
+        ],
+      };
+
+      vi.mocked(
+        mockClient as unknown as {
+          listResourceTemplates: ReturnType<typeof vi.fn>;
+        },
+      ).listResourceTemplates = vi.fn().mockResolvedValue(mockResponse);
+
+      const session = new MCPClientSession(
+        mockClient,
+        serverName,
+        undefined,
+        logger,
+      );
+
+      const result = await session.listResourceTemplates();
+
+      expect(result).toHaveLength(2);
+      expect(result[0]?.uriTemplate).toBe("deployment://{region}/{service}");
+    });
+
+    it("should cache resource template list after first call", async () => {
+      const mockResponse = {
+        resourceTemplates: [
+          {
+            uriTemplate: "cached://{id}",
+            name: "cached",
+          },
+        ],
+      };
+
+      const listResourceTemplatesFn = vi.fn().mockResolvedValue(mockResponse);
+      (
+        mockClient as unknown as {
+          listResourceTemplates: ReturnType<typeof vi.fn>;
+        }
+      ).listResourceTemplates = listResourceTemplatesFn;
+
+      const session = new MCPClientSession(
+        mockClient,
+        serverName,
+        undefined,
+        logger,
+      );
+
+      // First call should fetch from client
+      await session.listResourceTemplates();
+      expect(listResourceTemplatesFn).toHaveBeenCalledTimes(1);
+
+      // Second call should return cached result
+      await session.listResourceTemplates();
+      expect(listResourceTemplatesFn).toHaveBeenCalledTimes(1);
+
+      expect(logger.debug).toHaveBeenCalledWith(
+        `Server '${serverName}': Returning cached resource template list`,
+      );
+    });
+  });
+
+  describe("complete", () => {
+    it("should delegate to client.complete", async () => {
+      const mockResult = {
+        completion: { values: ["typescript", "terraform"], hasMore: false },
+      };
+
+      const completeFn = vi.fn().mockResolvedValue(mockResult);
+      (
+        mockClient as unknown as { complete: ReturnType<typeof vi.fn> }
+      ).complete = completeFn;
+
+      const session = new MCPClientSession(
+        mockClient,
+        serverName,
+        undefined,
+        logger,
+      );
+
+      const params = {
+        ref: { type: "ref/prompt" as const, name: "code-review" },
+        argument: { name: "language", value: "ty" },
+      };
+
+      const result = await session.complete(params);
+
+      expect(completeFn).toHaveBeenCalledWith(params);
+      expect(result.completion.values).toEqual(["typescript", "terraform"]);
+    });
+  });
+
   describe("experimental getter", () => {
     it("should passthrough to client.experimental", () => {
       const mockExperimental = {

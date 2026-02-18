@@ -41,8 +41,13 @@ export interface IGatewayBuiltins {
   listResources(): Promise<unknown>;
 
   /**
-   * Read a specific resource by its namespaced URI.
-   * @param uri The namespaced resource URI (gw:// or gw-skill://)
+   * List all available resource templates across connected MCP servers.
+   */
+  listResourceTemplates(): Promise<unknown>;
+
+  /**
+   * Read a specific resource by its URI.
+   * @param uri The resource URI (original upstream URI or gw-skill://)
    */
   readResource(uri: string): Promise<unknown>;
 
@@ -82,6 +87,13 @@ export interface IGatewayBuiltins {
     content?: string,
     files?: Array<{ path: string; content: string }>,
   ): Promise<unknown>;
+
+  /**
+   * Register a resource URI encountered in tool results for routing.
+   * Called by the runtime when a tool result contains resource_link or
+   * embedded resource content blocks.
+   */
+  registerResourceUri?(uri: string, serverName: string): void;
 }
 
 /**

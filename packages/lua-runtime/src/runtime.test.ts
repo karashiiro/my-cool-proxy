@@ -19,6 +19,7 @@ const createMockLogger = (): ILogger => ({
 // Mock gateway builtins factory - provides minimal implementation for tests
 const createMockGatewayBuiltins = (): IGatewayBuiltins => ({
   listResources: vi.fn().mockResolvedValue({ resources: [] }),
+  listResourceTemplates: vi.fn().mockResolvedValue({ resourceTemplates: [] }),
   readResource: vi.fn().mockResolvedValue({ contents: [] }),
   listPrompts: vi.fn().mockResolvedValue({ prompts: [] }),
   getPrompt: vi.fn().mockResolvedValue({ messages: [] }),
@@ -1238,6 +1239,195 @@ describe("WasmoonRuntime", () => {
           },
         },
       });
+    });
+  });
+
+  describe("resource URI registration from tool results", () => {
+    it("should call registerResourceUri for resource_link content blocks", async () => {
+      const { server, client } = await createTestServer("data-server", [
+        {
+          name: "get-link",
+          description: "Returns a resource link",
+          handler: async () => ({
+            content: [
+              {
+                type: "resource_link" as const,
+                name: "Report",
+                uri: "file:///data/report.json",
+              },
+            ],
+          }),
+        },
+      ]);
+
+      cleanupFns.push(async () => {
+        await client.close();
+        await server.close();
+      });
+
+      const servers = new Map([["data-server", client]]);
+      const builtins = createMockGatewayBuiltins();
+      const registerResourceUri = vi.fn();
+      builtins.registerResourceUri = registerResourceUri;
+
+      const script = `result(data_server.get_link({}):await())`;
+      await runtime.executeScript(script, servers, builtins);
+
+      expect(registerResourceUri).toHaveBeenCalledWith(
+        "file:///data/report.json",
+        "data-server",
+      );
+    });
+
+    it("should call registerResourceUri for embedded resource content blocks", async () => {
+      const { server, client } = await createTestServer("docs-server", [
+        {
+          name: "get-doc",
+          description: "Returns an embedded resource",
+          handler: async () => ({
+            content: [
+              {
+                type: "resource" as const,
+                resource: {
+                  uri: "file:///docs/readme.md",
+                  mimeType: "text/markdown",
+                  text: "# Hello",
+                },
+              },
+            ],
+          }),
+        },
+      ]);
+
+      cleanupFns.push(async () => {
+        await client.close();
+        await server.close();
+      });
+
+      const servers = new Map([["docs-server", client]]);
+      const builtins = createMockGatewayBuiltins();
+      const registerResourceUri = vi.fn();
+      builtins.registerResourceUri = registerResourceUri;
+
+      const script = `result(docs_server.get_doc({}):await())`;
+      await runtime.executeScript(script, servers, builtins);
+
+      expect(registerResourceUri).toHaveBeenCalledWith(
+        "file:///docs/readme.md",
+        "docs-server",
+      );
+    });
+
+    it("should register URIs from multiple content blocks", async () => {
+      const { server, client } = await createTestServer("multi-server", [
+        {
+          name: "get-multi",
+          description: "Returns multiple resource references",
+          handler: async () => ({
+            content: [
+              {
+                type: "text" as const,
+                text: "Here are some resources:",
+              },
+              {
+                type: "resource_link" as const,
+                name: "Report A",
+                uri: "file:///a.json",
+              },
+              {
+                type: "resource" as const,
+                resource: {
+                  uri: "file:///b.md",
+                  mimeType: "text/markdown",
+                  text: "# B",
+                },
+              },
+            ],
+          }),
+        },
+      ]);
+
+      cleanupFns.push(async () => {
+        await client.close();
+        await server.close();
+      });
+
+      const servers = new Map([["multi-server", client]]);
+      const builtins = createMockGatewayBuiltins();
+      const registerResourceUri = vi.fn();
+      builtins.registerResourceUri = registerResourceUri;
+
+      const script = `result(multi_server.get_multi({}):await())`;
+      await runtime.executeScript(script, servers, builtins);
+
+      expect(registerResourceUri).toHaveBeenCalledTimes(2);
+      expect(registerResourceUri).toHaveBeenCalledWith(
+        "file:///a.json",
+        "multi-server",
+      );
+      expect(registerResourceUri).toHaveBeenCalledWith(
+        "file:///b.md",
+        "multi-server",
+      );
+    });
+
+    it("should not call registerResourceUri for text-only content", async () => {
+      const { server, client } = await createTestServer("text-server", [
+        {
+          name: "get-text",
+          description: "Returns only text",
+          handler: async () => ({
+            content: [{ type: "text" as const, text: "just text" }],
+          }),
+        },
+      ]);
+
+      cleanupFns.push(async () => {
+        await client.close();
+        await server.close();
+      });
+
+      const servers = new Map([["text-server", client]]);
+      const builtins = createMockGatewayBuiltins();
+      const registerResourceUri = vi.fn();
+      builtins.registerResourceUri = registerResourceUri;
+
+      const script = `result(text_server.get_text({}):await())`;
+      await runtime.executeScript(script, servers, builtins);
+
+      expect(registerResourceUri).not.toHaveBeenCalled();
+    });
+
+    it("should not fail when registerResourceUri is not provided", async () => {
+      const { server, client } = await createTestServer("link-server", [
+        {
+          name: "get-link",
+          description: "Returns a resource link",
+          handler: async () => ({
+            content: [
+              {
+                type: "resource_link" as const,
+                name: "Report",
+                uri: "file:///report.json",
+              },
+            ],
+          }),
+        },
+      ]);
+
+      cleanupFns.push(async () => {
+        await client.close();
+        await server.close();
+      });
+
+      const servers = new Map([["link-server", client]]);
+      // No registerResourceUri on builtins — should not throw
+      const builtins = createMockGatewayBuiltins();
+
+      const script = `result(link_server.get_link({}):await())`;
+      await expect(
+        runtime.executeScript(script, servers, builtins),
+      ).resolves.not.toThrow();
     });
   });
 });

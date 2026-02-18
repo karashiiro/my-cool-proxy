@@ -8,6 +8,8 @@ import {
   LoggingMessageNotificationSchema,
   type Implementation,
   type ListResourcesResult,
+  type ListResourceTemplatesResult,
+  type ResourceTemplate as ResourceTemplateType,
   type ListPromptsResult,
   type Resource,
   type Prompt,
@@ -17,6 +19,8 @@ import {
   type Result,
   type LoggingMessageNotification,
   type LoggingLevel,
+  type CompleteRequest,
+  type CompleteResult,
 } from "@modelcontextprotocol/sdk/types.js";
 
 /**
@@ -55,6 +59,7 @@ export class MCPClientSession {
   private serverName: string;
   private toolCache: ICacheService<Tool[]>;
   private resourceCache: ICacheService<Resource[]>;
+  private resourceTemplateCache: ICacheService<ResourceTemplateType[]>;
   private promptCache: ICacheService<Prompt[]>;
   private onResourceListChanged?: (serverName: string) => void;
   private onPromptListChanged?: (serverName: string) => void;
@@ -87,6 +92,7 @@ export class MCPClientSession {
     // Initialize cache instances
     this.toolCache = createCache<Tool[]>(logger);
     this.resourceCache = createCache<Resource[]>(logger);
+    this.resourceTemplateCache = createCache<ResourceTemplateType[]>(logger);
     this.promptCache = createCache<Prompt[]>(logger);
 
     // Register notification handler for tool list changes
@@ -125,6 +131,7 @@ export class MCPClientSession {
             `Server '${this.serverName}': Resource list changed, invalidating cache`,
           );
           this.clearResourceCache();
+          this.clearResourceTemplateCache();
 
           // Notify gateway server if callback is provided
           if (this.onResourceListChanged) {
@@ -251,6 +258,10 @@ export class MCPClientSession {
     this.resourceCache.clear();
   }
 
+  private clearResourceTemplateCache(): void {
+    this.resourceTemplateCache.clear();
+  }
+
   private clearPromptCache(): void {
     this.promptCache.clear();
   }
@@ -341,6 +352,41 @@ export class MCPClientSession {
     return resources;
   }
 
+  async listResourceTemplates(): Promise<ResourceTemplateType[]> {
+    // Return cached response if available
+    const cacheKey = "resourceTemplates"; // Single entry cache
+    const cached = this.resourceTemplateCache.get(cacheKey);
+    if (cached !== undefined) {
+      this.logger.debug(
+        `Server '${this.serverName}': Returning cached resource template list`,
+      );
+      return cached;
+    }
+
+    // Fetch all pages of resource templates
+    const templates: ResourceTemplateType[] = [];
+    let nextCursor: string | undefined = undefined;
+    let response: ListResourceTemplatesResult;
+
+    do {
+      // Fetch current page
+      response = await this.client.listResourceTemplates(
+        nextCursor ? { cursor: nextCursor } : undefined,
+      );
+
+      // Accumulate templates from this page
+      templates.push(...response.resourceTemplates);
+
+      // Update cursor for next iteration
+      nextCursor = response.nextCursor;
+    } while (nextCursor !== undefined);
+
+    // Cache the complete response
+    this.resourceTemplateCache.set("resourceTemplates", templates);
+
+    return templates;
+  }
+
   async listPrompts() {
     // Return cached response if available
     const cacheKey = "prompts"; // Single entry cache
@@ -385,6 +431,10 @@ export class MCPClientSession {
     arguments?: Record<string, string>;
   }) {
     return this.client.getPrompt(params);
+  }
+
+  async complete(params: CompleteRequest["params"]): Promise<CompleteResult> {
+    return this.client.complete(params);
   }
 
   /**

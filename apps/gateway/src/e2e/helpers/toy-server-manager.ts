@@ -5,6 +5,7 @@ import {
   startHttpElicitationServer,
   startHttpLoggingServer,
   startHttpRootsTesterServer,
+  startHttpCompletionsServer,
 } from "../fixtures/toy-servers/index.js";
 
 type ToyServerType =
@@ -13,7 +14,8 @@ type ToyServerType =
   | "sampling"
   | "elicitation"
   | "logging"
-  | "roots-tester";
+  | "roots-tester"
+  | "completions";
 
 interface ToyServerInstance {
   type: ToyServerType;
@@ -71,6 +73,11 @@ export class ToyServerManager {
       }
       case "roots-tester": {
         const server = await startHttpRootsTesterServer(port);
+        closeFunc = server.close;
+        break;
+      }
+      case "completions": {
+        const server = await startHttpCompletionsServer(port);
         closeFunc = server.close;
         break;
       }

@@ -22,7 +22,10 @@ import {
   ToolDiscoveryService,
   ResourceAggregationService,
   PromptAggregationService,
+  CompletionAggregationService,
+  ResourceRoutingService,
   type IResourceProvider,
+  type IResourceRoutingService,
 } from "@my-cool-proxy/mcp-aggregation";
 // Import logger from shared package
 import { ConsoleLogger, type LoggerConfig } from "@my-cool-proxy/logger";
@@ -52,9 +55,9 @@ export function createContainer(
   container.bind<ServerConfig>(TYPES.ServerConfig).toConstantValue(config);
 
   // Build logger configuration from server config
-  // Defaults: console at "info" (or "warn" in CI), file at "trace" (captures everything)
-  const isCIEnv = process.env.CI !== undefined;
-  const defaultConsoleLevel = isCIEnv ? "warn" : "info";
+  // Defaults: console at "info" (or "warn" if QUIET_LOGS is set), file at "trace" (captures everything)
+  const quietLogs = process.env.QUIET_LOGS !== undefined;
+  const defaultConsoleLevel = quietLogs ? "warn" : "info";
 
   const loggerConfig: LoggerConfig = {
     console: { level: config.logging?.console?.level ?? defaultConsoleLevel },
@@ -86,6 +89,15 @@ export function createContainer(
     .toDynamicValue(() => {
       const logger = container.get<ILogger>(TYPES.Logger);
       return new MCPClientManager(logger);
+    })
+    .inSingletonScope();
+
+  // Bind resource routing service (from package - use factory binding)
+  container
+    .bind<IResourceRoutingService>(TYPES.ResourceRoutingService)
+    .toDynamicValue(() => {
+      const logger = container.get<ILogger>(TYPES.Logger);
+      return new ResourceRoutingService(logger);
     })
     .inSingletonScope();
 
@@ -122,6 +134,9 @@ export function createContainer(
         TYPES.MCPClientManager,
       );
       const logger = container.get<ILogger>(TYPES.Logger);
+      const routingService = container.get<IResourceRoutingService>(
+        TYPES.ResourceRoutingService,
+      );
 
       // Collect additional resource providers (e.g., skill resources)
       const providers: IResourceProvider[] = [];
@@ -131,7 +146,12 @@ export function createContainer(
         );
       }
 
-      return new ResourceAggregationService(clientManager, logger, providers);
+      return new ResourceAggregationService(
+        clientManager,
+        logger,
+        routingService,
+        providers,
+      );
     })
     .inSingletonScope();
 
@@ -142,7 +162,32 @@ export function createContainer(
         TYPES.MCPClientManager,
       );
       const logger = container.get<ILogger>(TYPES.Logger);
-      return new PromptAggregationService(clientManager, logger);
+      const routingService = container.get<IResourceRoutingService>(
+        TYPES.ResourceRoutingService,
+      );
+      return new PromptAggregationService(
+        clientManager,
+        logger,
+        routingService,
+      );
+    })
+    .inSingletonScope();
+
+  container
+    .bind(TYPES.CompletionAggregationService)
+    .toDynamicValue(() => {
+      const clientManager = container.get<IMCPClientManager>(
+        TYPES.MCPClientManager,
+      );
+      const logger = container.get<ILogger>(TYPES.Logger);
+      const routingService = container.get<IResourceRoutingService>(
+        TYPES.ResourceRoutingService,
+      );
+      return new CompletionAggregationService(
+        clientManager,
+        logger,
+        routingService,
+      );
     })
     .inSingletonScope();
 

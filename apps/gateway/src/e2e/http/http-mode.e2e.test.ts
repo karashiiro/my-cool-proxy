@@ -194,23 +194,25 @@ describe("HTTP Mode E2E", () => {
       expect(resources.resources).toBeDefined();
       expect(Array.isArray(resources.resources)).toBe(true);
 
-      // Should have resources from data-server (namespaced)
-      const dataServerResources = resources.resources.filter((r) =>
-        r.uri.startsWith("gw://data-server/"),
-      );
+      // Should have resources with original URIs (no gw:// namespacing)
+      expect(resources.resources.length).toBeGreaterThan(0);
 
-      expect(dataServerResources.length).toBeGreaterThan(0);
-
-      // Check for specific resources
+      // Check for specific resources by original URI
       const testDataResource = resources.resources.find((r) =>
         r.uri.includes("test-data.json"),
       );
       expect(testDataResource).toBeDefined();
     });
 
-    it("should read resource via namespaced URI", async () => {
-      const uri = "gw://data-server/file:///test-data.json";
+    it("should read resource via original URI after listing", async () => {
+      // List resources first to populate routing table
+      const resources = await gatewayClient.listResources();
+      const testDataResource = resources.resources.find((r) =>
+        r.uri.includes("test-data.json"),
+      );
+      expect(testDataResource).toBeDefined();
 
+      const uri = testDataResource!.uri;
       const result = await gatewayClient.readResource({ uri });
 
       expect(result.contents).toHaveLength(1);

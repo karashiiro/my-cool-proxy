@@ -5,10 +5,7 @@ import type {
   IMCPClientSession,
   IGatewayBuiltins,
 } from "./types.js";
-import {
-  sanitizeLuaIdentifier,
-  namespaceCallToolResultResources,
-} from "@my-cool-proxy/mcp-utilities";
+import { sanitizeLuaIdentifier } from "@my-cool-proxy/mcp-utilities";
 import {
   takeResult,
   type ResponseMessage,
@@ -40,7 +37,7 @@ export class WasmoonRuntime implements ILuaRuntime {
 
     try {
       // Inject MCP servers as Lua globals
-      await this.injectMCPServers(engine, mcpServers);
+      await this.injectMCPServers(engine, mcpServers, gatewayBuiltins);
 
       // Inject gateway builtins as _gateway global
       this.injectGatewayBuiltins(engine, gatewayBuiltins);
@@ -140,6 +137,7 @@ Common issues:
   private async injectMCPServers(
     engine: LuaEngine,
     mcpServers: Map<string, IMCPClientSession>,
+    gatewayBuiltins: IGatewayBuiltins,
   ): Promise<void> {
     for (const [originalServerName, client] of mcpServers.entries()) {
       try {
@@ -178,24 +176,44 @@ Common issues:
                 ) as AsyncGenerator<ResponseMessage<CallToolResult>>,
               );
 
-              // IMPORTANT: Namespace resource URIs in tool results here!
-              // This MUST happen at the tool call level because:
-              // 1. We have the server context (originalServerName) here
-              // 2. Lua scripts can call tools from multiple servers
-              // 3. By the time results reach the gateway server, we've lost which
-              //    server each resource came from
-              // This ensures clients can directly use resource URIs from tool results
-              // without manual namespacing (e.g., file:///data.json becomes
-              // gw://data-server/file:///data.json)
-              const namespacedResult = namespaceCallToolResultResources(
-                originalServerName,
-                result,
-              );
+              // Register resource URIs found in tool results for routing.
+              // We have the server context (originalServerName) here,
+              // which is needed because Lua scripts can call tools from
+              // multiple servers. The routing service maps URIs to their
+              // source server for subsequent resource reads.
+              if (gatewayBuiltins.registerResourceUri) {
+                for (const block of result.content) {
+                  if (
+                    typeof block === "object" &&
+                    block !== null &&
+                    "type" in block
+                  ) {
+                    if (block.type === "resource_link" && "uri" in block) {
+                      gatewayBuiltins.registerResourceUri(
+                        block.uri as string,
+                        originalServerName,
+                      );
+                    }
+                    if (
+                      block.type === "resource" &&
+                      "resource" in block &&
+                      typeof block.resource === "object" &&
+                      block.resource !== null &&
+                      "uri" in block.resource
+                    ) {
+                      gatewayBuiltins.registerResourceUri(
+                        block.resource.uri as string,
+                        originalServerName,
+                      );
+                    }
+                  }
+                }
+              }
 
               // Validate isError flag - throw so agents can't silently
               // extract error context as if it were successful data
-              if (namespacedResult.isError) {
-                const errorText = namespacedResult.content
+              if (result.isError) {
+                const errorText = result.content
                   .filter(
                     (c): c is { type: "text"; text: string } =>
                       c.type === "text",
@@ -207,24 +225,24 @@ Common issues:
                 );
               }
 
-              if (namespacedResult.structuredContent) {
+              if (result.structuredContent) {
                 // Directly return structured content as Lua table
-                return namespacedResult.structuredContent;
+                return result.structuredContent;
               }
 
               if (
-                namespacedResult.content.length === 1 &&
-                namespacedResult.content[0]?.type === "text"
+                result.content.length === 1 &&
+                result.content[0]?.type === "text"
               ) {
                 // If single text content, attempt to parse as JSON
                 try {
-                  return JSON.parse(namespacedResult.content[0].text);
+                  return JSON.parse(result.content[0].text);
                 } catch {
                   // ignored
                 }
               }
 
-              return namespacedResult;
+              return result;
             } catch (error) {
               this.logger.error(
                 `Error calling ${originalServerName}.${originalToolName}:`,
@@ -270,6 +288,11 @@ Common issues:
     gatewayTable["list_resources"] = async () => {
       this.logger.debug("Calling _gateway.list_resources()");
       return builtins.listResources();
+    };
+
+    gatewayTable["list_resource_templates"] = async () => {
+      this.logger.debug("Calling _gateway.list_resource_templates()");
+      return builtins.listResourceTemplates();
     };
 
     gatewayTable["read_resource"] = async (args: { uri: string }) => {

@@ -247,12 +247,8 @@ describe("Stdio Mode E2E", () => {
       expect(resources.resources).toBeDefined();
       expect(Array.isArray(resources.resources)).toBe(true);
 
-      // Should have resources from data-server
-      const dataServerResources = resources.resources.filter((r) =>
-        r.uri.startsWith("gw://data-server/"),
-      );
-
-      expect(dataServerResources.length).toBeGreaterThan(0);
+      // Should have resources with original URIs (no gw:// namespacing)
+      expect(resources.resources.length).toBeGreaterThan(0);
     });
   });
 

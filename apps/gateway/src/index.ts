@@ -24,6 +24,8 @@ import type { IToolRegistry } from "./tools/tool-registry.js";
 import type {
   ResourceAggregationService,
   PromptAggregationService,
+  CompletionAggregationService,
+  IResourceRoutingService,
 } from "@my-cool-proxy/mcp-aggregation";
 import { parseArgs } from "./utils/cli-args.js";
 import { getConfigPaths, getPlatformConfigDir } from "./utils/config-paths.js";
@@ -180,6 +182,9 @@ async function startHttpMode(
   const promptAggregation = container.get<PromptAggregationService>(
     TYPES.PromptAggregationService,
   );
+  const completionAggregation = container.get<CompletionAggregationService>(
+    TYPES.CompletionAggregationService,
+  );
   const shutdownHandler = container.get<IShutdownHandler>(
     TYPES.ShutdownHandler,
   );
@@ -188,6 +193,9 @@ async function startHttpMode(
   );
   const skillDiscoveryService = container.get<ISkillDiscoveryService>(
     TYPES.SkillDiscoveryService,
+  );
+  const routingService = container.get<IResourceRoutingService>(
+    TYPES.ResourceRoutingService,
   );
 
   // Preload upstream server info at startup to populate gateway instructions
@@ -251,6 +259,7 @@ async function startHttpMode(
         logger,
         resourceAggregation,
         promptAggregation,
+        completionAggregation,
         sessionInstructions,
       );
 
@@ -375,6 +384,9 @@ async function startHttpMode(
 
             capabilityStore.deleteCapabilities(sessionId);
 
+            // Clean up resource routing data
+            routingService.deleteSession(sessionId);
+
             // Clean up sampling shim if active
             if (container.isBound(TYPES.SamplingShim)) {
               const shim = container.get<ISamplingShim>(TYPES.SamplingShim);
@@ -435,6 +447,9 @@ async function startStdioMode(
   const promptAggregation = container.get<PromptAggregationService>(
     TYPES.PromptAggregationService,
   );
+  const completionAggregation = container.get<CompletionAggregationService>(
+    TYPES.CompletionAggregationService,
+  );
   const capabilityStore = container.get<ICapabilityStore>(
     TYPES.CapabilityStore,
   );
@@ -486,6 +501,7 @@ async function startStdioMode(
       logger,
       resourceAggregation,
       promptAggregation,
+      completionAggregation,
       aggregatedInstructions,
     );
 

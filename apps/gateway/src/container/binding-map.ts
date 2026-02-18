@@ -14,8 +14,10 @@ import type {
   ToolDiscoveryService,
   ResourceAggregationService,
   PromptAggregationService,
+  CompletionAggregationService,
   MCPFormatterService,
   IResourceProvider,
+  IResourceRoutingService,
 } from "@my-cool-proxy/mcp-aggregation";
 import type { ITool } from "../tools/base-tool.js";
 import type { IToolRegistry } from "../tools/tool-registry.js";
@@ -33,6 +35,8 @@ export interface ContainerBindingMap {
   ToolDiscoveryService: ToolDiscoveryService;
   ResourceAggregationService: ResourceAggregationService;
   PromptAggregationService: PromptAggregationService;
+  CompletionAggregationService: CompletionAggregationService;
+  ResourceRoutingService: IResourceRoutingService;
   MCPGatewayServer: MCPGatewayServer;
   ShutdownHandler: IShutdownHandler;
   Tool: ITool; // Multi-bound - use getAll() to retrieve all registered tools
