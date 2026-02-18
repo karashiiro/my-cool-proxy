@@ -81,7 +81,8 @@ that may provide optimized workflows or best practices for your task.
 
 Additional skill-related builtins in \`_gateway\`:
 - _gateway.invoke_skill_script({ skillName = "...", script = "...", args = {...} }):await() - Execute a skill script
-- _gateway.write_skill({ skillName = "...", content = "...", files = {...} }):await() - Create or modify a skill (when mutable)`;
+- _gateway.write_skill({ skillName = "...", content = "...", files = {...} }):await() - Create or modify a skill (when mutable)
+- _gateway.update_skill({ skillName = "...", file = "SKILL.md", old_string = "...", new_string = "...", replace_all = false }):await() - Partially update an existing skill file using string replacement (when mutable)`;
 
 @injectable()
 export class ExecuteLuaTool implements ITool {

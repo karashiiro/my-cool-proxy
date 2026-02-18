@@ -7,7 +7,7 @@ import {
   vi,
   type Mock,
 } from "vitest";
-import { mkdirSync, rmSync, existsSync } from "fs";
+import { mkdirSync, rmSync, existsSync, writeFileSync, readFileSync } from "fs";
 import { resolve } from "path";
 import { tmpdir } from "os";
 import { SkillOperationsService } from "./skill-operations-service.js";
@@ -426,6 +426,236 @@ describe("SkillOperationsService", () => {
           writtenFiles: ["scripts/helper.py"],
         }),
       );
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // updateSkillFile
+  // ---------------------------------------------------------------------------
+
+  describe("updateSkillFile", () => {
+    const validSkillContent = `---\nname: Test Skill\ndescription: A test skill\n---\n\n# Instructions\n\nDo the thing.`;
+
+    function createSkillFile(
+      skillName: string,
+      file: string,
+      content: string,
+    ): void {
+      const dir = resolve(skillsDir, skillName);
+      const filePath = resolve(dir, file);
+      mkdirSync(resolve(filePath, ".."), { recursive: true });
+      writeFileSync(filePath, content, "utf-8");
+    }
+
+    it("should successfully replace a unique string", async () => {
+      createSkillFile("my-skill", "SKILL.md", validSkillContent);
+
+      const result = await service.updateSkillFile(
+        "my-skill",
+        "SKILL.md",
+        "Do the thing.",
+        "Do the other thing.",
+      );
+
+      expect(result).toEqual({
+        success: true,
+        file: "SKILL.md",
+        replacements: 1,
+      });
+
+      const updated = readFileSync(
+        resolve(skillsDir, "my-skill", "SKILL.md"),
+        "utf-8",
+      );
+      expect(updated).toContain("Do the other thing.");
+      expect(updated).not.toContain("Do the thing.");
+    });
+
+    it("should return error when old_string is not found", async () => {
+      createSkillFile("my-skill", "SKILL.md", validSkillContent);
+
+      const result = await service.updateSkillFile(
+        "my-skill",
+        "SKILL.md",
+        "this text does not exist",
+        "replacement",
+      );
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          error: expect.stringContaining("not found"),
+        }),
+      );
+    });
+
+    it("should return error when multiple matches without replace_all", async () => {
+      const content = `---\nname: Test\ndescription: Test\n---\n\nfoo bar foo`;
+      createSkillFile("my-skill", "SKILL.md", content);
+
+      const result = await service.updateSkillFile(
+        "my-skill",
+        "SKILL.md",
+        "foo",
+        "baz",
+      );
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          error: expect.stringContaining("2 times"),
+        }),
+      );
+
+      // Verify file was not modified
+      const unchanged = readFileSync(
+        resolve(skillsDir, "my-skill", "SKILL.md"),
+        "utf-8",
+      );
+      expect(unchanged).toContain("foo bar foo");
+    });
+
+    it("should replace all occurrences when replace_all is true", async () => {
+      const content = `---\nname: Test\ndescription: Test\n---\n\nfoo bar foo`;
+      createSkillFile("my-skill", "SKILL.md", content);
+
+      const result = await service.updateSkillFile(
+        "my-skill",
+        "SKILL.md",
+        "foo",
+        "baz",
+        true,
+      );
+
+      expect(result).toEqual({
+        success: true,
+        file: "SKILL.md",
+        replacements: 2,
+      });
+
+      const updated = readFileSync(
+        resolve(skillsDir, "my-skill", "SKILL.md"),
+        "utf-8",
+      );
+      expect(updated).toContain("baz bar baz");
+    });
+
+    it("should reject path traversal in file parameter", async () => {
+      createSkillFile("my-skill", "SKILL.md", validSkillContent);
+
+      const result = await service.updateSkillFile(
+        "my-skill",
+        "../../../etc/passwd",
+        "old",
+        "new",
+      );
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          error: expect.stringContaining("path traversal"),
+        }),
+      );
+    });
+
+    it("should reject skill names with path separators", async () => {
+      const result = await service.updateSkillFile(
+        "../evil",
+        "SKILL.md",
+        "old",
+        "new",
+      );
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          error: expect.stringContaining("path separators"),
+        }),
+      );
+    });
+
+    it("should return error when file does not exist", async () => {
+      mkdirSync(resolve(skillsDir, "my-skill"), { recursive: true });
+
+      const result = await service.updateSkillFile(
+        "my-skill",
+        "nonexistent.md",
+        "old",
+        "new",
+      );
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          error: expect.stringContaining("not found"),
+        }),
+      );
+    });
+
+    it("should reject replacement that breaks SKILL.md frontmatter", async () => {
+      createSkillFile("my-skill", "SKILL.md", validSkillContent);
+
+      const result = await service.updateSkillFile(
+        "my-skill",
+        "SKILL.md",
+        "---\nname: Test Skill\ndescription: A test skill\n---",
+        "no frontmatter here",
+      );
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          error: expect.stringContaining("frontmatter"),
+        }),
+      );
+
+      // Verify file was not modified
+      const unchanged = readFileSync(
+        resolve(skillsDir, "my-skill", "SKILL.md"),
+        "utf-8",
+      );
+      expect(unchanged).toBe(validSkillContent);
+    });
+
+    it("should treat $ patterns in new_string as literal text", async () => {
+      createSkillFile("my-skill", "scripts/config.txt", "price: PLACEHOLDER");
+
+      const result = await service.updateSkillFile(
+        "my-skill",
+        "scripts/config.txt",
+        "PLACEHOLDER",
+        "$100 ($& is literal)",
+      );
+
+      expect(result).toEqual({
+        success: true,
+        file: "scripts/config.txt",
+        replacements: 1,
+      });
+
+      const updated = readFileSync(
+        resolve(skillsDir, "my-skill", "scripts", "config.txt"),
+        "utf-8",
+      );
+      // $& and $100 should be literal, not interpreted as replacement patterns
+      expect(updated).toBe("price: $100 ($& is literal)");
+    });
+
+    it("should work on non-SKILL.md files without frontmatter validation", async () => {
+      createSkillFile("my-skill", "scripts/helper.py", "print('hello')");
+
+      const result = await service.updateSkillFile(
+        "my-skill",
+        "scripts/helper.py",
+        "hello",
+        "world",
+      );
+
+      expect(result).toEqual({
+        success: true,
+        file: "scripts/helper.py",
+        replacements: 1,
+      });
+
+      const updated = readFileSync(
+        resolve(skillsDir, "my-skill", "scripts", "helper.py"),
+        "utf-8",
+      );
+      expect(updated).toBe("print('world')");
     });
   });
 

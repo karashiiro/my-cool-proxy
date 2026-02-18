@@ -1,7 +1,13 @@
 import { injectable } from "inversify";
 import { spawn } from "child_process";
 import { resolve, sep, dirname } from "path";
-import { existsSync, statSync, mkdirSync, writeFileSync } from "fs";
+import {
+  existsSync,
+  statSync,
+  mkdirSync,
+  writeFileSync,
+  readFileSync,
+} from "fs";
 import { parse as parseYaml } from "yaml";
 import { getErrorMessage } from "@my-cool-proxy/mcp-utilities";
 import type { ILogger, ISkillDiscoveryService } from "../types/interfaces.js";
@@ -223,6 +229,108 @@ export class SkillOperationsService {
         `Failed to write skill '${skillName}': ${errorMessage}`,
       );
       return { error: `Error writing skill: ${errorMessage}` };
+    }
+  }
+
+  /**
+   * Partially update an existing skill file using old_string/new_string replacement.
+   */
+  async updateSkillFile(
+    skillName: string,
+    file: string,
+    oldString: string,
+    newString: string,
+    replaceAll?: boolean,
+  ): Promise<unknown> {
+    // Validate skill name (no path separators allowed)
+    if (skillName.includes("/") || skillName.includes("\\")) {
+      return {
+        error: `Skill name '${skillName}' cannot contain path separators.`,
+      };
+    }
+
+    // Validate file path
+    const pathError = this.validateFilePath(file);
+    if (pathError) {
+      return { error: pathError };
+    }
+
+    // Resolve full path and verify it stays within skill directory
+    const skillsDir = getSkillsDir();
+    const skillDir = resolve(skillsDir, skillName);
+    const filePath = resolve(skillDir, file);
+
+    if (!filePath.startsWith(skillDir + sep)) {
+      return { error: `Invalid file path: '${file}'` };
+    }
+
+    // Check file exists
+    if (!existsSync(filePath)) {
+      return {
+        error: `File '${file}' not found in skill '${skillName}'. Use write_skill to create new files.`,
+      };
+    }
+
+    try {
+      const content = readFileSync(filePath, "utf-8");
+
+      // Count occurrences
+      let count = 0;
+      let searchFrom = 0;
+      while (true) {
+        const idx = content.indexOf(oldString, searchFrom);
+        if (idx === -1) break;
+        count++;
+        searchFrom = idx + oldString.length;
+      }
+
+      if (count === 0) {
+        return { error: "old_string not found in file." };
+      }
+
+      if (count > 1 && !replaceAll) {
+        return {
+          error: `old_string found ${count} times. Use replace_all: true to replace all occurrences, or provide a more specific old_string.`,
+        };
+      }
+
+      // Perform replacement using function replacer to avoid special $-pattern
+      // interpretation in newString (e.g. $&, $`, $', $1 would otherwise be
+      // treated as back-references rather than literal text).
+      let updated: string;
+      if (replaceAll) {
+        updated = content.replaceAll(oldString, () => newString);
+      } else {
+        updated = content.replace(oldString, () => newString);
+      }
+
+      // Validate frontmatter if editing SKILL.md
+      if (file === SKILL_FILENAME) {
+        const frontmatterError = this.validateFrontmatter(updated);
+        if (frontmatterError) {
+          return {
+            error: `Replacement would break SKILL.md frontmatter: ${frontmatterError}`,
+          };
+        }
+      }
+
+      writeFileSync(filePath, updated, "utf-8");
+
+      this.logger.info(
+        `Updated skill file '${skillName}/${file}' (${count} replacement${count > 1 ? "s" : ""})`,
+      );
+
+      return {
+        success: true,
+        file,
+        replacements: count,
+      };
+    } catch (error) {
+      const errorMessage = getErrorMessage(error);
+      this.logger.error(
+        `Failed to update skill file '${skillName}/${file}': ${errorMessage}`,
+      );
+      return { error: `Error updating skill file: ${errorMessage}` };
     }
   }
 

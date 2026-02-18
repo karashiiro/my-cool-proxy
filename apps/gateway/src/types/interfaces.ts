@@ -454,6 +454,13 @@ export interface ISkillOperationsService {
     content?: string,
     files?: Array<{ path: string; content: string }>,
   ): Promise<unknown>;
+  updateSkillFile(
+    skillName: string,
+    file: string,
+    oldString: string,
+    newString: string,
+    replaceAll?: boolean,
+  ): Promise<unknown>;
 }
 
 // Re-export skill types for convenience

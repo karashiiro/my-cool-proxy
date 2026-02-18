@@ -396,6 +396,28 @@ Common issues:
       };
     }
 
+    if (builtins.updateSkill) {
+      const updateSkill = builtins.updateSkill;
+      gatewayTable["update_skill"] = async (args: {
+        skillName: string;
+        file?: string;
+        old_string: string;
+        new_string: string;
+        replace_all?: boolean;
+      }) => {
+        this.logger.debug(
+          `Calling _gateway.update_skill({ skillName = "${args?.skillName}", file = "${args?.file ?? "SKILL.md"}" })`,
+        );
+        return updateSkill(
+          args?.skillName,
+          args?.file ?? "SKILL.md",
+          args?.old_string,
+          args?.new_string,
+          args?.replace_all,
+        );
+      };
+    }
+
     // Set as global with underscore prefix
     engine.global.set("_gateway", gatewayTable);
 

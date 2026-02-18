@@ -106,6 +106,18 @@ export interface IGatewayBuiltins {
   ): Promise<unknown>;
 
   /**
+   * Partially update an existing skill file using old_string/new_string replacement.
+   * Only available when skills are enabled and mutable.
+   */
+  updateSkill?(
+    skillName: string,
+    file: string,
+    oldString: string,
+    newString: string,
+    replaceAll?: boolean,
+  ): Promise<unknown>;
+
+  /**
    * Register a resource URI encountered in tool results for routing.
    * Called by the runtime when a tool result contains resource_link or
    * embedded resource content blocks.

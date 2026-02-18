@@ -309,6 +309,22 @@ export class GatewayBuiltinsBuilder {
         ) => {
           return skillOps.writeSkillFiles(skillName, content, files);
         };
+
+        builtins.updateSkill = async (
+          skillName: string,
+          file: string,
+          oldString: string,
+          newString: string,
+          replaceAll?: boolean,
+        ) => {
+          return skillOps.updateSkillFile(
+            skillName,
+            file,
+            oldString,
+            newString,
+            replaceAll,
+          );
+        };
       }
     }
 

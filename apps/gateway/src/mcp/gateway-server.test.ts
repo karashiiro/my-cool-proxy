@@ -77,6 +77,7 @@ const createMockSkillDiscoveryService = (): ISkillDiscoveryService => ({
 const createMockSkillOperationsService = (): ISkillOperationsService => ({
   executeSkillScript: vi.fn().mockResolvedValue({ success: true }),
   writeSkillFiles: vi.fn().mockResolvedValue({ success: true }),
+  updateSkillFile: vi.fn().mockResolvedValue({ success: true }),
 });
 
 // Helper to create a tool registry with all tools
