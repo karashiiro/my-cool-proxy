@@ -15,6 +15,9 @@ import {
   type CallToolResult,
 } from "@modelcontextprotocol/sdk/types.js";
 import { inspect } from "node:util";
+import { ProgressAggregator } from "./progress-aggregator.js";
+
+export { ProgressAggregator } from "./progress-aggregator.js";
 
 export class WasmoonRuntime implements ILuaRuntime {
   private factory: LuaFactory;
@@ -27,6 +30,7 @@ export class WasmoonRuntime implements ILuaRuntime {
     script: string,
     mcpServers: Map<string, IMCPClientSession>,
     gatewayBuiltins: IGatewayBuiltins,
+    onProgress?: (progress: number, total?: number, message?: string) => void,
   ): Promise<unknown> {
     this.logger.debug(`Executing Lua script:\n${script}`);
 
@@ -35,9 +39,19 @@ export class WasmoonRuntime implements ILuaRuntime {
       finalResult = result;
     });
 
+    // Create aggregator if progress reporting is requested
+    const aggregator = onProgress
+      ? new ProgressAggregator(onProgress)
+      : undefined;
+
     try {
       // Inject MCP servers as Lua globals
-      await this.injectMCPServers(engine, mcpServers, gatewayBuiltins);
+      await this.injectMCPServers(
+        engine,
+        mcpServers,
+        gatewayBuiltins,
+        aggregator,
+      );
 
       // Inject gateway builtins as _gateway global
       this.injectGatewayBuiltins(engine, gatewayBuiltins);
@@ -138,6 +152,7 @@ Common issues:
     engine: LuaEngine,
     mcpServers: Map<string, IMCPClientSession>,
     gatewayBuiltins: IGatewayBuiltins,
+    aggregator?: ProgressAggregator,
   ): Promise<void> {
     for (const [originalServerName, client] of mcpServers.entries()) {
       try {
@@ -163,6 +178,26 @@ Common issues:
                   `(Lua: ${sanitizedServerName}.${sanitizedToolName}) with args: ${inspect(args)}`,
               );
 
+              // Register with progress aggregator if available.
+              // Registration happens at call time (not injection time) so
+              // tools called multiple times each get their own progress slot.
+              let callToolOptions:
+                | {
+                    onprogress?: (progress: {
+                      progress: number;
+                      total?: number;
+                      message?: string;
+                    }) => void;
+                  }
+                | undefined;
+
+              if (aggregator) {
+                const callId = aggregator.register();
+                callToolOptions = {
+                  onprogress: (p) => aggregator.update(callId, p),
+                };
+              }
+
               const result = await takeResult<
                 CallToolResult,
                 AsyncGenerator<ResponseMessage<CallToolResult>>
@@ -173,6 +208,7 @@ Common issues:
                     arguments: (args as Record<string, unknown>) || {},
                   },
                   CallToolResultSchema,
+                  callToolOptions,
                 ) as AsyncGenerator<ResponseMessage<CallToolResult>>,
               );
 

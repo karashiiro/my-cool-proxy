@@ -8,8 +8,15 @@ import {
   GetPromptRequestSchema,
   CompleteRequestSchema,
   RootsListChangedNotificationSchema,
+  CallToolRequestSchema,
+  ErrorCode,
+  McpError,
 } from "@modelcontextprotocol/sdk/types.js";
-import type { CompleteRequest } from "@modelcontextprotocol/sdk/types.js";
+import type {
+  CompleteRequest,
+  ProgressToken,
+  ServerNotification,
+} from "@modelcontextprotocol/sdk/types.js";
 import type {
   CreateMessageRequest,
   CreateMessageResult,
@@ -242,7 +249,9 @@ export class MCPGatewayServer {
   }
 
   private setupTools(): void {
-    // Register all tools from the tool registry
+    // Register all tools with McpServer for tools/list support.
+    // The actual tools/call dispatch is overridden below at the Protocol level
+    // to access the raw request (including _meta.progressToken).
     for (const tool of this.toolRegistry.getAll()) {
       this.server.registerTool(
         tool.name,
@@ -252,20 +261,8 @@ export class MCPGatewayServer {
           inputSchema: tool.schema as any,
           annotations: tool.annotations,
         },
-        async (
-          args: Record<string, unknown>,
-          // The SDK passes the full RequestHandlerExtra here, which includes
-          // requestId — we capture it so forwardListRootsRequest can route
-          // through the POST response stream rather than the standalone GET SSE.
-          context: { sessionId?: string; requestId?: string | number },
-        ) => {
-          this.activeDownstreamRequestId = context.requestId;
-          try {
-            return await tool.execute(args, context);
-          } finally {
-            this.activeDownstreamRequestId = undefined;
-          }
-        },
+        // Placeholder handler — overridden by setRequestHandler below
+        async () => ({ content: [] }),
       );
 
       this.logger.info(`Registered tool: ${tool.name}`);
@@ -273,6 +270,75 @@ export class MCPGatewayServer {
 
     this.logger.info(
       `MCP gateway tools registered (${this.toolRegistry.getAll().length} tools)`,
+    );
+
+    // Override tools/call at the Protocol level to access progressToken from
+    // the raw request _meta. McpServer's registerTool handler doesn't expose
+    // _meta, but we need it to forward progress notifications downstream.
+    this.server.server.setRequestHandler(
+      CallToolRequestSchema,
+      async (request, extra) => {
+        const toolName = request.params.name;
+        const tool = this.toolRegistry.get(toolName);
+        if (!tool) {
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            `Tool not found: ${toolName}`,
+          );
+        }
+
+        // Track downstream request ID for routing server-to-client requests
+        // (e.g., roots/list) through the POST response stream.
+        this.activeDownstreamRequestId = extra.requestId;
+
+        try {
+          // Extract progressToken from the downstream request's _meta
+          const progressToken = request.params._meta?.progressToken as
+            | ProgressToken
+            | undefined;
+
+          // Build sendProgress callback if the client requested progress
+          let sendProgress:
+            | ((progress: number, total?: number, message?: string) => void)
+            | undefined;
+
+          if (progressToken !== undefined) {
+            sendProgress = (
+              progress: number,
+              total?: number,
+              message?: string,
+            ) => {
+              const params: Record<string, unknown> = {
+                progressToken,
+                progress,
+              };
+              if (total !== undefined) params.total = total;
+              if (message !== undefined) params.message = message;
+
+              extra
+                .sendNotification({
+                  method: "notifications/progress" as const,
+                  params,
+                } as ServerNotification)
+                .catch((err: unknown) => {
+                  this.logger.warn(
+                    `Failed to send progress notification: ${err instanceof Error ? err.message : String(err)}`,
+                  );
+                });
+            };
+          }
+
+          return await tool.execute(
+            (request.params.arguments ?? {}) as Record<string, unknown>,
+            {
+              sessionId: extra.sessionId,
+              sendProgress,
+            },
+          );
+        } finally {
+          this.activeDownstreamRequestId = undefined;
+        }
+      },
     );
 
     // Register resource and prompt handlers that delegate to aggregation services

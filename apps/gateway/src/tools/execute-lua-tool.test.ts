@@ -67,6 +67,7 @@ describe("ExecuteLuaTool", () => {
           summaryStats: expect.any(Function),
           complete: expect.any(Function),
         }),
+        undefined,
       );
     });
 
@@ -269,6 +270,7 @@ describe("ExecuteLuaTool", () => {
           summaryStats: expect.any(Function),
           complete: expect.any(Function),
         }),
+        undefined,
       );
     });
 

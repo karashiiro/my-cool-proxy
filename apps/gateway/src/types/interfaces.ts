@@ -14,6 +14,7 @@ export interface ILuaRuntime {
     script: string,
     mcpServers: Map<string, MCPClientSession>,
     gatewayBuiltins: IGatewayBuiltins,
+    onProgress?: (progress: number, total?: number, message?: string) => void,
   ): Promise<unknown>;
 }
 

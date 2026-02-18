@@ -33,3 +33,5 @@ export {
   startHttpCompletionsServer,
   startStdioCompletionsServer,
 } from "./completions-server.js";
+
+export { startHttpProgressServer } from "./progress-server.js";

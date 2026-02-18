@@ -20,6 +20,13 @@ export interface IMCPClientSession {
       callToolStream(
         params: { name: string; arguments: Record<string, unknown> },
         schema: unknown,
+        options?: {
+          onprogress?: (progress: {
+            progress: number;
+            total?: number;
+            message?: string;
+          }) => void;
+        },
       ): AsyncGenerator<unknown>;
     };
   };
@@ -115,11 +122,13 @@ export interface ILuaRuntime {
    * @param script The Lua source code to execute
    * @param mcpServers Map of server name to client session
    * @param gatewayBuiltins Gateway built-in functions to inject
+   * @param onProgress Optional callback for aggregated progress notifications
    * @returns The result returned by calling result() in Lua
    */
   executeScript(
     script: string,
     mcpServers: Map<string, IMCPClientSession>,
     gatewayBuiltins: IGatewayBuiltins,
+    onProgress?: (progress: number, total?: number, message?: string) => void,
   ): Promise<unknown>;
 }

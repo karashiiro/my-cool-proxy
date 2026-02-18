@@ -159,6 +159,7 @@ export class ExecuteLuaTool implements ITool {
         script as string,
         mcpServers,
         gatewayBuiltins,
+        context.sendProgress,
       );
 
       // Check if result is already a valid CallToolResult

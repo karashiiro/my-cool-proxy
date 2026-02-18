@@ -243,7 +243,7 @@ export async function createCapableGatewayClient(
  * @param expectedServerCount - Number of servers to wait for
  * @param timeoutMs - Maximum time to wait
  */
-async function waitForServersReady(
+export async function waitForServersReady(
   client: Client,
   expectedServerCount: number,
   timeoutMs = 5000,
