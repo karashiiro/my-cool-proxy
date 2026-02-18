@@ -418,9 +418,40 @@ export class ExecuteLuaTool implements ITool {
           return { error: "Missing required parameters: ref and argument" };
         }
 
+        const { ref, argument } = params;
+
+        // Validate ref.type is a known completion reference type
+        if (ref.type !== "ref/prompt" && ref.type !== "ref/resource") {
+          return {
+            error: `Invalid ref.type: '${String(ref.type)}'. Expected 'ref/prompt' or 'ref/resource'.`,
+          };
+        }
+
+        // Validate discriminated union fields match the ref type
+        if (ref.type === "ref/prompt" && typeof ref.name !== "string") {
+          return {
+            error:
+              "ref.type is 'ref/prompt' but ref.name is missing or not a string.",
+          };
+        }
+        if (ref.type === "ref/resource" && typeof ref.uri !== "string") {
+          return {
+            error:
+              "ref.type is 'ref/resource' but ref.uri is missing or not a string.",
+          };
+        }
+
+        // Validate argument structure
+        if (
+          typeof argument.name !== "string" ||
+          typeof argument.value !== "string"
+        ) {
+          return {
+            error: "argument.name and argument.value must both be strings.",
+          };
+        }
+
         try {
-          // Cast from loose Lua types to the expected discriminated union —
-          // Lua passes untyped data, the aggregation service validates it.
           return await this.completionAggregation.complete(
             params as CompleteRequest["params"],
             sessionId,

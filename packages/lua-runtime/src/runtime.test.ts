@@ -1471,5 +1471,121 @@ describe("WasmoonRuntime", () => {
       expect(typed.completion.values).toContain("us-east-1");
       expect(typed.completion.values).toContain("us-west-2");
     });
+
+    it("should call complete builtin with ref/prompt type", async () => {
+      const builtins = createMockGatewayBuiltins();
+      const mockComplete = vi.fn().mockResolvedValue({
+        completion: { values: ["typescript", "terraform"], hasMore: false },
+      });
+      builtins.complete = mockComplete;
+
+      const script = `
+        local res = _gateway.complete({
+          ref = { type = "ref/prompt", name = "my-server/code-review" },
+          argument = { name = "language", value = "type" }
+        }):await()
+        result(res)
+      `;
+
+      const result = await runtime.executeScript(script, new Map(), builtins);
+
+      expect(mockComplete).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ref: expect.objectContaining({
+            type: "ref/prompt",
+            name: "my-server/code-review",
+          }),
+          argument: expect.objectContaining({
+            name: "language",
+            value: "type",
+          }),
+        }),
+      );
+
+      const typed = result as {
+        completion: { values: string[]; hasMore: boolean };
+      };
+      expect(typed.completion.values).toEqual(["typescript", "terraform"]);
+    });
+
+    it("should pass context.arguments through to complete builtin", async () => {
+      const builtins = createMockGatewayBuiltins();
+      const mockComplete = vi.fn().mockResolvedValue({
+        completion: { values: ["express", "fastify"], hasMore: false },
+      });
+      builtins.complete = mockComplete;
+
+      const script = `
+        local res = _gateway.complete({
+          ref = { type = "ref/prompt", name = "my-server/code-review" },
+          argument = { name = "framework", value = "" },
+          context = { arguments = { language = "typescript" } }
+        }):await()
+        result(res)
+      `;
+
+      const result = await runtime.executeScript(script, new Map(), builtins);
+
+      expect(mockComplete).toHaveBeenCalledWith(
+        expect.objectContaining({
+          context: expect.objectContaining({
+            arguments: expect.objectContaining({
+              language: "typescript",
+            }),
+          }),
+        }),
+      );
+
+      const typed = result as {
+        completion: { values: string[]; hasMore: boolean };
+      };
+      expect(typed.completion.values).toEqual(["express", "fastify"]);
+    });
+
+    it("should return error object when complete builtin rejects", async () => {
+      const builtins = createMockGatewayBuiltins();
+      builtins.complete = vi
+        .fn()
+        .mockRejectedValue(new Error("No route found for resource URI"));
+
+      const script = `
+        local ok, err = pcall(function()
+          return _gateway.complete({
+            ref = { type = "ref/resource", uri = "unknown://{id}" },
+            argument = { name = "id", value = "test" }
+          }):await()
+        end)
+        result({ ok = ok, error_message = tostring(err) })
+      `;
+
+      const result = await runtime.executeScript(script, new Map(), builtins);
+
+      const typed = result as { ok: boolean; error_message: string };
+      expect(typed.ok).toBe(false);
+      expect(typed.error_message).toContain("No route found");
+    });
+
+    it("should handle empty completion results", async () => {
+      const builtins = createMockGatewayBuiltins();
+      builtins.complete = vi.fn().mockResolvedValue({
+        completion: { values: [], hasMore: false },
+      });
+
+      const script = `
+        local res = _gateway.complete({
+          ref = { type = "ref/resource", uri = "deployment://{region}/{service}" },
+          argument = { name = "region", value = "zzz" }
+        }):await()
+        result(res)
+      `;
+
+      const result = await runtime.executeScript(script, new Map(), builtins);
+
+      const typed = result as {
+        completion: { values: string[]; hasMore: boolean };
+      };
+      expect(typed.completion.values).toEqual([]);
+      expect(typed.completion.hasMore).toBe(false);
+    });
   });
 });
