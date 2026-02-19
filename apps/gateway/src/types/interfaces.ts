@@ -302,6 +302,19 @@ export interface LoggingConfig {
   };
 }
 
+/**
+ * Database configuration for session persistence and data retention.
+ */
+export interface DatabaseConfig {
+  /**
+   * Number of days to retain data before automatic cleanup.
+   * Data older than this threshold is purged on server startup.
+   * Must be a positive number.
+   * @default 7
+   */
+  retentionDays?: number;
+}
+
 export interface ServerConfig {
   port?: number;
   host?: string;
@@ -327,6 +340,14 @@ export interface ServerConfig {
    * - File: "trace" level to platform log directory
    */
   logging?: LoggingConfig;
+  /**
+   * Database configuration for session persistence and data retention.
+   * Controls how long historical data is kept before automatic cleanup.
+   *
+   * Default behavior (no config):
+   * - Data older than 7 days is purged on startup
+   */
+  database?: DatabaseConfig;
 }
 
 export type { ILogger } from "@my-cool-proxy/logger";

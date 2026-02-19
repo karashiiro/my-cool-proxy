@@ -162,6 +162,22 @@ async function startHttpMode(
   const sqliteDb = new SQLiteDatabase(dbPath);
   logger.info(`Session persistence enabled: ${dbPath}`);
 
+  // Purge old data based on retention policy
+  const retentionDays = config.database?.retentionDays ?? 7;
+  const purged = sqliteDb.purgeOldData(retentionDays);
+  const totalPurged =
+    purged.luaToolCalls +
+    purged.luaExecutions +
+    purged.mcpEvents +
+    purged.sessionInitRequests +
+    purged.sessions;
+  if (totalPurged > 0) {
+    logger.info(
+      { retentionDays, ...purged },
+      `Purged ${totalPurged} expired rows (retention: ${retentionDays} days)`,
+    );
+  }
+
   // Create SQLite-backed capability store (replaces in-memory store for HTTP mode)
   const capabilityStore: ICapabilityStore = new SQLiteCapabilityStore(
     sqliteDb,
@@ -480,6 +496,22 @@ async function startStdioMode(
   const dbPath = getDbPath();
   const sqliteDb = new SQLiteDatabase(dbPath);
   logger.info(`Execution log enabled: ${dbPath}`);
+
+  // Purge old data based on retention policy
+  const retentionDays = config.database?.retentionDays ?? 7;
+  const purged = sqliteDb.purgeOldData(retentionDays);
+  const totalPurged =
+    purged.luaToolCalls +
+    purged.luaExecutions +
+    purged.mcpEvents +
+    purged.sessionInitRequests +
+    purged.sessions;
+  if (totalPurged > 0) {
+    logger.info(
+      { retentionDays, ...purged },
+      `Purged ${totalPurged} expired rows (retention: ${retentionDays} days)`,
+    );
+  }
 
   container.unbind(TYPES.ExecutionLog);
   container

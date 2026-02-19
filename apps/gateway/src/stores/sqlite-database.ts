@@ -107,6 +107,63 @@ export class SQLiteDatabase {
   }
 
   /**
+   * Purge data older than the specified retention period.
+   * Runs within a transaction for consistency.
+   *
+   * @param retentionDays Number of days of data to retain
+   * @returns Object with the number of rows deleted from each table
+   */
+  purgeOldData(retentionDays: number): {
+    luaToolCalls: number;
+    luaExecutions: number;
+    mcpEvents: number;
+    sessionInitRequests: number;
+    sessions: number;
+  } {
+    const cutoffMs = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
+
+    return this.transaction(() => {
+      // Delete tool calls for old executions (must go before lua_executions due to FK)
+      const luaToolCalls = this.db
+        .prepare(
+          `DELETE FROM lua_tool_calls WHERE execution_id IN (
+            SELECT execution_id FROM lua_executions WHERE created_at < ?
+          )`,
+        )
+        .run(cutoffMs).changes;
+
+      const luaExecutions = this.db
+        .prepare(`DELETE FROM lua_executions WHERE created_at < ?`)
+        .run(cutoffMs).changes;
+
+      const mcpEvents = this.db
+        .prepare(`DELETE FROM mcp_events WHERE created_at < ?`)
+        .run(cutoffMs).changes;
+
+      // session_init_requests has no timestamp — delete orphans whose session is old
+      const sessionInitRequests = this.db
+        .prepare(
+          `DELETE FROM session_init_requests WHERE session_id IN (
+            SELECT session_id FROM sessions WHERE created_at < ?
+          )`,
+        )
+        .run(cutoffMs).changes;
+
+      const sessions = this.db
+        .prepare(`DELETE FROM sessions WHERE created_at < ?`)
+        .run(cutoffMs).changes;
+
+      return {
+        luaToolCalls,
+        luaExecutions,
+        mcpEvents,
+        sessionInitRequests,
+        sessions,
+      };
+    });
+  }
+
+  /**
    * Close the database connection.
    */
   close(): void {

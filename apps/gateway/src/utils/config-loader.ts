@@ -215,6 +215,28 @@ function validateACPConfig(config: ServerConfig): void {
 }
 
 /**
+ * Validates the database configuration if provided.
+ */
+function validateDatabaseConfig(config: ServerConfig): void {
+  if (config.database === undefined) return;
+
+  if (typeof config.database !== "object" || config.database === null) {
+    throw new Error("Config 'database' must be an object if specified");
+  }
+
+  if (config.database.retentionDays !== undefined) {
+    if (
+      typeof config.database.retentionDays !== "number" ||
+      config.database.retentionDays <= 0
+    ) {
+      throw new Error(
+        "Config 'database.retentionDays' must be a positive number if specified",
+      );
+    }
+  }
+}
+
+/**
  * Validates the logging configuration if provided.
  */
 function validateLoggingConfig(config: ServerConfig): void {
@@ -409,6 +431,7 @@ export function loadConfig(): ServerConfig {
     validateSkillsConfig(config);
     validateACPConfig(config);
     validateLoggingConfig(config);
+    validateDatabaseConfig(config);
 
     return config;
   } catch (error) {

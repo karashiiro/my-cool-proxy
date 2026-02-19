@@ -122,6 +122,8 @@ CONFIG_PATH=/path/to/custom-config.json pnpm dev
   - `"http"`: Run as HTTP server (requires port and host)
   - `"stdio"`: Run as stdio-based MCP server (port and host are optional)
 - **mcpClients** (object, required): Map of MCP server configurations, keyed by server name
+- **database** (object, optional): Database configuration for data retention
+  - **retentionDays** (number, optional): Number of days to retain data before automatic cleanup on startup (default: `7`)
 
 #### MCP Client Configuration
 
@@ -1062,6 +1064,22 @@ cp ~/.local/share/my-cool-proxy/sessions.db ~/backup/sessions.db
 # Or use SQLite backup (safe while gateway is running)
 sqlite3 ~/.local/share/my-cool-proxy/sessions.db ".backup ~/backup/sessions.db"
 ```
+
+### Data Retention
+
+On startup, the gateway automatically purges data older than the configured retention period from all database tables (sessions, events, execution logs, and tool call logs). This prevents unbounded database growth over time.
+
+```json
+{
+  "database": {
+    "retentionDays": 7
+  }
+}
+```
+
+- **retentionDays** (number, optional): Number of days of data to retain. Data older than this is deleted on startup. Default: `7`.
+
+The cleanup runs once at server startup in both HTTP and stdio modes. It logs the number of purged rows when any data is removed.
 
 ### Stdio Mode
 
