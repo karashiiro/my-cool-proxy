@@ -154,10 +154,10 @@ export class ServerInfoPreloader implements IServerInfoPreloader {
 
     lines.push("");
     lines.push(
-      "Use the `list-servers` tool to see detailed information about connected servers.",
+      "You MUST use the `list-servers` tool to see detailed information about connected servers.",
     );
     lines.push(
-      "Use the `list-server-tools` tool to discover available tools for each server.",
+      "You MUST use the `list-server-tools` tool to discover available tools for each server.",
     );
 
     return lines.join("\n");

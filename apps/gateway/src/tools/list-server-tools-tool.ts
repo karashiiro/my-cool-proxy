@@ -24,8 +24,8 @@ export class ListServerToolsTool implements ITool {
   readonly description =
     "List all tools provided by a specific MCP server. Use this after calling list-servers to explore " +
     "what operations each server supports. Returns tool names with brief descriptions, allowing you to " +
-    "identify which tools might be relevant for your task. Once you've identified relevant tools, use " +
-    "tool-details to get complete information before calling them.";
+    "identify which tools might be relevant for your task. Once you've identified relevant tools, you MUST " +
+    "use tool-details to get complete information before calling them.";
   readonly schema = {
     luaServerName: luaServerNameSchema.describe(
       "The Lua identifier of the MCP server to list tools for",

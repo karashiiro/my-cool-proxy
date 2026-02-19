@@ -182,7 +182,7 @@ describe("ServerInfoPreloader", () => {
       expect(result).toContain("Instructions:");
       expect(result).toContain("...");
       expect(result.length).toBeLessThan(
-        longInstructions.length + 200, // some buffer for headers
+        longInstructions.length + 300, // some buffer for headers
       );
     });
 
