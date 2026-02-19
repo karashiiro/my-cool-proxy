@@ -181,10 +181,23 @@ export class ResourceAggregationService {
     }
 
     // Look up the server via routing table
-    const serverName = this.routingService.getServerForUri(session, uri);
+    let serverName = this.routingService.getServerForUri(session, uri);
+
+    // If no route found, auto-populate by listing resources and templates
+    if (!serverName) {
+      this.logger.debug(
+        `No route for '${uri}', auto-populating resource routes for session '${session}'`,
+      );
+      await Promise.all([
+        this.listResources(session),
+        this.listResourceTemplates(session),
+      ]);
+      serverName = this.routingService.getServerForUri(session, uri);
+    }
+
     if (!serverName) {
       throw new Error(
-        `No route found for resource URI: '${uri}'. The resource may not have been listed yet.`,
+        `No route found for resource URI: '${uri}'. No server provides this resource or matches it via a template.`,
       );
     }
 

@@ -443,6 +443,8 @@ export interface PreloadedServerInfo {
   version?: string;
   instructions?: string;
   toolNames?: string[];
+  resourceNames?: string[];
+  resourceTemplateNames?: string[];
 }
 
 /**

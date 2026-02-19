@@ -239,6 +239,85 @@ describe("ServerInfoPreloader", () => {
       expect(result).not.toContain("Tools:");
     });
 
+    it("should include resource names in output", () => {
+      const servers = [
+        {
+          name: "resource-server",
+          resourceNames: ["file:///readme", "config://app", "db://users"],
+        },
+      ];
+
+      const result = preloader.buildAggregatedInstructions(servers);
+
+      expect(result).toContain(
+        "Resources: file:///readme, config://app, db://users",
+      );
+    });
+
+    it("should truncate resource list when exceeding limit", () => {
+      const resourceNames = Array.from(
+        { length: 15 },
+        (_, i) => `res://item_${i + 1}`,
+      );
+      const servers = [{ name: "many-resources-server", resourceNames }];
+
+      const result = preloader.buildAggregatedInstructions(servers);
+
+      expect(result).toContain("Resources:");
+      expect(result).toContain("(and 5 more)");
+      expect(result).toContain("res://item_1");
+      expect(result).toContain("res://item_10");
+      expect(result).not.toContain("res://item_11,");
+    });
+
+    it("should include resource template names in output", () => {
+      const servers = [
+        {
+          name: "template-server",
+          resourceTemplateNames: ["users://{id}", "posts://{slug}"],
+        },
+      ];
+
+      const result = preloader.buildAggregatedInstructions(servers);
+
+      expect(result).toContain(
+        "Resource templates: users://{id}, posts://{slug}",
+      );
+    });
+
+    it("should truncate resource template list when exceeding limit", () => {
+      const resourceTemplateNames = Array.from(
+        { length: 12 },
+        (_, i) => `tmpl://{id_${i + 1}}`,
+      );
+      const servers = [
+        { name: "many-templates-server", resourceTemplateNames },
+      ];
+
+      const result = preloader.buildAggregatedInstructions(servers);
+
+      expect(result).toContain("Resource templates:");
+      expect(result).toContain("(and 2 more)");
+    });
+
+    it("should omit resources line when server has no resources", () => {
+      const servers = [{ name: "no-res-server", resourceNames: [] }];
+
+      const result = preloader.buildAggregatedInstructions(servers);
+
+      expect(result).not.toContain("Resources:");
+    });
+
+    it("should omit resource templates line when server has no templates", () => {
+      const servers = [
+        { name: "no-tmpl-server", resourceTemplateNames: [] },
+      ];
+
+      const result = preloader.buildAggregatedInstructions(servers);
+
+      expect(result).not.toContain("Resource templates:");
+    });
+
     it("should handle undefined toolNames gracefully", () => {
       const servers = [
         {

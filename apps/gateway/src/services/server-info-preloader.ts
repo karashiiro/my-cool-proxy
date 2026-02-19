@@ -15,6 +15,8 @@ import { TYPES } from "../types/index.js";
 
 const MAX_INSTRUCTION_EXCERPT_LENGTH = 200;
 const MAX_TOOLS_IN_INSTRUCTIONS = 40;
+const MAX_RESOURCES_IN_INSTRUCTIONS = 10;
+const MAX_RESOURCE_TEMPLATES_IN_INSTRUCTIONS = 10;
 
 @injectable()
 export class ServerInfoPreloader implements IServerInfoPreloader {
@@ -73,11 +75,40 @@ export class ServerInfoPreloader implements IServerInfoPreloader {
             );
           }
 
+          // Get resource and template names (only if server advertises resources capability)
+          let resourceNames: string[] = [];
+          let resourceTemplateNames: string[] = [];
+          const capabilities = sdkClient.getServerCapabilities();
+
+          if (capabilities?.resources) {
+            try {
+              const resourcesResponse = await sdkClient.listResources();
+              resourceNames = resourcesResponse.resources.map((r) => r.uri);
+            } catch (error) {
+              this.logger.warn(
+                `Failed to list resources for server '${name}': ${getErrorMessage(error)}`,
+              );
+            }
+
+            try {
+              const templatesResponse =
+                await sdkClient.listResourceTemplates();
+              resourceTemplateNames =
+                templatesResponse.resourceTemplates.map(
+                  (t) => t.uriTemplate,
+                );
+            } catch (error) {
+              this.logger.warn(
+                `Failed to list resource templates for server '${name}': ${getErrorMessage(error)}`,
+              );
+            }
+          }
+
           // Close the probe connection
           await sdkClient.close();
 
           this.logger.info(
-            `Preloaded info for server '${name}': ${serverVersion?.name || "unnamed"} ${serverVersion?.version || "unknown"} (${toolNames.length} tools)`,
+            `Preloaded info for server '${name}': ${serverVersion?.name || "unnamed"} ${serverVersion?.version || "unknown"} (${toolNames.length} tools, ${resourceNames.length} resources, ${resourceTemplateNames.length} templates)`,
           );
 
           return {
@@ -87,6 +118,8 @@ export class ServerInfoPreloader implements IServerInfoPreloader {
             version: serverVersion?.version,
             instructions,
             toolNames,
+            resourceNames,
+            resourceTemplateNames,
           };
         } catch (error) {
           const errorMessage = getErrorMessage(error);
@@ -141,6 +174,25 @@ export class ServerInfoPreloader implements IServerInfoPreloader {
           MAX_TOOLS_IN_INSTRUCTIONS,
         );
         lines.push(`Tools: ${toolsLine}`);
+      }
+
+      if (server.resourceNames && server.resourceNames.length > 0) {
+        const resourcesLine = this.formatToolNames(
+          server.resourceNames,
+          MAX_RESOURCES_IN_INSTRUCTIONS,
+        );
+        lines.push(`Resources: ${resourcesLine}`);
+      }
+
+      if (
+        server.resourceTemplateNames &&
+        server.resourceTemplateNames.length > 0
+      ) {
+        const templatesLine = this.formatToolNames(
+          server.resourceTemplateNames,
+          MAX_RESOURCE_TEMPLATES_IN_INSTRUCTIONS,
+        );
+        lines.push(`Resource templates: ${templatesLine}`);
       }
 
       if (server.instructions) {
