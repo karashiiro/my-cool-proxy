@@ -90,9 +90,7 @@ export class SQLiteExecutionLog implements IExecutionLog {
   markExecutionResult(executionId: string, result: string): void {
     this.db
       .getDatabase()
-      .prepare(
-        `UPDATE lua_executions SET result = ? WHERE execution_id = ?`,
-      )
+      .prepare(`UPDATE lua_executions SET result = ? WHERE execution_id = ?`)
       .run(result, executionId);
   }
 
@@ -146,9 +144,7 @@ export class SQLiteExecutionLog implements IExecutionLog {
   markToolCallResult(callId: string, result: string): void {
     this.db
       .getDatabase()
-      .prepare(
-        `UPDATE lua_tool_calls SET result = ? WHERE call_id = ?`,
-      )
+      .prepare(`UPDATE lua_tool_calls SET result = ? WHERE call_id = ?`)
       .run(result, callId);
   }
 

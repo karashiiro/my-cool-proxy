@@ -219,7 +219,7 @@ export class MCPClientSession {
           }
         } catch (error) {
           this.logger.error(
-            `Server '${this.serverName}': Error handling logging notification: ${error instanceof Error ? error.message : String(error)}`,
+            `Server '${this.serverName}': Error handling logging notification: ${getErrorMessage(error)}`,
           );
         }
       },

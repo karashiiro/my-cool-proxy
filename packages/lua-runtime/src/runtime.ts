@@ -6,7 +6,10 @@ import type {
   IGatewayBuiltins,
   IToolCallLog,
 } from "./types.js";
-import { sanitizeLuaIdentifier } from "@my-cool-proxy/mcp-utilities";
+import {
+  sanitizeLuaIdentifier,
+  getErrorMessage,
+} from "@my-cool-proxy/mcp-utilities";
 import {
   takeResult,
   type ResponseMessage,
@@ -282,10 +285,7 @@ Common issues:
 
               // Log successful tool call result
               if (logCallId) {
-                toolCallLog?.onToolCallEnd(
-                  logCallId,
-                  JSON.stringify(result),
-                );
+                toolCallLog?.onToolCallEnd(logCallId, JSON.stringify(result));
               }
 
               if (result.structuredContent) {
@@ -308,10 +308,7 @@ Common issues:
               return result;
             } catch (error) {
               if (logCallId) {
-                toolCallLog?.onToolCallError(
-                  logCallId,
-                  error instanceof Error ? error.message : String(error),
-                );
+                toolCallLog?.onToolCallError(logCallId, getErrorMessage(error));
               }
               this.logger.error(
                 `Error calling ${originalServerName}.${originalToolName}:`,

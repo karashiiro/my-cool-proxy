@@ -11,6 +11,7 @@ import {
   CompletionAggregationService,
   type IResourceRoutingService,
 } from "@my-cool-proxy/mcp-aggregation";
+import { getErrorMessage } from "@my-cool-proxy/mcp-utilities";
 import type {
   ILuaRuntime,
   IMCPClientManager,
@@ -222,10 +223,7 @@ export class ExecuteLuaTool implements ITool {
         ],
       };
     } catch (error) {
-      this.executionLog.markExecutionError(
-        executionId,
-        error instanceof Error ? error.message : String(error),
-      );
+      this.executionLog.markExecutionError(executionId, getErrorMessage(error));
       this.logger.error("Lua script execution failed:", error as Error);
       return {
         content: [{ type: "text", text: `Script execution failed:\n${error}` }],

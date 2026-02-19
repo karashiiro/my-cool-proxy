@@ -38,6 +38,7 @@ import {
   PromptAggregationService,
   CompletionAggregationService,
 } from "@my-cool-proxy/mcp-aggregation";
+import { getErrorMessage } from "@my-cool-proxy/mcp-utilities";
 import type { IToolRegistry } from "../tools/tool-registry.js";
 import { getEffectiveSessionId } from "../utils/session.js";
 
@@ -227,7 +228,7 @@ export class MCPGatewayServer {
       this.server.sendResourceListChanged();
     } catch (error) {
       this.logger.warn(
-        `Failed to send resources/list_changed downstream after change from '${serverName}' (session: ${sessionId}): ${error instanceof Error ? error.message : String(error)}`,
+        `Failed to send resources/list_changed downstream after change from '${serverName}' (session: ${sessionId}): ${getErrorMessage(error)}`,
       );
     }
   }
@@ -243,7 +244,7 @@ export class MCPGatewayServer {
       this.server.sendPromptListChanged();
     } catch (error) {
       this.logger.warn(
-        `Failed to send prompts/list_changed downstream after change from '${serverName}' (session: ${sessionId}): ${error instanceof Error ? error.message : String(error)}`,
+        `Failed to send prompts/list_changed downstream after change from '${serverName}' (session: ${sessionId}): ${getErrorMessage(error)}`,
       );
     }
   }
@@ -559,7 +560,7 @@ export class MCPGatewayServer {
             );
           } catch (error) {
             this.logger.warn(
-              `Failed to send roots/list_changed to upstream server '${serverName}': ${error instanceof Error ? error.message : String(error)}`,
+              `Failed to send roots/list_changed to upstream server '${serverName}': ${getErrorMessage(error)}`,
             );
           }
         }
