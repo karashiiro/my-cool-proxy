@@ -3,7 +3,10 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { generateStdioTestConfig } from "../helpers/test-config-generator.js";
 import { getTextString } from "../helpers/test-assertions.js";
-import { waitForServersReady } from "../helpers/client-helpers.js";
+import {
+  waitForServersReady,
+  inspectAllTools,
+} from "../helpers/client-helpers.js";
 import { resolve } from "node:path";
 
 describe("Completions E2E (Stdio Mode)", () => {
@@ -45,6 +48,7 @@ describe("Completions E2E (Stdio Mode)", () => {
     await gatewayClient.connect(transport);
 
     await waitForServersReady(gatewayClient, 1);
+    await inspectAllTools(gatewayClient);
   }, 60000);
 
   afterAll(async () => {

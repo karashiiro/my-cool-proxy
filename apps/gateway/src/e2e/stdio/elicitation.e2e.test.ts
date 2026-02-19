@@ -3,7 +3,10 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { ElicitRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { generateStdioTestConfig } from "../helpers/test-config-generator.js";
-import { waitForServersReady } from "../helpers/client-helpers.js";
+import {
+  waitForServersReady,
+  inspectAllTools,
+} from "../helpers/client-helpers.js";
 import { assertTextContains } from "../helpers/test-assertions.js";
 import { resolve } from "node:path";
 
@@ -64,6 +67,7 @@ describe("Elicitation Proxy E2E (Stdio Mode)", () => {
     await gatewayClient.connect(transport);
 
     await waitForServersReady(gatewayClient, 1);
+    await inspectAllTools(gatewayClient);
   }, 60000);
 
   afterAll(async () => {

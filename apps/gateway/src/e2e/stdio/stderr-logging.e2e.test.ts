@@ -7,7 +7,10 @@ import type {
   EmbeddedResource,
 } from "@modelcontextprotocol/sdk/types.js";
 import { generateStdioTestConfig } from "../helpers/test-config-generator.js";
-import { waitForServersReady } from "../helpers/client-helpers.js";
+import {
+  waitForServersReady,
+  inspectAllTools,
+} from "../helpers/client-helpers.js";
 import { resolve } from "node:path";
 import { existsSync, readFileSync, rmSync, readdirSync } from "node:fs";
 import { getServerLogDir } from "../../utils/log-paths.js";
@@ -67,6 +70,7 @@ describe("Stderr Logging E2E", () => {
 
     // Wait for the stderr-server to be ready
     await waitForServersReady(gatewayClient, 1);
+    await inspectAllTools(gatewayClient);
   }, 60000);
 
   afterAll(async () => {

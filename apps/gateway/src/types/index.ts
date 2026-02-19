@@ -25,4 +25,5 @@ export const TYPES = {
   ResourceRoutingService: "ResourceRoutingService",
   SamplingShim: "SamplingShim",
   SkillOperationsService: "SkillOperationsService",
+  ToolInspectionStore: "ToolInspectionStore",
 } as const;

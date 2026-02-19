@@ -48,6 +48,10 @@ export async function createGatewayClient(
   // after the downstream client's capabilities are captured
   await waitForServersReady(client, config.expectedServerCount ?? 2);
 
+  // Pre-inspect all tools so execute scripts can call them.
+  // The gateway enforces tool-details must be called before execute.
+  await inspectAllTools(client);
+
   return client;
 }
 
@@ -232,7 +236,70 @@ export async function createCapableGatewayClient(
   // after the downstream client's capabilities are captured
   await waitForServersReady(client, config.expectedServerCount ?? 2);
 
+  // Pre-inspect all tools so execute scripts can call them.
+  // The gateway enforces tool-details must be called before execute.
+  await inspectAllTools(client);
+
   return client;
+}
+
+/**
+ * Inspects all tools on all connected servers by calling tool-details for each.
+ * This is required because the gateway enforces that tool-details must be called
+ * for each tool before it can be used in execute scripts.
+ *
+ * @param client - The connected MCP client
+ */
+export async function inspectAllTools(client: Client): Promise<void> {
+  // Get all servers
+  const listServersResult = await client.callTool({
+    name: "list-servers",
+    arguments: {},
+  });
+
+  const serversContent = listServersResult.content as Array<{
+    type: string;
+    text?: string;
+  }>;
+  const serversText = serversContent[0]?.text ?? "";
+
+  // Extract Lua server names from the list-servers output
+  // Format: "[*] server_name\n   Name: ..."
+  const serverNames: string[] = [];
+  for (const match of serversText.matchAll(/^\[\*\]\s+(\w+)/gm)) {
+    if (match[1]) serverNames.push(match[1]);
+  }
+
+  // For each server, list tools and call tool-details for each
+  for (const serverName of serverNames) {
+    const listToolsResult = await client.callTool({
+      name: "list-server-tools",
+      arguments: { luaServerName: serverName },
+    });
+
+    const toolsContent = listToolsResult.content as Array<{
+      type: string;
+      text?: string;
+    }>;
+    const toolsText = toolsContent[0]?.text ?? "";
+
+    // Extract tool names from list-server-tools output
+    // Format: "[>] tool_name\n   Description..."
+    const toolNames: string[] = [];
+    for (const match of toolsText.matchAll(/^\[>\]\s+(\w+)/gm)) {
+      if (match[1]) toolNames.push(match[1]);
+    }
+
+    // Call tool-details for each tool (runs in parallel per server)
+    await Promise.all(
+      toolNames.map((toolName) =>
+        client.callTool({
+          name: "tool-details",
+          arguments: { luaServerName: serverName, luaToolName: toolName },
+        }),
+      ),
+    );
+  }
 }
 
 /**

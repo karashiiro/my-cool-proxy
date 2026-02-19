@@ -463,6 +463,36 @@ export interface ISkillOperationsService {
   ): Promise<unknown>;
 }
 
+/**
+ * Store for tracking which tools have been inspected (via tool-details
+ * or inspect-tool-response) per session. Used to enforce that agents
+ * read tool documentation before invoking tools in execute scripts.
+ */
+export interface IToolInspectionStore {
+  /**
+   * Mark a tool as inspected for a session.
+   */
+  markInspected(
+    sessionId: string,
+    luaServerName: string,
+    luaToolName: string,
+  ): void;
+
+  /**
+   * Check if a tool has been inspected for a session.
+   */
+  isInspected(
+    sessionId: string,
+    luaServerName: string,
+    luaToolName: string,
+  ): boolean;
+
+  /**
+   * Remove all inspection records for a session (cleanup).
+   */
+  deleteSession(sessionId: string): void;
+}
+
 // Re-export skill types for convenience
 export type { ISkillDiscoveryService } from "./skill.js";
 export type { SkillMetadata };

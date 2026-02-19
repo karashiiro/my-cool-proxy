@@ -12,6 +12,7 @@ import type {
   ServerConfig,
   ISkillDiscoveryService,
   ISkillOperationsService,
+  IToolInspectionStore,
   IGatewayBuiltins,
 } from "../types/interfaces.js";
 
@@ -33,6 +34,7 @@ export class GatewayBuiltinsBuilder {
     private skillOperations: ISkillOperationsService | null,
     private config: ServerConfig,
     private logger: ILogger,
+    private toolInspectionStore: IToolInspectionStore,
   ) {}
 
   build(sessionId: string): IGatewayBuiltins {
@@ -287,6 +289,24 @@ export class GatewayBuiltinsBuilder {
     // Add resource URI registration callback for tool result routing
     builtins.registerResourceUri = (uri: string, serverName: string) => {
       this.routingService.registerEncounteredUri(sessionId, uri, serverName);
+    };
+
+    // Add tool call guard to enforce tool-details before execute
+    builtins.toolCallGuard = (luaServerName: string, luaToolName: string) => {
+      if (
+        !this.toolInspectionStore.isInspected(
+          sessionId,
+          luaServerName,
+          luaToolName,
+        )
+      ) {
+        throw new Error(
+          `Tool '${luaServerName}.${luaToolName}' cannot be called without prior inspection.\n\n` +
+            `You MUST call tool-details (or inspect-tool-response) for this tool before using it in execute scripts.\n\n` +
+            `Example:\n` +
+            `  Call tool-details with luaServerName="${luaServerName}" and luaToolName="${luaToolName}"`,
+        );
+      }
     };
 
     // Add skill-related builtins conditionally

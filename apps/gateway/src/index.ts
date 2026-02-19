@@ -13,6 +13,7 @@ import type {
   IServerInfoPreloader,
   IShutdownHandler,
   ISkillDiscoveryService,
+  IToolInspectionStore,
   ServerConfig,
 } from "./types/interfaces.js";
 import { serveHttp } from "@karashiiro/mcp/http";
@@ -196,6 +197,9 @@ async function startHttpMode(
   );
   const routingService = container.get<IResourceRoutingService>(
     TYPES.ResourceRoutingService,
+  );
+  const toolInspectionStore = container.get<IToolInspectionStore>(
+    TYPES.ToolInspectionStore,
   );
 
   // Preload upstream server info at startup to populate gateway instructions
@@ -386,6 +390,9 @@ async function startHttpMode(
 
             // Clean up resource routing data
             routingService.deleteSession(sessionId);
+
+            // Clean up tool inspection tracking
+            toolInspectionStore.deleteSession(sessionId);
 
             // Clean up sampling shim if active
             if (container.isBound(TYPES.SamplingShim)) {

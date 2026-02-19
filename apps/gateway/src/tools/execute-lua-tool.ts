@@ -18,6 +18,7 @@ import type {
   ServerConfig,
   ISkillDiscoveryService,
   ISkillOperationsService,
+  IToolInspectionStore,
   IGatewayBuiltins,
 } from "../types/interfaces.js";
 import { $inject } from "../container/decorators.js";
@@ -121,6 +122,8 @@ export class ExecuteLuaTool implements ITool {
     private completionAggregation: CompletionAggregationService,
     @$inject(TYPES.SkillOperationsService)
     private skillOperations: ISkillOperationsService,
+    @$inject(TYPES.ToolInspectionStore)
+    private toolInspectionStore: IToolInspectionStore,
   ) {
     this.description =
       this.config.skills?.enabled === true
@@ -210,6 +213,7 @@ export class ExecuteLuaTool implements ITool {
       this.config.skills?.enabled === true ? this.skillOperations : null,
       this.config,
       this.logger,
+      this.toolInspectionStore,
     ).build(sessionId);
   }
 }

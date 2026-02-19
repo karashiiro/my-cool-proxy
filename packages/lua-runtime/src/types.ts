@@ -123,6 +123,13 @@ export interface IGatewayBuiltins {
    * embedded resource content blocks.
    */
   registerResourceUri?(uri: string, serverName: string): void;
+
+  /**
+   * Guard that checks whether a tool has been inspected before allowing execution.
+   * Throws an error if the tool has not been inspected via tool-details or
+   * inspect-tool-response. Called by the runtime before each upstream tool invocation.
+   */
+  toolCallGuard?(luaServerName: string, luaToolName: string): void;
 }
 
 /**

@@ -14,6 +14,7 @@ import type {
   ISkillDiscoveryService,
   ISamplingShim,
   ISkillOperationsService,
+  IToolInspectionStore,
 } from "../types/interfaces.js";
 // Import from workspace packages
 import { WasmoonRuntime } from "@my-cool-proxy/lua-runtime";
@@ -38,6 +39,7 @@ import { ServerInfoPreloader } from "../services/server-info-preloader.js";
 import { SkillDiscoveryService } from "../services/skill-discovery-service.js";
 import { SkillOperationsService } from "../services/skill-operations-service.js";
 import { SkillResourceProvider } from "../services/skill-resource-provider.js";
+import { ToolInspectionStore } from "../services/tool-inspection-store.js";
 import { SamplingShim } from "../services/sampling-shim.js";
 import type { ITool } from "../tools/base-tool.js";
 import { ExecuteLuaTool } from "../tools/execute-lua-tool.js";
@@ -263,6 +265,12 @@ export function createContainer(
   container
     .bind<ICapabilityStore>(TYPES.CapabilityStore)
     .to(CapabilityStore)
+    .inSingletonScope();
+
+  // Bind tool inspection store for enforcing tool-details before execute
+  container
+    .bind<IToolInspectionStore>(TYPES.ToolInspectionStore)
+    .to(ToolInspectionStore)
     .inSingletonScope();
 
   // Bind server info preloader for gathering upstream server info at startup

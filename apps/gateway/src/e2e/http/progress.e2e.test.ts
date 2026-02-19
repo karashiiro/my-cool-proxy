@@ -7,7 +7,10 @@ import { generateHttpTestConfig } from "../helpers/test-config-generator.js";
 import { HttpServerManager } from "../helpers/http-server-manager.js";
 import { ToyServerManager } from "../helpers/toy-server-manager.js";
 import { assertTextContains } from "../helpers/test-assertions.js";
-import { waitForServersReady } from "../helpers/client-helpers.js";
+import {
+  waitForServersReady,
+  inspectAllTools,
+} from "../helpers/client-helpers.js";
 
 describe("Progress Notification Proxy E2E (HTTP Mode)", () => {
   let gatewayPort: number;
@@ -73,6 +76,7 @@ describe("Progress Notification Proxy E2E (HTTP Mode)", () => {
 
     // Wait for upstream servers to be ready
     await waitForServersReady(gatewayClient, 1);
+    await inspectAllTools(gatewayClient);
   }, 30000);
 
   afterAll(async () => {

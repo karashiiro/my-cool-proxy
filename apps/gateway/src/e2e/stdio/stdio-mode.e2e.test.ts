@@ -7,7 +7,10 @@ import {
   type EmbeddedResource,
 } from "@modelcontextprotocol/sdk/types.js";
 import { generateStdioTestConfig } from "../helpers/test-config-generator.js";
-import { waitForServersReady } from "../helpers/client-helpers.js";
+import {
+  waitForServersReady,
+  inspectAllTools,
+} from "../helpers/client-helpers.js";
 import { resolve } from "node:path";
 
 describe("Stdio Mode E2E", () => {
@@ -65,6 +68,7 @@ describe("Stdio Mode E2E", () => {
     // This is necessary because upstream clients are created asynchronously
     // We expect 2 servers: calculator and data-server
     await waitForServersReady(gatewayClient, 2);
+    await inspectAllTools(gatewayClient);
   }, 60000);
 
   afterAll(async () => {

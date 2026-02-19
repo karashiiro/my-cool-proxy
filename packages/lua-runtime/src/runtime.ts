@@ -178,6 +178,14 @@ Common issues:
                   `(Lua: ${sanitizedServerName}.${sanitizedToolName}) with args: ${inspect(args)}`,
               );
 
+              // Enforce tool inspection guard if configured
+              if (gatewayBuiltins.toolCallGuard) {
+                gatewayBuiltins.toolCallGuard(
+                  sanitizedServerName,
+                  sanitizedToolName,
+                );
+              }
+
               // Register with progress aggregator if available.
               // Registration happens at call time (not injection time) so
               // tools called multiple times each get their own progress slot.
