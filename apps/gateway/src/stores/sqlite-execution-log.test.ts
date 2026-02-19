@@ -86,6 +86,54 @@ describe("SQLiteExecutionLog", () => {
     });
   });
 
+  describe("markExecutionResult", () => {
+    it("should store the final script result", () => {
+      const id = log.logExecution("session-1", "result(42)");
+      log.markExecutionResult(id, "42");
+
+      const executions = log.getExecutions("session-1");
+      expect(executions[0]!.result).toBe("42");
+    });
+
+    it("should store JSON-serialized object results", () => {
+      const id = log.logExecution("session-1", 'result({key = "val"})');
+      const resultJson = JSON.stringify({ key: "val" });
+      log.markExecutionResult(id, resultJson);
+
+      const executions = log.getExecutions("session-1");
+      expect(executions[0]!.result).toBe(resultJson);
+    });
+
+    it("should leave result null when not set", () => {
+      log.logExecution("session-1", "-- no result");
+
+      const executions = log.getExecutions("session-1");
+      expect(executions[0]!.result).toBeNull();
+    });
+  });
+
+  describe("markToolCallResult", () => {
+    it("should store the tool call result", () => {
+      const execId = log.logExecution("session-1", "script");
+      const callId = log.logToolCall(execId, "server", "tool");
+      const resultJson = JSON.stringify({
+        content: [{ type: "text", text: "hello" }],
+      });
+      log.markToolCallResult(callId, resultJson);
+
+      const calls = log.getToolCalls(execId);
+      expect(calls[0]!.result).toBe(resultJson);
+    });
+
+    it("should leave result null when not set", () => {
+      const execId = log.logExecution("session-1", "script");
+      log.logToolCall(execId, "server", "tool");
+
+      const calls = log.getToolCalls(execId);
+      expect(calls[0]!.result).toBeNull();
+    });
+  });
+
   describe("getExecutions", () => {
     it("should return executions in descending order by timestamp", async () => {
       log.logExecution("session-1", "first");

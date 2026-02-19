@@ -13,9 +13,13 @@ export class NoopExecutionLog implements IExecutionLog {
 
   markExecutionError(): void {}
 
+  markExecutionResult(): void {}
+
   logToolCall(): string {
     return "";
   }
 
   markToolCallError(): void {}
+
+  markToolCallResult(): void {}
 }

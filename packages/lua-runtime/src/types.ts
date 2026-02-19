@@ -142,9 +142,16 @@ export interface IToolCallLog {
    * @param serverName The MCP server name (original, not sanitized)
    * @param toolName The tool name (original, not sanitized)
    * @param args JSON-serialized tool arguments
-   * @returns A call ID to pass to onToolCallError if the call fails
+   * @returns A call ID to pass to onToolCallEnd/onToolCallError
    */
   onToolCallStart(serverName: string, toolName: string, args?: string): string;
+
+  /**
+   * Called when a tool call completes successfully.
+   * @param callId The call ID returned by onToolCallStart
+   * @param result JSON-serialized tool call result
+   */
+  onToolCallEnd(callId: string, result: string): void;
 
   /**
    * Called when a tool call fails.

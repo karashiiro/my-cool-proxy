@@ -157,6 +157,8 @@ export class ExecuteLuaTool implements ITool {
         args?: string,
       ): string =>
         this.executionLog.logToolCall(executionId, serverName, toolName, args),
+      onToolCallEnd: (callId: string, result: string): void =>
+        this.executionLog.markToolCallResult(callId, result),
       onToolCallError: (callId: string, error: string): void =>
         this.executionLog.markToolCallError(callId, error),
     };
@@ -169,6 +171,14 @@ export class ExecuteLuaTool implements ITool {
         context.sendProgress,
         toolCallLog,
       );
+
+      // Log the final script result
+      if (result !== undefined) {
+        this.executionLog.markExecutionResult(
+          executionId,
+          typeof result === "string" ? result : JSON.stringify(result),
+        );
+      }
 
       // Check if result is already a valid CallToolResult
       if (

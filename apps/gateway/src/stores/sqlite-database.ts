@@ -65,6 +65,7 @@ export class SQLiteDatabase {
         script TEXT NOT NULL,
         status TEXT NOT NULL,
         error TEXT,
+        result TEXT,
         created_at INTEGER NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_lua_executions_session_created
@@ -81,6 +82,7 @@ export class SQLiteDatabase {
         arguments TEXT,
         status TEXT NOT NULL,
         error TEXT,
+        result TEXT,
         created_at INTEGER NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_lua_tool_calls_execution

@@ -519,6 +519,12 @@ export interface IExecutionLog {
   markExecutionError(executionId: string, error: string): void;
 
   /**
+   * Store the final result of a Lua script execution.
+   * @param result JSON-serialized result value
+   */
+  markExecutionResult(executionId: string, result: string): void;
+
+  /**
    * Log a tool call made within a Lua script execution.
    * @returns The generated call ID
    */
@@ -533,6 +539,12 @@ export interface IExecutionLog {
    * Mark a tool call as failed with an error message.
    */
   markToolCallError(callId: string, error: string): void;
+
+  /**
+   * Store the result of a tool call.
+   * @param result JSON-serialized result value
+   */
+  markToolCallResult(callId: string, result: string): void;
 }
 
 // Re-export skill types for convenience

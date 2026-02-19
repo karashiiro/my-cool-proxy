@@ -93,8 +93,10 @@ const createMockToolInspectionStore = (): IToolInspectionStore => ({
 const createMockExecutionLog = (): IExecutionLog => ({
   logExecution: vi.fn().mockReturnValue("exec-1"),
   markExecutionError: vi.fn(),
+  markExecutionResult: vi.fn(),
   logToolCall: vi.fn().mockReturnValue("call-1"),
   markToolCallError: vi.fn(),
+  markToolCallResult: vi.fn(),
 });
 
 // Helper to create a tool registry with all tools

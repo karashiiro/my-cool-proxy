@@ -10,6 +10,7 @@ export interface LuaExecution {
   script: string;
   status: "success" | "error";
   error?: string;
+  result?: string;
   createdAt: number;
 }
 
@@ -24,6 +25,7 @@ export interface LuaToolCall {
   arguments?: string;
   status: "success" | "error";
   error?: string;
+  result?: string;
   createdAt: number;
 }
 
@@ -81,6 +83,20 @@ export class SQLiteExecutionLog implements IExecutionLog {
   }
 
   /**
+   * Store the final result of a Lua script execution.
+   * @param executionId The execution to update
+   * @param result The JSON-serialized result value
+   */
+  markExecutionResult(executionId: string, result: string): void {
+    this.db
+      .getDatabase()
+      .prepare(
+        `UPDATE lua_executions SET result = ? WHERE execution_id = ?`,
+      )
+      .run(result, executionId);
+  }
+
+  /**
    * Log a tool call made within a Lua script execution.
    * @param executionId The parent execution ID
    * @param serverName The MCP server name (original, not sanitized)
@@ -123,6 +139,20 @@ export class SQLiteExecutionLog implements IExecutionLog {
   }
 
   /**
+   * Store the result of a tool call.
+   * @param callId The tool call to update
+   * @param result The JSON-serialized result value
+   */
+  markToolCallResult(callId: string, result: string): void {
+    this.db
+      .getDatabase()
+      .prepare(
+        `UPDATE lua_tool_calls SET result = ? WHERE call_id = ?`,
+      )
+      .run(result, callId);
+  }
+
+  /**
    * Get recent executions for a session, ordered by timestamp descending.
    * @param sessionId The session to query
    * @param limit Maximum number of executions to return (default 50)
@@ -137,6 +167,7 @@ export class SQLiteExecutionLog implements IExecutionLog {
            script,
            status,
            error,
+           result,
            created_at AS createdAt
          FROM lua_executions
          WHERE session_id = ?
@@ -162,6 +193,7 @@ export class SQLiteExecutionLog implements IExecutionLog {
            arguments,
            status,
            error,
+           result,
            created_at AS createdAt
          FROM lua_tool_calls
          WHERE execution_id = ?

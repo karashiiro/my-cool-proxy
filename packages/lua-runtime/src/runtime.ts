@@ -280,6 +280,14 @@ Common issues:
                 );
               }
 
+              // Log successful tool call result
+              if (logCallId) {
+                toolCallLog?.onToolCallEnd(
+                  logCallId,
+                  JSON.stringify(result),
+                );
+              }
+
               if (result.structuredContent) {
                 // Directly return structured content as Lua table
                 return result.structuredContent;

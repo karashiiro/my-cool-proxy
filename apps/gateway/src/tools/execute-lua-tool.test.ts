@@ -70,6 +70,7 @@ describe("ExecuteLuaTool", () => {
         undefined,
         expect.objectContaining({
           onToolCallStart: expect.any(Function),
+          onToolCallEnd: expect.any(Function),
           onToolCallError: expect.any(Function),
         }),
       );
@@ -277,6 +278,7 @@ describe("ExecuteLuaTool", () => {
         undefined,
         expect.objectContaining({
           onToolCallStart: expect.any(Function),
+          onToolCallEnd: expect.any(Function),
           onToolCallError: expect.any(Function),
         }),
       );
