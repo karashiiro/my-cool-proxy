@@ -1,0 +1,172 @@
+import type { IExecutionLog } from "../types/interfaces.js";
+import type { SQLiteDatabase } from "./sqlite-database.js";
+
+/**
+ * A logged Lua script execution.
+ */
+export interface LuaExecution {
+  executionId: string;
+  sessionId: string;
+  script: string;
+  status: "success" | "error";
+  error?: string;
+  createdAt: number;
+}
+
+/**
+ * A logged tool call made within a Lua script execution.
+ */
+export interface LuaToolCall {
+  callId: string;
+  executionId: string;
+  serverName: string;
+  toolName: string;
+  arguments?: string;
+  status: "success" | "error";
+  error?: string;
+  createdAt: number;
+}
+
+/**
+ * Generate a unique ID with a timestamp prefix for chronological ordering.
+ */
+function generateId(): string {
+  return `${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+}
+
+/**
+ * SQLite-backed execution log for Lua script executions and their tool calls.
+ *
+ * Records are stored in descending order by timestamp for efficient
+ * retrieval of the most recent executions.
+ *
+ * NOT injectable - instantiated directly in index.ts alongside SQLiteDatabase.
+ */
+export class SQLiteExecutionLog implements IExecutionLog {
+  constructor(private readonly db: SQLiteDatabase) {}
+
+  /**
+   * Log the start of a Lua script execution.
+   * @param sessionId The session that triggered the execution
+   * @param script The Lua script source code
+   * @returns The generated execution ID for linking tool calls
+   */
+  logExecution(sessionId: string, script: string): string {
+    const executionId = generateId();
+    const now = Date.now();
+
+    this.db
+      .getDatabase()
+      .prepare(
+        `INSERT INTO lua_executions (execution_id, session_id, script, status, created_at)
+         VALUES (?, ?, ?, 'success', ?)`,
+      )
+      .run(executionId, sessionId, script, now);
+
+    return executionId;
+  }
+
+  /**
+   * Mark an execution as failed with an error message.
+   * @param executionId The execution to mark as failed
+   * @param error The error message
+   */
+  markExecutionError(executionId: string, error: string): void {
+    this.db
+      .getDatabase()
+      .prepare(
+        `UPDATE lua_executions SET status = 'error', error = ? WHERE execution_id = ?`,
+      )
+      .run(error, executionId);
+  }
+
+  /**
+   * Log a tool call made within a Lua script execution.
+   * @param executionId The parent execution ID
+   * @param serverName The MCP server name (original, not sanitized)
+   * @param toolName The tool name (original, not sanitized)
+   * @param args The tool call arguments (JSON-serialized)
+   * @returns The generated call ID
+   */
+  logToolCall(
+    executionId: string,
+    serverName: string,
+    toolName: string,
+    args?: string,
+  ): string {
+    const callId = generateId();
+    const now = Date.now();
+
+    this.db
+      .getDatabase()
+      .prepare(
+        `INSERT INTO lua_tool_calls (call_id, execution_id, server_name, tool_name, arguments, status, created_at)
+         VALUES (?, ?, ?, ?, ?, 'success', ?)`,
+      )
+      .run(callId, executionId, serverName, toolName, args ?? null, now);
+
+    return callId;
+  }
+
+  /**
+   * Mark a tool call as failed with an error message.
+   * @param callId The tool call to mark as failed
+   * @param error The error message
+   */
+  markToolCallError(callId: string, error: string): void {
+    this.db
+      .getDatabase()
+      .prepare(
+        `UPDATE lua_tool_calls SET status = 'error', error = ? WHERE call_id = ?`,
+      )
+      .run(error, callId);
+  }
+
+  /**
+   * Get recent executions for a session, ordered by timestamp descending.
+   * @param sessionId The session to query
+   * @param limit Maximum number of executions to return (default 50)
+   */
+  getExecutions(sessionId: string, limit = 50): LuaExecution[] {
+    return this.db
+      .getDatabase()
+      .prepare(
+        `SELECT
+           execution_id AS executionId,
+           session_id AS sessionId,
+           script,
+           status,
+           error,
+           created_at AS createdAt
+         FROM lua_executions
+         WHERE session_id = ?
+         ORDER BY created_at DESC
+         LIMIT ?`,
+      )
+      .all(sessionId, limit) as LuaExecution[];
+  }
+
+  /**
+   * Get tool calls for an execution, ordered by timestamp descending.
+   * @param executionId The execution to query
+   */
+  getToolCalls(executionId: string): LuaToolCall[] {
+    return this.db
+      .getDatabase()
+      .prepare(
+        `SELECT
+           call_id AS callId,
+           execution_id AS executionId,
+           server_name AS serverName,
+           tool_name AS toolName,
+           arguments,
+           status,
+           error,
+           created_at AS createdAt
+         FROM lua_tool_calls
+         WHERE execution_id = ?
+         ORDER BY created_at DESC`,
+      )
+      .all(executionId) as LuaToolCall[];
+  }
+}

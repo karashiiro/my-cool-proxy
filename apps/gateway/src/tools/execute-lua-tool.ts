@@ -20,6 +20,7 @@ import type {
   ISkillOperationsService,
   IToolInspectionStore,
   IGatewayBuiltins,
+  IExecutionLog,
 } from "../types/interfaces.js";
 import { $inject } from "../container/decorators.js";
 import { TYPES } from "../types/index.js";
@@ -124,6 +125,8 @@ export class ExecuteLuaTool implements ITool {
     private skillOperations: ISkillOperationsService,
     @$inject(TYPES.ToolInspectionStore)
     private toolInspectionStore: IToolInspectionStore,
+    @$inject(TYPES.ExecutionLog)
+    private executionLog: IExecutionLog,
   ) {
     this.description =
       this.config.skills?.enabled === true
@@ -140,12 +143,31 @@ export class ExecuteLuaTool implements ITool {
     const mcpServers = this.clientPool.getClientsBySession(sessionId);
     const gatewayBuiltins = this.buildGatewayBuiltins(sessionId);
 
+    // Log execution start
+    const executionId = this.executionLog.logExecution(
+      sessionId,
+      script as string,
+    );
+
+    // Build tool call log that records individual tool calls within this execution
+    const toolCallLog = {
+      onToolCallStart: (
+        serverName: string,
+        toolName: string,
+        args?: string,
+      ): string =>
+        this.executionLog.logToolCall(executionId, serverName, toolName, args),
+      onToolCallError: (callId: string, error: string): void =>
+        this.executionLog.markToolCallError(callId, error),
+    };
+
     try {
       const result = await this.luaRuntime.executeScript(
         script as string,
         mcpServers,
         gatewayBuiltins,
         context.sendProgress,
+        toolCallLog,
       );
 
       // Check if result is already a valid CallToolResult
@@ -190,6 +212,10 @@ export class ExecuteLuaTool implements ITool {
         ],
       };
     } catch (error) {
+      this.executionLog.markExecutionError(
+        executionId,
+        error instanceof Error ? error.message : String(error),
+      );
       this.logger.error("Lua script execution failed:", error as Error);
       return {
         content: [{ type: "text", text: `Script execution failed:\n${error}` }],

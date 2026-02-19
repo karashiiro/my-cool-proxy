@@ -7,6 +7,7 @@ import type {
   ClientConnectionResult,
   ClientCapabilities,
   ICapabilityStore,
+  IExecutionLog,
   ILogger,
   IMCPClientManager,
   ISamplingShim,
@@ -40,6 +41,7 @@ import { getDbPath, ensureDbDirectory } from "./utils/db-paths.js";
 import { SQLiteDatabase } from "./stores/sqlite-database.js";
 import { SQLiteEventStore } from "./stores/sqlite-event-store.js";
 import { SQLiteCapabilityStore } from "./stores/sqlite-capability-store.js";
+import { SQLiteExecutionLog } from "./stores/sqlite-execution-log.js";
 
 /**
  * Session inactivity timeout in milliseconds.
@@ -171,6 +173,12 @@ async function startHttpMode(
   container
     .bind<ICapabilityStore>(TYPES.CapabilityStore)
     .toConstantValue(capabilityStore);
+
+  // Rebind execution log to SQLite-backed implementation
+  container.unbind(TYPES.ExecutionLog);
+  container
+    .bind<IExecutionLog>(TYPES.ExecutionLog)
+    .toConstantValue(new SQLiteExecutionLog(sqliteDb));
 
   // Get shared services from DI container
   const clientManager = container.get<IMCPClientManager>(
@@ -467,6 +475,17 @@ async function startStdioMode(
     TYPES.SkillDiscoveryService,
   );
 
+  // Initialize SQLite for execution logging in stdio mode
+  ensureDbDirectory();
+  const dbPath = getDbPath();
+  const sqliteDb = new SQLiteDatabase(dbPath);
+  logger.info(`Execution log enabled: ${dbPath}`);
+
+  container.unbind(TYPES.ExecutionLog);
+  container
+    .bind<IExecutionLog>(TYPES.ExecutionLog)
+    .toConstantValue(new SQLiteExecutionLog(sqliteDb));
+
   // Fixed session ID for stdio (single session mode)
   const SESSION_ID = "default";
 
@@ -610,6 +629,7 @@ async function startStdioMode(
       await samplingShim.closeAll();
     }
 
+    sqliteDb.close();
     logger.info("Shutdown complete");
     process.exit(0);
   });

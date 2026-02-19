@@ -4,6 +4,7 @@ export type {
   ILuaRuntime,
   IMCPClientSession,
   IGatewayBuiltins,
+  IToolCallLog,
 } from "./types.js";
 
 // Implementation

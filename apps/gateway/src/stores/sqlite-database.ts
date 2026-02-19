@@ -56,6 +56,36 @@ export class SQLiteDatabase {
         request TEXT NOT NULL
       );
     `);
+
+    // Lua execution log table
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS lua_executions (
+        execution_id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL,
+        script TEXT NOT NULL,
+        status TEXT NOT NULL,
+        error TEXT,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_lua_executions_session_created
+        ON lua_executions(session_id, created_at DESC);
+    `);
+
+    // Tool calls within Lua executions
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS lua_tool_calls (
+        call_id TEXT PRIMARY KEY,
+        execution_id TEXT NOT NULL REFERENCES lua_executions(execution_id),
+        server_name TEXT NOT NULL,
+        tool_name TEXT NOT NULL,
+        arguments TEXT,
+        status TEXT NOT NULL,
+        error TEXT,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_lua_tool_calls_execution
+        ON lua_tool_calls(execution_id, created_at DESC);
+    `);
   }
 
   /**

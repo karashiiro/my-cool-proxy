@@ -15,6 +15,7 @@ import type {
   ISamplingShim,
   ISkillOperationsService,
   IToolInspectionStore,
+  IExecutionLog,
 } from "../types/interfaces.js";
 // Import from workspace packages
 import { WasmoonRuntime } from "@my-cool-proxy/lua-runtime";
@@ -40,6 +41,7 @@ import { SkillDiscoveryService } from "../services/skill-discovery-service.js";
 import { SkillOperationsService } from "../services/skill-operations-service.js";
 import { SkillResourceProvider } from "../services/skill-resource-provider.js";
 import { ToolInspectionStore } from "../services/tool-inspection-store.js";
+import { NoopExecutionLog } from "../services/noop-execution-log.js";
 import { SamplingShim } from "../services/sampling-shim.js";
 import type { ITool } from "../tools/base-tool.js";
 import { ExecuteLuaTool } from "../tools/execute-lua-tool.js";
@@ -289,6 +291,12 @@ export function createContainer(
   container
     .bind<ISkillOperationsService>(TYPES.SkillOperationsService)
     .to(SkillOperationsService)
+    .inSingletonScope();
+
+  // Bind no-op execution log by default (rebound to SQLite in startHttpMode/startStdioMode)
+  container
+    .bind<IExecutionLog>(TYPES.ExecutionLog)
+    .to(NoopExecutionLog)
     .inSingletonScope();
 
   return container;

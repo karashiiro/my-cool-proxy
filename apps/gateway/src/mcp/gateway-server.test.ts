@@ -20,6 +20,7 @@ import type {
   ISkillDiscoveryService,
   ISkillOperationsService,
   IToolInspectionStore,
+  IExecutionLog,
 } from "../types/interfaces.js";
 import * as z from "zod";
 import { MCPClientSession } from "@my-cool-proxy/mcp-client";
@@ -88,6 +89,14 @@ const createMockToolInspectionStore = (): IToolInspectionStore => ({
   deleteSession: vi.fn(),
 });
 
+// Mock execution log
+const createMockExecutionLog = (): IExecutionLog => ({
+  logExecution: vi.fn().mockReturnValue("exec-1"),
+  markExecutionError: vi.fn(),
+  logToolCall: vi.fn().mockReturnValue("call-1"),
+  markToolCallError: vi.fn(),
+});
+
 // Helper to create a tool registry with all tools
 const createToolRegistry = (
   luaRuntime: ILuaRuntime,
@@ -128,6 +137,8 @@ const createToolRegistry = (
   const skillOperationsService = createMockSkillOperationsService();
   const toolInspectionStore = createMockToolInspectionStore();
 
+  const executionLog = createMockExecutionLog();
+
   const registry = new ToolRegistry();
   registry.register(
     new ExecuteLuaTool(
@@ -142,6 +153,7 @@ const createToolRegistry = (
       completionAggregation,
       skillOperationsService,
       toolInspectionStore,
+      executionLog,
     ),
   );
   registry.register(new ListServersTool(toolDiscovery, config));

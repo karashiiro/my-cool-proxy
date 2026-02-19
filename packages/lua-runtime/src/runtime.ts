@@ -4,6 +4,7 @@ import type {
   ILogger,
   IMCPClientSession,
   IGatewayBuiltins,
+  IToolCallLog,
 } from "./types.js";
 import { sanitizeLuaIdentifier } from "@my-cool-proxy/mcp-utilities";
 import {
@@ -31,6 +32,7 @@ export class WasmoonRuntime implements ILuaRuntime {
     mcpServers: Map<string, IMCPClientSession>,
     gatewayBuiltins: IGatewayBuiltins,
     onProgress?: (progress: number, total?: number, message?: string) => void,
+    toolCallLog?: IToolCallLog,
   ): Promise<unknown> {
     this.logger.info(`Executing Lua script:\n${script}`);
 
@@ -51,6 +53,7 @@ export class WasmoonRuntime implements ILuaRuntime {
         mcpServers,
         gatewayBuiltins,
         aggregator,
+        toolCallLog,
       );
 
       // Inject gateway builtins as _gateway global
@@ -153,6 +156,7 @@ Common issues:
     mcpServers: Map<string, IMCPClientSession>,
     gatewayBuiltins: IGatewayBuiltins,
     aggregator?: ProgressAggregator,
+    toolCallLog?: IToolCallLog,
   ): Promise<void> {
     for (const [originalServerName, client] of mcpServers.entries()) {
       try {
@@ -172,6 +176,13 @@ Common issues:
 
           // Capture original names in closure for MCP calls
           serverTable[sanitizedToolName] = async (args: unknown) => {
+            // Log tool call start if logger is provided
+            const logCallId = toolCallLog?.onToolCallStart(
+              originalServerName,
+              originalToolName,
+              args ? JSON.stringify(args) : undefined,
+            );
+
             try {
               this.logger.debug(
                 `Calling ${originalServerName}.${originalToolName} ` +
@@ -288,6 +299,12 @@ Common issues:
 
               return result;
             } catch (error) {
+              if (logCallId) {
+                toolCallLog?.onToolCallError(
+                  logCallId,
+                  error instanceof Error ? error.message : String(error),
+                );
+              }
               this.logger.error(
                 `Error calling ${originalServerName}.${originalToolName}:`,
                 error as Error,

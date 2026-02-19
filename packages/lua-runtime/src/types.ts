@@ -133,6 +133,28 @@ export interface IGatewayBuiltins {
 }
 
 /**
+ * Callback interface for logging tool calls made within a Lua script execution.
+ * Implementations are provided by the caller to record tool call activity.
+ */
+export interface IToolCallLog {
+  /**
+   * Called when a tool call begins.
+   * @param serverName The MCP server name (original, not sanitized)
+   * @param toolName The tool name (original, not sanitized)
+   * @param args JSON-serialized tool arguments
+   * @returns A call ID to pass to onToolCallError if the call fails
+   */
+  onToolCallStart(serverName: string, toolName: string, args?: string): string;
+
+  /**
+   * Called when a tool call fails.
+   * @param callId The call ID returned by onToolCallStart
+   * @param error The error message
+   */
+  onToolCallError(callId: string, error: string): void;
+}
+
+/**
  * Interface for Lua runtime implementations
  */
 export interface ILuaRuntime {
@@ -142,6 +164,7 @@ export interface ILuaRuntime {
    * @param mcpServers Map of server name to client session
    * @param gatewayBuiltins Gateway built-in functions to inject
    * @param onProgress Optional callback for aggregated progress notifications
+   * @param toolCallLog Optional logger for recording tool calls within the execution
    * @returns The result returned by calling result() in Lua
    */
   executeScript(
@@ -149,5 +172,6 @@ export interface ILuaRuntime {
     mcpServers: Map<string, IMCPClientSession>,
     gatewayBuiltins: IGatewayBuiltins,
     onProgress?: (progress: number, total?: number, message?: string) => void,
+    toolCallLog?: IToolCallLog,
   ): Promise<unknown>;
 }
