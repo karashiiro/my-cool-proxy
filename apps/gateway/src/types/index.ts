@@ -26,4 +26,5 @@ export const TYPES = {
   SamplingShim: "SamplingShim",
   SkillOperationsService: "SkillOperationsService",
   ToolInspectionStore: "ToolInspectionStore",
+  ExecutionLog: "ExecutionLog",
 } as const;

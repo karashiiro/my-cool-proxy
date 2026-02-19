@@ -5,7 +5,12 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import * as z from "zod";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import type { ILogger, IMCPClientSession, IGatewayBuiltins } from "./types.js";
+import type {
+  ILogger,
+  IMCPClientSession,
+  IGatewayBuiltins,
+  IToolCallLog,
+} from "./types.js";
 
 // Mock logger factory
 const createMockLogger = (): ILogger => ({
@@ -1586,6 +1591,289 @@ describe("WasmoonRuntime", () => {
       };
       expect(typed.completion.values).toEqual([]);
       expect(typed.completion.hasMore).toBe(false);
+    });
+  });
+
+  describe("toolCallLog integration", () => {
+    it("should call onToolCallStart for each tool invocation", async () => {
+      const { server, client } = await createTestServer("api", [
+        {
+          name: "get-data",
+          description: "Get data",
+          handler: async () => ({
+            content: [{ type: "text" as const, text: '{"ok":true}' }],
+          }),
+        },
+      ]);
+
+      cleanupFns.push(async () => {
+        await client.close();
+        await server.close();
+      });
+
+      const toolCallLog: IToolCallLog = {
+        onToolCallStart: vi.fn().mockReturnValue("call-1"),
+        onToolCallEnd: vi.fn(),
+        onToolCallError: vi.fn(),
+      };
+
+      const script = `result(api.get_data({}):await())`;
+      await runtime.executeScript(
+        script,
+        new Map([["api", client]]),
+        createMockGatewayBuiltins(),
+        undefined,
+        toolCallLog,
+      );
+
+      expect(toolCallLog.onToolCallStart).toHaveBeenCalledWith(
+        "api",
+        "get-data",
+        expect.any(String),
+      );
+    });
+
+    it("should call onToolCallStart for each tool call in a multi-call script", async () => {
+      const { server, client } = await createTestServer("svc", [
+        {
+          name: "tool-a",
+          description: "A",
+          handler: async () => ({
+            content: [{ type: "text" as const, text: "a" }],
+          }),
+        },
+        {
+          name: "tool-b",
+          description: "B",
+          handler: async () => ({
+            content: [{ type: "text" as const, text: "b" }],
+          }),
+        },
+      ]);
+
+      cleanupFns.push(async () => {
+        await client.close();
+        await server.close();
+      });
+
+      const toolCallLog: IToolCallLog = {
+        onToolCallStart: vi.fn().mockReturnValue("call-id"),
+        onToolCallEnd: vi.fn(),
+        onToolCallError: vi.fn(),
+      };
+
+      const script = `
+        svc.tool_a({}):await()
+        svc.tool_b({}):await()
+        result(true)
+      `;
+
+      await runtime.executeScript(
+        script,
+        new Map([["svc", client]]),
+        createMockGatewayBuiltins(),
+        undefined,
+        toolCallLog,
+      );
+
+      expect(toolCallLog.onToolCallStart).toHaveBeenCalledTimes(2);
+      expect(toolCallLog.onToolCallStart).toHaveBeenCalledWith(
+        "svc",
+        "tool-a",
+        expect.any(String),
+      );
+      expect(toolCallLog.onToolCallStart).toHaveBeenCalledWith(
+        "svc",
+        "tool-b",
+        expect.any(String),
+      );
+    });
+
+    it("should call onToolCallError when a tool call fails", async () => {
+      const { server, client } = await createTestServer("api", [
+        {
+          name: "failing",
+          description: "Fails",
+          handler: async () => ({
+            content: [{ type: "text" as const, text: "bad" }],
+            isError: true,
+          }),
+        },
+      ]);
+
+      cleanupFns.push(async () => {
+        await client.close();
+        await server.close();
+      });
+
+      const toolCallLog: IToolCallLog = {
+        onToolCallStart: vi.fn().mockReturnValue("call-42"),
+        onToolCallEnd: vi.fn(),
+        onToolCallError: vi.fn(),
+      };
+
+      const script = `result(api.failing({}):await())`;
+
+      await runtime
+        .executeScript(
+          script,
+          new Map([["api", client]]),
+          createMockGatewayBuiltins(),
+          undefined,
+          toolCallLog,
+        )
+        .catch(() => {});
+
+      expect(toolCallLog.onToolCallStart).toHaveBeenCalledTimes(1);
+      expect(toolCallLog.onToolCallError).toHaveBeenCalledWith(
+        "call-42",
+        expect.stringContaining("isError"),
+      );
+    });
+
+    it("should call onToolCallEnd with serialized result on success", async () => {
+      const { server, client } = await createTestServer("api", [
+        {
+          name: "get-data",
+          description: "Get data",
+          handler: async () => ({
+            content: [{ type: "text" as const, text: '{"ok":true}' }],
+          }),
+        },
+      ]);
+
+      cleanupFns.push(async () => {
+        await client.close();
+        await server.close();
+      });
+
+      const toolCallLog: IToolCallLog = {
+        onToolCallStart: vi.fn().mockReturnValue("call-1"),
+        onToolCallEnd: vi.fn(),
+        onToolCallError: vi.fn(),
+      };
+
+      const script = `result(api.get_data({}):await())`;
+      await runtime.executeScript(
+        script,
+        new Map([["api", client]]),
+        createMockGatewayBuiltins(),
+        undefined,
+        toolCallLog,
+      );
+
+      expect(toolCallLog.onToolCallEnd).toHaveBeenCalledWith(
+        "call-1",
+        expect.any(String),
+      );
+      // The result should be valid JSON
+      const resultArg = (toolCallLog.onToolCallEnd as ReturnType<typeof vi.fn>)
+        .mock.calls[0]![1];
+      const parsed = JSON.parse(resultArg as string);
+      expect(parsed).toHaveProperty("content");
+    });
+
+    it("should not call onToolCallEnd when a tool call fails", async () => {
+      const { server, client } = await createTestServer("api", [
+        {
+          name: "failing",
+          description: "Fails",
+          handler: async () => ({
+            content: [{ type: "text" as const, text: "bad" }],
+            isError: true,
+          }),
+        },
+      ]);
+
+      cleanupFns.push(async () => {
+        await client.close();
+        await server.close();
+      });
+
+      const toolCallLog: IToolCallLog = {
+        onToolCallStart: vi.fn().mockReturnValue("call-1"),
+        onToolCallEnd: vi.fn(),
+        onToolCallError: vi.fn(),
+      };
+
+      const script = `result(api.failing({}):await())`;
+      await runtime
+        .executeScript(
+          script,
+          new Map([["api", client]]),
+          createMockGatewayBuiltins(),
+          undefined,
+          toolCallLog,
+        )
+        .catch(() => {});
+
+      expect(toolCallLog.onToolCallEnd).not.toHaveBeenCalled();
+      expect(toolCallLog.onToolCallError).toHaveBeenCalled();
+    });
+
+    it("should not fail when toolCallLog is not provided", async () => {
+      const { server, client } = await createTestServer("api", [
+        {
+          name: "tool",
+          description: "A tool",
+          handler: async () => ({
+            content: [{ type: "text" as const, text: '{"ok":true}' }],
+          }),
+        },
+      ]);
+
+      cleanupFns.push(async () => {
+        await client.close();
+        await server.close();
+      });
+
+      const script = `result(api.tool({}):await())`;
+
+      // Should not throw even without toolCallLog
+      await expect(
+        runtime.executeScript(
+          script,
+          new Map([["api", client]]),
+          createMockGatewayBuiltins(),
+        ),
+      ).resolves.not.toThrow();
+    });
+
+    it("should pass JSON-serialized arguments to onToolCallStart", async () => {
+      const { server, client } = await createTestServer("api", [
+        {
+          name: "search",
+          description: "Search",
+          handler: async () => ({
+            content: [{ type: "text" as const, text: "[]" }],
+          }),
+        },
+      ]);
+
+      cleanupFns.push(async () => {
+        await client.close();
+        await server.close();
+      });
+
+      const toolCallLog: IToolCallLog = {
+        onToolCallStart: vi.fn().mockReturnValue("call-1"),
+        onToolCallEnd: vi.fn(),
+        onToolCallError: vi.fn(),
+      };
+
+      const script = `result(api.search({ query = "test", limit = 10 }):await())`;
+      await runtime.executeScript(
+        script,
+        new Map([["api", client]]),
+        createMockGatewayBuiltins(),
+        undefined,
+        toolCallLog,
+      );
+
+      const args = (toolCallLog.onToolCallStart as ReturnType<typeof vi.fn>)
+        .mock.calls[0]![2];
+      const parsed = JSON.parse(args as string);
+      expect(parsed).toEqual({ query: "test", limit: 10 });
     });
   });
 });

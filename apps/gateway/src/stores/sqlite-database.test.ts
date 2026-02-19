@@ -37,6 +37,22 @@ describe("SQLiteDatabase", () => {
         )
         .get() as { name: string } | undefined;
       expect(sessionsTable?.name).toBe("sessions");
+
+      // Check lua_executions table exists
+      const executionsTable = database
+        .prepare(
+          `SELECT name FROM sqlite_master WHERE type='table' AND name='lua_executions'`,
+        )
+        .get() as { name: string } | undefined;
+      expect(executionsTable?.name).toBe("lua_executions");
+
+      // Check lua_tool_calls table exists
+      const toolCallsTable = database
+        .prepare(
+          `SELECT name FROM sqlite_master WHERE type='table' AND name='lua_tool_calls'`,
+        )
+        .get() as { name: string } | undefined;
+      expect(toolCallsTable?.name).toBe("lua_tool_calls");
     });
 
     it("should create indices for mcp_events table", () => {
@@ -52,6 +68,34 @@ describe("SQLiteDatabase", () => {
       const indexNames = indices.map((i) => i.name);
       expect(indexNames).toContain("idx_session_stream");
       expect(indexNames).toContain("idx_session_created");
+    });
+
+    it("should create indices for lua_executions table", () => {
+      db = new SQLiteDatabase(":memory:");
+      const database = db.getDatabase();
+
+      const indices = database
+        .prepare(
+          `SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='lua_executions'`,
+        )
+        .all() as Array<{ name: string }>;
+
+      const indexNames = indices.map((i) => i.name);
+      expect(indexNames).toContain("idx_lua_executions_session_created");
+    });
+
+    it("should create indices for lua_tool_calls table", () => {
+      db = new SQLiteDatabase(":memory:");
+      const database = db.getDatabase();
+
+      const indices = database
+        .prepare(
+          `SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='lua_tool_calls'`,
+        )
+        .all() as Array<{ name: string }>;
+
+      const indexNames = indices.map((i) => i.name);
+      expect(indexNames).toContain("idx_lua_tool_calls_execution");
     });
   });
 

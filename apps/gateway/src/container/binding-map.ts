@@ -10,6 +10,7 @@ import type {
   ISamplingShim,
   ISkillOperationsService,
   IToolInspectionStore,
+  IExecutionLog,
 } from "../types/interfaces.js";
 import type { MCPGatewayServer } from "../mcp/gateway-server.js";
 import type {
@@ -50,4 +51,5 @@ export interface ContainerBindingMap {
   SamplingShim: ISamplingShim;
   SkillOperationsService: ISkillOperationsService;
   ToolInspectionStore: IToolInspectionStore;
+  ExecutionLog: IExecutionLog;
 }

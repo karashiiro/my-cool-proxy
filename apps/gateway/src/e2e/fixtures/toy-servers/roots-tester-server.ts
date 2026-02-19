@@ -1,4 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { getErrorMessage } from "@my-cool-proxy/mcp-utilities";
 import { serveStdio } from "@karashiiro/mcp/stdio";
 import { serveHttp } from "@karashiiro/mcp/http";
 import * as z from "zod";
@@ -41,8 +42,7 @@ function createRootsTesterServer(): McpServer {
           ],
         };
       } catch (error) {
-        const errorMessage =
-          error instanceof Error ? error.message : String(error);
+        const errorMessage = getErrorMessage(error);
         return {
           content: [
             {

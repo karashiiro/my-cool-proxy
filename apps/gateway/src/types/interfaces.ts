@@ -1,13 +1,21 @@
 import type { MCPClientSession } from "@my-cool-proxy/mcp-client";
 import type { ACPAgentConfig } from "@my-cool-proxy/acp-client";
-import type { IGatewayBuiltins } from "@my-cool-proxy/lua-runtime";
+import type {
+  IGatewayBuiltins,
+  IToolCallLog,
+} from "@my-cool-proxy/lua-runtime";
 import type { SkillMetadata } from "./skill.js";
 import type {
   ClientCapabilities,
   LoggingMessageNotification,
 } from "@modelcontextprotocol/sdk/types.js";
 
-export type { ACPAgentConfig, ClientCapabilities, IGatewayBuiltins };
+export type {
+  ACPAgentConfig,
+  ClientCapabilities,
+  IGatewayBuiltins,
+  IToolCallLog,
+};
 
 export interface ILuaRuntime {
   executeScript(
@@ -15,6 +23,7 @@ export interface ILuaRuntime {
     mcpServers: Map<string, MCPClientSession>,
     gatewayBuiltins: IGatewayBuiltins,
     onProgress?: (progress: number, total?: number, message?: string) => void,
+    toolCallLog?: IToolCallLog,
   ): Promise<unknown>;
 }
 
@@ -491,6 +500,51 @@ export interface IToolInspectionStore {
    * Remove all inspection records for a session (cleanup).
    */
   deleteSession(sessionId: string): void;
+}
+
+/**
+ * Service for logging Lua script executions and their tool calls.
+ * Backed by SQLite in HTTP mode; no-op in stdio mode.
+ */
+export interface IExecutionLog {
+  /**
+   * Log the start of a Lua script execution.
+   * @returns The generated execution ID for linking tool calls
+   */
+  logExecution(sessionId: string, script: string): string;
+
+  /**
+   * Mark an execution as failed with an error message.
+   */
+  markExecutionError(executionId: string, error: string): void;
+
+  /**
+   * Store the final result of a Lua script execution.
+   * @param result JSON-serialized result value
+   */
+  markExecutionResult(executionId: string, result: string): void;
+
+  /**
+   * Log a tool call made within a Lua script execution.
+   * @returns The generated call ID
+   */
+  logToolCall(
+    executionId: string,
+    serverName: string,
+    toolName: string,
+    args?: string,
+  ): string;
+
+  /**
+   * Mark a tool call as failed with an error message.
+   */
+  markToolCallError(callId: string, error: string): void;
+
+  /**
+   * Store the result of a tool call.
+   * @param result JSON-serialized result value
+   */
+  markToolCallResult(callId: string, result: string): void;
 }
 
 // Re-export skill types for convenience
