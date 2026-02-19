@@ -45,7 +45,7 @@ Before you begin, make sure you have the following installed:
 2. **Copy the example config file:**
 
    ```bash
-   cp config.example.json config.json
+   cp apps/gateway/config.example.json config.json
    ```
 
    Edit `config.json` to add any MCP servers you want to test with. See the [Configuration Guide](docs/configuration.md) for detailed configuration options.
@@ -58,13 +58,19 @@ Before you begin, make sure you have the following installed:
 
 ### Available Commands
 
-- `pnpm dev` - Run development server with hot reload
-- `pnpm build` - Compile TypeScript to `dist/` using tsgo
-- `pnpm typecheck` - Run TypeScript type checking without emitting files
-- `pnpm lint` - Run ESLint on all `.ts` and `.js` files
+- `pnpm dev` - Build all packages and run development server with hot reload
+- `pnpm build` - Build all packages (gateway uses tsup for bundling)
+- `pnpm typecheck` - Run TypeScript type checking across all packages
+- `pnpm lint` - Run ESLint and Prettier checks
 - `pnpm format` - Format all files with Prettier
 - `pnpm test` - Run all tests with Vitest
+- `pnpm test:unit` - Run unit tests only (excludes e2e)
+- `pnpm test:e2e` - Run end-to-end tests only
+- `pnpm test:e2e:http` - Run HTTP mode e2e tests
+- `pnpm test:e2e:stdio` - Run stdio mode e2e tests
 - `pnpm test:watch` - Run tests in watch mode for development
+- `pnpm test:coverage` - Run tests with coverage report
+- `pnpm check` - Run lint, typecheck, and test together
 
 ## Development Workflow
 
@@ -119,16 +125,16 @@ Before you begin, make sure you have the following installed:
 ### Dependency Injection
 
 - Use **Inversify** for dependency injection
-- Register all components in `src/container/inversify.config.ts`
-- Use symbols from `src/types/index.ts` (TYPES) for injection tokens
+- Register all components in `apps/gateway/src/container/inversify.config.ts`
+- Use symbols from `apps/gateway/src/types/index.ts` (TYPES) for injection tokens
 - Decorate injectable classes with `@injectable()`
 
 ### Code Organization
 
 - **Interfaces first:** Create interfaces for all major components
 - **Single responsibility:** Each class/module should have one clear purpose
-- **Configuration:** Use the config loader in `src/utils/config-loader.ts`
-- **Logging:** Use the logger from `src/utils/logger.ts` instead of console.log
+- **Configuration:** Use the config loader in `apps/gateway/src/utils/config-loader.ts`
+- **Logging:** Use the injected `ILogger` interface from `packages/logger/` instead of console.log
 
 ### Naming Conventions
 
@@ -219,18 +225,18 @@ pnpm test:watch
 
 ### Key Components
 
-- **Gateway Server** (`src/mcp/gateway-server.ts`) - Main MCP server wrapper
-- **Client Manager** (`src/mcp/client-manager.ts`) - Manages MCP client connections
-- **Lua Runtime** (`src/lua/runtime.ts`) - Executes Lua scripts with Wasmoon
-- **DI Container** (`src/container/inversify.config.ts`) - Wires everything together
+- **Gateway Server** (`apps/gateway/src/mcp/gateway-server.ts`) - Main MCP server wrapper
+- **Client Manager** (`packages/mcp-client/src/client-manager.ts`) - Manages MCP client connections
+- **Lua Runtime** (`packages/lua-runtime/src/runtime.ts`) - Executes Lua scripts with Wasmoon
+- **DI Container** (`apps/gateway/src/container/inversify.config.ts`) - Wires everything together
 
 ### Transport Modes
 
-The proxy supports both the stdio and streamable HTTP transports (see `src/index.ts`):
+The proxy supports both the stdio and streamable HTTP transports (see `apps/gateway/src/index.ts`):
 
 **Streamable HTTP**:
 
-- Uses `serveHttp()` from `@karashiiro/mcp` with session factory pattern
+- Uses `serveHttp()` from `@karashiiro/mcp/http` with session factory pattern
 - Supports multiple concurrent sessions with isolated state
 - Each session gets its own Gateway server instance via the session factory
 - Clients are initialized on-demand when sessions start
@@ -239,7 +245,7 @@ The proxy supports both the stdio and streamable HTTP transports (see `src/index
 
 **stdio**:
 
-- Uses `serveStdio()` from `@karashiiro/mcp`
+- Uses `serveStdio()` from `@karashiiro/mcp/stdio`
 - Single-session model (uses `default` as the session ID)
 - All MCP clients initialized upfront during startup
 - Reads from stdin, writes to stdout (incompatible with `pnpm dev`)

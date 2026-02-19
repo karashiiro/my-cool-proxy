@@ -100,7 +100,7 @@ my.api       →  my_api
 while        →  _while (reserved keyword)
 ```
 
-Implementation: `src/utils/lua-identifier.ts`
+Implementation: `packages/mcp-utilities/src/lua-identifier.ts`
 
 ### Server Table Structure
 
@@ -149,10 +149,15 @@ The `_gateway` global table provides built-in functions for accessing gateway fu
 | Function                                                    | Description                                           |
 | ----------------------------------------------------------- | ----------------------------------------------------- |
 | `_gateway.list_resources()`                                 | List all available resources across connected servers |
-| `_gateway.read_resource({ uri = "..." })`                   | Read a resource by its namespaced URI                 |
+| `_gateway.read_resource({ uri = "..." })`                   | Read a resource by its URI                            |
+| `_gateway.list_resource_templates()`                        | List all available resource templates                 |
+| `_gateway.list_prompts()`                                   | List all available prompts across connected servers   |
+| `_gateway.get_prompt({ name, arguments })`                  | Get a specific prompt by its namespaced name          |
+| `_gateway.complete({ ref, argument, context })`             | Get completions for resource templates or prompt args |
 | `_gateway.summary_stats()`                                  | Get gateway statistics (server/tool/resource counts)  |
 | `_gateway.invoke_skill_script({ skillName, script, args })` | Execute a skill script (when skills enabled)          |
 | `_gateway.write_skill({ skillName, content, files })`       | Create/modify a skill (when skills mutable)           |
+| `_gateway.update_skill({ skillName, file, ... })`           | Partially update a skill file (when skills mutable)   |
 
 ### Usage Example
 
@@ -171,11 +176,24 @@ print(skill.contents[1].text)
 local stats = _gateway.summary_stats():await()
 print("Connected servers: " .. stats.servers.connected)
 print("Total tools: " .. stats.tools)
+
+-- List and get prompts
+local prompts = _gateway.list_prompts():await()
+local prompt = _gateway.get_prompt({
+    name = "calculator/help",
+    arguments = { topic = "addition" }
+}):await()
+
+-- Get completions for prompt arguments
+local completions = _gateway.complete({
+    ref = { type = "ref/prompt", name = "calculator/help" },
+    argument = { name = "topic", value = "add" }
+}):await()
 ```
 
 ### Conditional Builtins
 
-The skill-related builtins (`invoke_skill_script`, `write_skill`) are only available when skills are enabled in the gateway configuration. If you try to call them when disabled, they simply won't exist on the `_gateway` table.
+The skill-related builtins (`invoke_skill_script`, `write_skill`, `update_skill`) are only available when skills are enabled in the gateway configuration. If you try to call them when disabled, they simply won't exist on the `_gateway` table.
 
 ## The Promise/Await Pattern
 
@@ -280,30 +298,25 @@ This allows LLMs to parse the structured data more reliably.
 
 Arrays are excluded from `structuredContent` because the MCP spec only allows objects.
 
-## Resource URI Namespacing
+## Resource URI Routing
 
-When tools return resources, URIs are namespaced with the server name:
-
-```
-Original:    file:///data.json
-Namespaced:  gw://calculator/file:///data.json
-```
+When tools return content containing `resource_link` or `resource` blocks, the runtime registers the URI in the gateway's routing table so the gateway knows which server owns that resource. The URIs themselves are **not modified** — they pass through unchanged.
 
 This happens in the runtime during tool execution because:
 
 - The runtime knows which server each tool came from
 - Scripts can call tools from multiple servers
-- Namespacing must happen per-call, not per-response
+- Routing entries must be registered per-call
 
-See [Resource Namespacing](./resource-namespacing.md) for details.
+See [Resource Namespacing](./resource-namespacing.md) for details on the routing table approach.
 
 ## Example Scripts
 
 ### Simple Tool Call
 
 ```lua
-local result = calculator.add({ a = 10, b = 20 }):await()
-result(result)
+local sum = calculator.add({ a = 10, b = 20 }):await()
+result(sum)
 ```
 
 ### Multi-Server Orchestration
@@ -352,12 +365,13 @@ result({ user_names = names })
 
 ## Implementation Files
 
-| File                            | Purpose                           |
-| ------------------------------- | --------------------------------- |
-| `src/lua/runtime.ts`            | Main `WasmoonRuntime` class       |
-| `src/tools/execute-lua-tool.ts` | Gateway tool that invokes runtime |
-| `src/utils/lua-identifier.ts`   | Name sanitization utilities       |
-| `src/utils/resource-uri.ts`     | URI namespacing for tool results  |
+| File                                                 | Purpose                                   |
+| ---------------------------------------------------- | ----------------------------------------- |
+| `packages/lua-runtime/src/runtime.ts`                | Main `WasmoonRuntime` class               |
+| `apps/gateway/src/tools/execute-lua-tool.ts`         | Gateway tool that invokes runtime         |
+| `apps/gateway/src/tools/gateway-builtins-builder.ts` | Constructs `_gateway` table with builtins |
+| `packages/mcp-utilities/src/lua-identifier.ts`       | Name sanitization utilities               |
+| `packages/mcp-utilities/src/resource-uri.ts`         | URI utilities for skill resources         |
 
 ## Related Documentation
 

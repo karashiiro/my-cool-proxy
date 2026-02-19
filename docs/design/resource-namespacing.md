@@ -1,6 +1,6 @@
-# Resource Namespacing
+# Resource Routing
 
-This document explains how the MCP Gateway Proxy aggregates resources and prompts from multiple upstream servers and uses URI namespacing to prevent collisions.
+This document explains how the MCP Gateway Proxy aggregates resources and prompts from multiple upstream servers and routes requests to the correct server.
 
 ## The Problem
 
@@ -11,18 +11,11 @@ Server A: file:///config.json
 Server B: file:///config.json  ← Same URI, different content!
 ```
 
-Without namespacing, the gateway couldn't distinguish which server owns which resource.
+Without routing, the gateway couldn't distinguish which server owns which resource.
 
-## The Solution: URI Namespacing
+## The Solution: Routing Tables
 
-All resource URIs are prefixed with the server name:
-
-```
-Original:    file:///config.json
-Namespaced:  gw://server-a/file:///config.json
-```
-
-The `gw://` (gateway) scheme with server name creates a unique namespace.
+The gateway maintains per-session routing tables that map resource URIs to their source servers. Resource URIs pass through **unchanged** — the gateway never modifies them.
 
 ```mermaid
 flowchart LR
@@ -32,106 +25,84 @@ flowchart LR
     end
 
     subgraph Gateway["Gateway"]
-        Namespace["Namespacing"]
+        Routing["Routing Table<br/>file:///config.json → Server A (or B)"]
     end
 
     subgraph Agent["Agent View"]
-        NA["gw://server-a/file:///config.json"]
-        NB["gw://server-b/file:///config.json"]
+        NA["file:///config.json"]
     end
 
-    SA --> Namespace
-    SB --> Namespace
-    Namespace --> NA
-    Namespace --> NB
+    SA --> Routing
+    SB --> Routing
+    Routing --> NA
 ```
 
-## Where Namespacing Happens
+> **Note:** When two servers expose the same URI, a collision warning is logged and the last-registered server wins. This is an inherent limitation of the routing-table approach when URIs genuinely collide.
 
-Namespacing occurs at two levels:
+### Why Not `gw://` URI Namespacing?
 
-### 1. Aggregation Services (Gateway Level)
+An earlier version of the gateway embedded the server name into resource URIs (e.g., `gw://server-a/file:///config.json`). This was removed because URI parsers in MCP clients (e.g., VS Code) normalize paths and destroy embedded URIs, making the scheme fragile in practice.
 
-For listing and reading resources/prompts:
+## How Routing Works
+
+### Three Sources of Routing Data
+
+The routing table is populated from three sources, checked in priority order:
 
 ```mermaid
 flowchart TB
-    subgraph List["listResources()"]
-        L1["Fetch from all servers"]
-        L2["Namespace each URI"]
-        L3["Return aggregated list"]
-        L1 --> L2 --> L3
+    subgraph Sources["Routing Data Sources"]
+        List["1. Resource Listings<br/>(listResources / listResourceTemplates)"]
+        Encountered["2. Encountered URIs<br/>(tool results / prompt results)"]
+        Templates["3. Template Prefix Matching<br/>(listResourceTemplates)"]
     end
 
-    subgraph Read["readResource(uri)"]
-        R1["Parse namespaced URI"]
-        R2["Extract server name"]
-        R3["Route to correct server"]
-        R4["Namespace response URIs"]
-        R1 --> R2 --> R3 --> R4
+    subgraph Resolution["URI Resolution Order"]
+        R1["Exact match in URI map"]
+        R2["Exact match in encountered map"]
+        R3["Longest template prefix match"]
     end
+
+    List --> R1
+    Encountered --> R2
+    Templates --> R3
+
+    R1 -->|"miss"| R2
+    R2 -->|"miss"| R3
 ```
 
-### 2. Lua Runtime (Tool Results)
+| Source              | Populated By                                                        | Survives Invalidation?                   |
+| ------------------- | ------------------------------------------------------------------- | ---------------------------------------- |
+| **URI map**         | `listResources()` results                                           | No — cleared on `resources/list_changed` |
+| **Encountered map** | `resource_link` / `resource` blocks in tool and prompt results      | Yes — persists across cache invalidation |
+| **Template map**    | `listResourceTemplates()` results, matched by longest static prefix | No — cleared on `resources/list_changed` |
 
-For tool call results that contain resources:
-
-```mermaid
-flowchart TB
-    Tool["Tool Call"] --> Result["Tool Result"]
-    Result --> Check{"Contains resources?"}
-    Check -->|Yes| Namespace["Namespace URIs"]
-    Check -->|No| Return["Return as-is"]
-    Namespace --> Return
-```
-
-The runtime namespaces because:
-
-- It knows which server the tool belongs to
-- Scripts can call tools from multiple servers
-- Results must be namespaced per-call
-
-## URI Format
-
-### Namespaced URI Structure
-
-```
-gw://server-name/original-uri
-└──┬─┘ └────┬────┘ └────┬────┘
-scheme  server     original
-```
-
-### Examples
-
-| Original                      | Server      | Namespaced                                |
-| ----------------------------- | ----------- | ----------------------------------------- |
-| `file:///data.json`           | calculator  | `gw://calculator/file:///data.json`       |
-| `https://api.example.com/doc` | my-api      | `gw://my-api/https://api.example.com/doc` |
-| `custom://resource/1`         | data-server | `gw://data-server/custom://resource/1`    |
-
-## Resource Aggregation Service
-
-The `ResourceAggregationService` handles resource operations:
-
-### Listing Resources
+### Registration Flow
 
 ```mermaid
 sequenceDiagram
     participant Agent
     participant Gateway
-    participant Service as Resource Aggregation
+    participant Routing as Routing Service
     participant ClientA as Server A Client
     participant ClientB as Server B Client
 
+    Note over Agent,ClientB: Resource Listing
     Agent->>Gateway: listResources()
-    Gateway->>Service: listResources(sessionId)
-    Service->>ClientA: listResources()
-    Service->>ClientB: listResources()
-    ClientA-->>Service: [file:///a.txt]
-    ClientB-->>Service: [file:///b.txt]
-    Service->>Service: Namespace URIs
-    Service-->>Gateway: [gw://server-a/file:///a.txt,<br/>gw://server-b/file:///b.txt]
-    Gateway-->>Agent: Aggregated list
+    Gateway->>ClientA: listResources()
+    Gateway->>ClientB: listResources()
+    ClientA-->>Gateway: [file:///a.txt]
+    ClientB-->>Gateway: [file:///b.txt]
+    Gateway->>Routing: registerUri("file:///a.txt", "server-a")
+    Gateway->>Routing: registerUri("file:///b.txt", "server-b")
+    Gateway-->>Agent: [file:///a.txt, file:///b.txt]
+
+    Note over Agent,ClientB: Tool Execution (Encounter-Based)
+    Agent->>Gateway: execute("server_a.some_tool({})")
+    Gateway->>ClientA: callTool("some_tool", {})
+    ClientA-->>Gateway: {content: [{type: "resource_link", uri: "file:///new.txt"}]}
+    Gateway->>Routing: registerEncounteredUri("file:///new.txt", "server-a")
+    Gateway-->>Agent: Tool result
 ```
 
 ### Reading Resources
@@ -140,30 +111,33 @@ sequenceDiagram
 sequenceDiagram
     participant Agent
     participant Gateway
-    participant Service as Resource Aggregation
+    participant Routing as Routing Service
     participant Client as Target Server
 
-    Agent->>Gateway: readResource(gw://server-a/file:///data.json)
-    Gateway->>Service: readResource(uri)
-    Service->>Service: Parse URI → server-a, file:///data.json
-    Service->>Client: readResource(file:///data.json)
-    Client-->>Service: Resource content
-    Service->>Service: Namespace any URIs in content
-    Service-->>Gateway: Namespaced response
+    Agent->>Gateway: readResource("file:///data.json")
+    Gateway->>Routing: getServerForUri("file:///data.json")
+    Routing-->>Gateway: "server-a"
+    Gateway->>Client: readResource("file:///data.json")
+    Client-->>Gateway: Resource content
     Gateway-->>Agent: Resource content
 ```
 
-### Caching
+The key insight: URIs are sent to upstream servers **exactly as the agent requests them** — no transformation needed.
 
-Resources are cached per session:
+## Cache Invalidation
 
-- First `listResources()` call fetches from all servers
-- Subsequent calls return cached data
-- Cache invalidated on `resources/list_changed` notification
+When an upstream server sends a `resources/list_changed` notification:
 
-## Prompt Aggregation Service
+1. The resource cache is cleared
+2. The template cache is cleared
+3. Listing-derived routes (URI map + template map) are invalidated
+4. **Encountered URIs are preserved** — they remain valid references even when the listing changes
 
-Prompts use a simpler namespacing scheme:
+This design ensures that resources discovered via tool results remain routable even after a listing invalidation.
+
+## Prompt Aggregation
+
+Prompts use a simpler namespacing scheme based on name prefixing:
 
 ```
 Format: {server-name}/{prompt-name}
@@ -173,8 +147,6 @@ Example: calculator/help
 ```
 
 ### Listing Prompts
-
-Similar flow to resources:
 
 1. Fetch from all servers
 2. Prefix each prompt name with server name
@@ -189,19 +161,18 @@ sequenceDiagram
     participant Service as Prompt Aggregation
     participant Client as Target Server
 
-    Agent->>Gateway: getPrompt(calculator/help)
+    Agent->>Gateway: getPrompt("calculator/help")
     Gateway->>Service: getPrompt(name)
     Service->>Service: Parse → calculator, help
-    Service->>Client: getPrompt(help)
+    Service->>Client: getPrompt("help")
     Client-->>Service: Prompt with messages
-    Service->>Service: Namespace resource URIs in messages
-    Service-->>Gateway: Namespaced prompt
+    Service-->>Gateway: Prompt content
     Gateway-->>Agent: Prompt content
 ```
 
 ### Resource URIs in Prompts
 
-Prompts can contain embedded resources or resource links. These are also namespaced:
+Prompts can contain embedded resources or resource links. When encountered, these URIs are registered in the routing table for future reads:
 
 ```json
 {
@@ -211,7 +182,7 @@ Prompts can contain embedded resources or resource links. These are also namespa
       "content": {
         "type": "resource",
         "resource": {
-          "uri": "gw://calculator/file:///template.txt"
+          "uri": "file:///template.txt"
         }
       }
     }
@@ -219,144 +190,56 @@ Prompts can contain embedded resources or resource links. These are also namespa
 }
 ```
 
-## Tool Result Namespacing
+## Tool Result Resource Registration
 
-When tools return resources, the Lua runtime namespaces them:
+When tools return content containing resource references, the Lua runtime registers them in the encountered map:
 
-### Content Types Namespaced
+### Content Types Registered
 
-| Content Type    | Field Namespaced |
+| Content Type    | Field Registered |
 | --------------- | ---------------- |
 | `resource`      | `resource.uri`   |
 | `resource_link` | `uri`            |
 
-### Example
+This ensures that resources discovered dynamically via tool calls can be read later without requiring a fresh `listResources()` call.
 
-Tool returns:
+## Related Scheme: `gw-skill://`
 
-```json
-{
-  "content": [
-    {
-      "type": "resource_link",
-      "uri": "file:///output.json"
-    }
-  ]
-}
-```
+The gateway uses a `gw-skill://` scheme for [Skills](./skills.md) — local process documents stored in the gateway's config directory. This scheme is handled by a separate resource provider (not the routing table):
 
-After namespacing (from `data-server`):
+- **Routing table** — Routes URIs from upstream MCP servers (proxied content)
+- **`gw-skill://`** — References gateway-local skill resources (local content)
 
-```json
-{
-  "content": [
-    {
-      "type": "resource_link",
-      "uri": "gw://data-server/file:///output.json"
-    }
-  ]
-}
-```
-
-## URI Utilities
-
-The `src/utils/resource-uri.ts` module provides:
-
-### namespaceResourceUri
-
-```typescript
-namespaceResourceUri("data-server", "file:///data.json");
-// → "gw://data-server/file:///data.json"
-```
-
-### parseResourceUri
-
-```typescript
-parseResourceUri("gw://data-server/file:///data.json");
-// → { serverName: "data-server", originalUri: "file:///data.json" }
-```
-
-### namespaceResource
-
-Namespaces a full resource object:
-
-```typescript
-namespaceResource("server", { uri: "file:///x", name: "X" });
-// → { uri: "gw://server/file:///x", name: "X" }
-```
-
-### namespaceCallToolResultResources
-
-Walks through tool result content and namespaces all resource URIs.
-
-### namespaceGetPromptResultResources
-
-Namespaces resource URIs in prompt messages.
-
-## Error Handling
-
-### Invalid Namespaced URI
-
-If an agent requests a resource with an invalid namespaced URI:
-
-```
-Requested: gw://unknown-server/file:///data.json
-Error: Server 'unknown-server' not found
-```
-
-### Missing Original URI
-
-If the namespaced URI is malformed:
-
-```
-Requested: gw://server
-Error: Invalid namespaced URI format
-```
+Both appear in `_gateway.list_resources()` results and native MCP resource operations, allowing agents to discover both upstream resources and available skills.
 
 ## Implementation Files
 
-| File                                      | Purpose                           |
-| ----------------------------------------- | --------------------------------- |
-| `src/utils/resource-uri.ts`               | URI namespacing/parsing utilities |
-| `src/mcp/resource-aggregation-service.ts` | Resource listing and reading      |
-| `src/mcp/prompt-aggregation-service.ts`   | Prompt listing and getting        |
-| `src/lua/runtime.ts`                      | Tool result namespacing           |
+| File                                                             | Purpose                                   |
+| ---------------------------------------------------------------- | ----------------------------------------- |
+| `packages/mcp-aggregation/src/resource-routing-service.ts`       | URI → server routing table                |
+| `packages/mcp-aggregation/src/resource-aggregation-service.ts`   | Resource listing, reading, and cache mgmt |
+| `packages/mcp-aggregation/src/prompt-aggregation-service.ts`     | Prompt listing and getting                |
+| `packages/mcp-aggregation/src/completion-aggregation-service.ts` | Completion aggregation                    |
+| `packages/lua-runtime/src/runtime.ts`                            | Tool result resource registration         |
 
 ## Design Decisions
 
-### Why gw:// Scheme?
+### Why Routing Tables Instead of URI Mutation?
 
-- Clear indication this is a gateway-namespaced URI
-- Won't conflict with other schemes (file, http, etc.)
-- Easy to identify and parse
+- **Client compatibility** — URI parsers in MCP clients (e.g., VS Code) normalize paths and can destroy embedded URIs
+- **Simplicity** — Upstream servers receive the exact URIs they expect
+- **Transparency** — No information loss or transformation needed for round-trips
 
-### Related Scheme: gw-skill://
+### Why Preserve Encountered URIs Across Invalidation?
 
-The gateway also uses a `gw-skill://` scheme for [Skills](./skills.md) - local process documents stored in the gateway's config directory. This scheme is distinct from `gw://` because:
+When a server reports `resources/list_changed`, the listing-derived routes are cleared. But URIs discovered via tool results or prompt results remain valid references — they point to specific resources the agent has already interacted with. Preserving them prevents the agent from losing access to resources it discovered dynamically.
 
-- **`gw://`** - Namespaces resources from upstream MCP servers (proxied content)
-- **`gw-skill://`** - References gateway-local skill resources (local content)
+### URI Collision Handling
 
-Both schemes appear in `_gateway.list_resources()` results (and native MCP resource operations), allowing agents to discover both upstream resources and available skills.
-
-### Why Namespace in Runtime Too?
-
-The aggregation services handle list/read operations, but tool results also need namespacing because:
-
-- Tools can return resource links
-- The runtime knows the source server
-- Scripts can call multiple servers in one execution
-
-### Why Not Modify Original URIs?
-
-We preserve the original URI after the server name so:
-
-- Upstream servers receive the exact URIs they expect
-- Easy round-trip: namespace → parse → original
-- No information loss
+When two servers register the same URI, the last registration wins and a warning is logged. This is a deliberate tradeoff: true URI collisions are rare in practice, and the simplicity of the routing table approach outweighs the edge case.
 
 ## Related Documentation
 
-- [Lua Runtime](./lua-runtime.md) - Where tool result namespacing happens
+- [Lua Runtime](./lua-runtime.md) - Where tool result resource registration happens
 - [Session Management](./session-management.md) - Per-session resource caching
 - [Index](./index.md) - High-level architecture overview

@@ -657,7 +657,7 @@ Skills are reusable instruction sets that extend the gateway's capabilities. The
 
 - **mutable** (boolean, optional): Allow creating and modifying skills. Default: `false`
   - Only takes effect if `enabled` is `true`
-  - When `true`, enables the `_gateway.write_skill()` Lua builtin
+  - When `true`, enables the `_gateway.write_skill()` and `_gateway.update_skill()` Lua builtins
   - When `false`, skills are read-only (can read via resources and invoke scripts, but not create/modify)
 
 ### Accessing Skills
@@ -673,10 +673,11 @@ Use the standard `resources/list` and `resources/read` MCP operations to discove
 
 When skills are enabled, these Lua builtins become available in the `_gateway` table:
 
-| Builtin                                 | Requires                            | Description                                         |
-| --------------------------------------- | ----------------------------------- | --------------------------------------------------- |
-| `_gateway.invoke_skill_script({ ... })` | `enabled: true`                     | Execute scripts from a skill's `scripts/` directory |
-| `_gateway.write_skill({ ... })`         | `enabled: true` AND `mutable: true` | Create or modify skills and their files             |
+| Builtin                                 | Requires                            | Description                                            |
+| --------------------------------------- | ----------------------------------- | ------------------------------------------------------ |
+| `_gateway.invoke_skill_script({ ... })` | `enabled: true`                     | Execute scripts from a skill's `scripts/` directory    |
+| `_gateway.write_skill({ ... })`         | `enabled: true` AND `mutable: true` | Create or modify skills and their files                |
+| `_gateway.update_skill({ ... })`        | `enabled: true` AND `mutable: true` | Partially update a skill file using string replacement |
 
 Note: `_gateway.list_resources()` and `_gateway.read_resource()` are always available (not skill-specific) and can be used to discover and read skills.
 
