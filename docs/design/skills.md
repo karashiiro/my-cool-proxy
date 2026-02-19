@@ -120,11 +120,11 @@ Instructions for the agent on how to perform code reviews...
 
 When skills are enabled, these Lua builtins become available in the `_gateway` global table (within `execute` scripts):
 
-| Builtin                                 | Requires                                          | Description                                               |
-| --------------------------------------- | ------------------------------------------------- | --------------------------------------------------------- |
-| `_gateway.invoke_skill_script({ ... })` | `skills.enabled: true`                            | Execute a script from a skill's `scripts/` directory      |
-| `_gateway.write_skill({ ... })`         | `skills.enabled: true` AND `skills.mutable: true` | Create or modify skills and their files                   |
-| `_gateway.update_skill({ ... })`        | `skills.enabled: true` AND `skills.mutable: true` | Partially update a skill file using string replacement    |
+| Builtin                                 | Requires                                          | Description                                            |
+| --------------------------------------- | ------------------------------------------------- | ------------------------------------------------------ |
+| `_gateway.invoke_skill_script({ ... })` | `skills.enabled: true`                            | Execute a script from a skill's `scripts/` directory   |
+| `_gateway.write_skill({ ... })`         | `skills.enabled: true` AND `skills.mutable: true` | Create or modify skills and their files                |
+| `_gateway.update_skill({ ... })`        | `skills.enabled: true` AND `skills.mutable: true` | Partially update a skill file using string replacement |
 
 Additionally, these builtins are always available (not skill-specific):
 
@@ -267,12 +267,12 @@ The native resource protocol handlers exist for clients that _do_ support resour
 
 ### Key Components
 
-| Component               | File                                                         | Purpose                                          |
-| ----------------------- | ------------------------------------------------------------ | ------------------------------------------------ |
-| `SkillDiscoveryService` | `apps/gateway/src/services/skill-discovery-service.ts`       | Scans skill directories, resolves skill content  |
-| `SkillOperationsService`| `apps/gateway/src/services/skill-operations-service.ts`      | Creates, modifies, and updates skills            |
-| `SkillResourceProvider` | `apps/gateway/src/services/skill-resource-provider.ts`       | Provides skills as MCP resources                 |
-| `GatewayBuiltinsBuilder`| `apps/gateway/src/tools/gateway-builtins-builder.ts`         | Constructs `_gateway.*` builtins for skill ops   |
+| Component                | File                                                    | Purpose                                         |
+| ------------------------ | ------------------------------------------------------- | ----------------------------------------------- |
+| `SkillDiscoveryService`  | `apps/gateway/src/services/skill-discovery-service.ts`  | Scans skill directories, resolves skill content |
+| `SkillOperationsService` | `apps/gateway/src/services/skill-operations-service.ts` | Creates, modifies, and updates skills           |
+| `SkillResourceProvider`  | `apps/gateway/src/services/skill-resource-provider.ts`  | Provides skills as MCP resources                |
+| `GatewayBuiltinsBuilder` | `apps/gateway/src/tools/gateway-builtins-builder.ts`    | Constructs `_gateway.*` builtins for skill ops  |
 
 ### Resource Integration
 

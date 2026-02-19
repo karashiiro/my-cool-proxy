@@ -382,12 +382,12 @@ In stdio mode:
 
 ## Implementation Files
 
-| File                                            | Purpose                                          |
-| ----------------------------------------------- | ------------------------------------------------ |
-| `apps/gateway/src/index.ts`                     | Session factory and lifecycle callbacks          |
-| `packages/mcp-client/src/client-manager.ts`     | Client lifecycle and session keying              |
-| `packages/mcp-client/src/client-session.ts`     | Per-client caching and filtering                 |
-| `apps/gateway/src/mcp/gateway-server.ts`        | Per-session Gateway server with tool integration |
+| File                                        | Purpose                                          |
+| ------------------------------------------- | ------------------------------------------------ |
+| `apps/gateway/src/index.ts`                 | Session factory and lifecycle callbacks          |
+| `packages/mcp-client/src/client-manager.ts` | Client lifecycle and session keying              |
+| `packages/mcp-client/src/client-session.ts` | Per-client caching and filtering                 |
+| `apps/gateway/src/mcp/gateway-server.ts`    | Per-session Gateway server with tool integration |
 
 ## Best Practices
 

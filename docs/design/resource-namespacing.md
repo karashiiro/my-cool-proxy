@@ -71,11 +71,11 @@ flowchart TB
     R2 -->|"miss"| R3
 ```
 
-| Source | Populated By | Survives Invalidation? |
-| --- | --- | --- |
-| **URI map** | `listResources()` results | No — cleared on `resources/list_changed` |
-| **Encountered map** | `resource_link` / `resource` blocks in tool and prompt results | Yes — persists across cache invalidation |
-| **Template map** | `listResourceTemplates()` results, matched by longest static prefix | No — cleared on `resources/list_changed` |
+| Source              | Populated By                                                        | Survives Invalidation?                   |
+| ------------------- | ------------------------------------------------------------------- | ---------------------------------------- |
+| **URI map**         | `listResources()` results                                           | No — cleared on `resources/list_changed` |
+| **Encountered map** | `resource_link` / `resource` blocks in tool and prompt results      | Yes — persists across cache invalidation |
+| **Template map**    | `listResourceTemplates()` results, matched by longest static prefix | No — cleared on `resources/list_changed` |
 
 ### Registration Flow
 
@@ -214,13 +214,13 @@ Both appear in `_gateway.list_resources()` results and native MCP resource opera
 
 ## Implementation Files
 
-| File                                                                 | Purpose                                      |
-| -------------------------------------------------------------------- | -------------------------------------------- |
-| `packages/mcp-aggregation/src/resource-routing-service.ts`           | URI → server routing table                   |
-| `packages/mcp-aggregation/src/resource-aggregation-service.ts`       | Resource listing, reading, and cache mgmt    |
-| `packages/mcp-aggregation/src/prompt-aggregation-service.ts`         | Prompt listing and getting                   |
-| `packages/mcp-aggregation/src/completion-aggregation-service.ts`     | Completion aggregation                       |
-| `packages/lua-runtime/src/runtime.ts`                                | Tool result resource registration            |
+| File                                                             | Purpose                                   |
+| ---------------------------------------------------------------- | ----------------------------------------- |
+| `packages/mcp-aggregation/src/resource-routing-service.ts`       | URI → server routing table                |
+| `packages/mcp-aggregation/src/resource-aggregation-service.ts`   | Resource listing, reading, and cache mgmt |
+| `packages/mcp-aggregation/src/prompt-aggregation-service.ts`     | Prompt listing and getting                |
+| `packages/mcp-aggregation/src/completion-aggregation-service.ts` | Completion aggregation                    |
+| `packages/lua-runtime/src/runtime.ts`                            | Tool result resource registration         |
 
 ## Design Decisions
 
