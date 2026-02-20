@@ -1,10 +1,8 @@
 import { injectable } from "inversify";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { getErrorMessage } from "@my-cool-proxy/mcp-utilities";
 import type {
   ILogger,
+  IMCPClientManager,
   IServerInfoPreloader,
   PreloadedServerInfo,
   ServerConfig,
@@ -13,6 +11,7 @@ import type {
 import { $inject } from "../container/decorators.js";
 import { TYPES } from "../types/index.js";
 
+const PROBE_SESSION_ID = "__probe__";
 const MAX_INSTRUCTION_EXCERPT_LENGTH = 200;
 const MAX_TOOLS_IN_INSTRUCTIONS = 40;
 const MAX_RESOURCES_IN_INSTRUCTIONS = 10;
@@ -20,127 +19,109 @@ const MAX_RESOURCE_TEMPLATES_IN_INSTRUCTIONS = 10;
 
 @injectable()
 export class ServerInfoPreloader implements IServerInfoPreloader {
-  constructor(@$inject(TYPES.Logger) private logger: ILogger) {}
+  constructor(
+    @$inject(TYPES.Logger) private logger: ILogger,
+    @$inject(TYPES.MCPClientManager)
+    private clientManager: IMCPClientManager,
+  ) {}
 
   async preloadServerInfo(
     config: ServerConfig,
   ): Promise<PreloadedServerInfo[]> {
-    const results: PreloadedServerInfo[] = [];
-
-    const probePromises = Object.entries(config.mcpClients).map(
-      async ([name, clientConfig]): Promise<PreloadedServerInfo> => {
-        try {
-          // Create a minimal client just for probing
-          const sdkClient = new Client(
-            {
-              name: "my-cool-proxy-probe",
-              version: "1.0.0",
-            },
-            {
-              capabilities: {},
-              enforceStrictCapabilities: true,
-            },
-          );
-
-          let transport;
-          if (clientConfig.type === "http") {
-            transport = new StreamableHTTPClientTransport(
-              new URL(clientConfig.url),
-              clientConfig.headers
-                ? { requestInit: { headers: clientConfig.headers } }
-                : undefined,
-            );
-          } else {
-            transport = new StdioClientTransport({
-              command: clientConfig.command,
-              args: clientConfig.args,
-              env: clientConfig.env,
-            });
-          }
-
-          await sdkClient.connect(transport);
-
-          // Get server info
-          const serverVersion = sdkClient.getServerVersion();
-          const instructions = sdkClient.getInstructions();
-
-          // Get tool names
-          let toolNames: string[] = [];
-          try {
-            const toolsResponse = await sdkClient.listTools();
-            toolNames = toolsResponse.tools.map((t) => t.name);
-          } catch (error) {
-            this.logger.warn(
-              `Failed to list tools for server '${name}': ${getErrorMessage(error)}`,
-            );
-          }
-
-          // Get resource and template names (only if server advertises resources capability)
-          let resourceNames: string[] = [];
-          let resourceTemplateNames: string[] = [];
-          const capabilities = sdkClient.getServerCapabilities();
-
-          if (capabilities?.resources) {
-            try {
-              const resourcesResponse = await sdkClient.listResources();
-              resourceNames = resourcesResponse.resources.map((r) => r.uri);
-            } catch (error) {
-              this.logger.warn(
-                `Failed to list resources for server '${name}': ${getErrorMessage(error)}`,
-              );
-            }
-
-            try {
-              const templatesResponse =
-                await sdkClient.listResourceTemplates();
-              resourceTemplateNames =
-                templatesResponse.resourceTemplates.map(
-                  (t) => t.uriTemplate,
-                );
-            } catch (error) {
-              this.logger.warn(
-                `Failed to list resource templates for server '${name}': ${getErrorMessage(error)}`,
-              );
-            }
-          }
-
-          // Close the probe connection
-          await sdkClient.close();
-
-          this.logger.info(
-            `Preloaded info for server '${name}': ${serverVersion?.name || "unnamed"} ${serverVersion?.version || "unknown"} (${toolNames.length} tools, ${resourceNames.length} resources, ${resourceTemplateNames.length} templates)`,
-          );
-
-          return {
+    // Connect all servers via the client manager using a probe session
+    const connectionPromises = Object.entries(config.mcpClients).map(
+      ([name, clientConfig]) => {
+        if (clientConfig.type === "http") {
+          return this.clientManager.addHttpClient(
             name,
-            serverName: serverVersion?.name,
-            description: serverVersion?.description,
-            version: serverVersion?.version,
-            instructions,
-            toolNames,
-            resourceNames,
-            resourceTemplateNames,
-          };
-        } catch (error) {
-          const errorMessage = getErrorMessage(error);
-          this.logger.warn(
-            `Failed to preload info for server '${name}': ${errorMessage}`,
+            clientConfig.url,
+            PROBE_SESSION_ID,
+            clientConfig.headers,
           );
-          // Return minimal info on failure
-          return {
+        } else {
+          return this.clientManager.addStdioClient(
             name,
-          };
+            clientConfig.command,
+            PROBE_SESSION_ID,
+            clientConfig.args,
+            clientConfig.env,
+          );
         }
       },
     );
 
-    const settledResults = await Promise.allSettled(probePromises);
+    await Promise.allSettled(connectionPromises);
 
-    for (const result of settledResults) {
-      if (result.status === "fulfilled") {
-        results.push(result.value);
+    // Gather info from successfully connected sessions
+    const results: PreloadedServerInfo[] = [];
+    const sessions =
+      this.clientManager.getClientsBySession(PROBE_SESSION_ID);
+
+    for (const [name, session] of sessions) {
+      try {
+        const serverVersion = session.getServerVersion();
+        const instructions = session.getInstructions();
+
+        // Get tool names
+        let toolNames: string[] = [];
+        try {
+          const tools = await session.listTools();
+          toolNames = tools.map((t) => t.name);
+        } catch (error) {
+          this.logger.warn(
+            `Failed to list tools for server '${name}': ${getErrorMessage(error)}`,
+          );
+        }
+
+        // Get resource and template names (servers without resource capability will throw)
+        let resourceNames: string[] = [];
+        let resourceTemplateNames: string[] = [];
+
+        try {
+          const resources = await session.listResources();
+          resourceNames = resources.map((r) => r.uri);
+        } catch {
+          // Server doesn't support resources — that's fine
+        }
+
+        try {
+          const templates = await session.listResourceTemplates();
+          resourceTemplateNames = templates.map((t) => t.uriTemplate);
+        } catch {
+          // Server doesn't support resource templates — that's fine
+        }
+
+        this.logger.info(
+          `Preloaded info for server '${name}': ${serverVersion?.name || "unnamed"} ${serverVersion?.version || "unknown"} (${toolNames.length} tools, ${resourceNames.length} resources, ${resourceTemplateNames.length} templates)`,
+        );
+
+        results.push({
+          name,
+          serverName: serverVersion?.name,
+          description: serverVersion?.description,
+          version: serverVersion?.version,
+          instructions,
+          toolNames,
+          resourceNames,
+          resourceTemplateNames,
+        });
+      } catch (error) {
+        this.logger.warn(
+          `Failed to preload info for server '${name}': ${getErrorMessage(error)}`,
+        );
+        results.push({ name });
       }
     }
+
+    // Include failed servers as minimal entries
+    const failedServers =
+      this.clientManager.getFailedServers(PROBE_SESSION_ID);
+    for (const [name] of failedServers) {
+      results.push({ name });
+    }
+
+    // Clean up probe connections
+    await this.clientManager.closeSession(PROBE_SESSION_ID);
 
     return results;
   }

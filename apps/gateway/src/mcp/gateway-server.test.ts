@@ -2055,11 +2055,11 @@ describe("MCPGatewayServer - Resource Aggregation", () => {
       });
     });
 
-    it("should route resource read via encounter map when URI was never listed", async () => {
-      // The resource exists on the upstream server, but the gateway client never
-      // calls listResources — so the routing table has no entry for this URI.
-      // The tool returns a resource_link, which registers in the encounter map,
-      // enabling subsequent readResource without prior listing.
+    it("should read resource returned as resource_link without prior listResources call", async () => {
+      // The gateway client never calls listResources, but auto-populate
+      // (triggered on readResource) discovers the route from the upstream
+      // server. The tool also returns a resource_link which registers in
+      // the encounter map — either path enables the read.
       const { server, client } = await createTestServerWithToolsAndResources(
         "dynamic-server",
         [
@@ -2139,14 +2139,9 @@ describe("MCPGatewayServer - Resource Aggregation", () => {
       );
       await gatewayClient.connect(clientTransport);
 
-      // Do NOT call listResources — the resource is not listed
+      // Do NOT call listResources — verify auto-populate handles routing
 
-      // Step 0: Verify the URI is NOT routable before the tool call
-      await expect(
-        gatewayClient.readResource({ uri: "file:///dynamic/report.json" }),
-      ).rejects.toThrow(/No route found/);
-
-      // Step 1: Call the tool — this registers the URI via encounter map
+      // Step 1: Call the tool — this returns a resource_link
       const toolResult = await gatewayClient.callTool({
         name: "execute",
         arguments: {
@@ -2165,7 +2160,7 @@ describe("MCPGatewayServer - Resource Aggregation", () => {
       );
       expect(resourceLink).toBeDefined();
 
-      // Step 2: Read the resource — should route via encounter map
+      // Step 2: Read the resource — should succeed without prior listResources
       const readResult = await gatewayClient.readResource({
         uri: "file:///dynamic/report.json",
       });

@@ -1,10 +1,15 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { ServerInfoPreloader } from "./server-info-preloader.js";
-import type { ILogger, SkillMetadata } from "../types/interfaces.js";
+import type {
+  ILogger,
+  IMCPClientManager,
+  SkillMetadata,
+} from "../types/interfaces.js";
 
 describe("ServerInfoPreloader", () => {
   let preloader: ServerInfoPreloader;
   let mockLogger: ILogger;
+  let mockClientManager: IMCPClientManager;
 
   beforeEach(() => {
     mockLogger = {
@@ -15,7 +20,21 @@ describe("ServerInfoPreloader", () => {
       fatal: vi.fn(),
     };
 
-    preloader = new ServerInfoPreloader(mockLogger);
+    mockClientManager = {
+      addHttpClient: vi.fn(),
+      addStdioClient: vi.fn(),
+      getClient: vi.fn(),
+      getClientsBySession: vi.fn().mockReturnValue(new Map()),
+      getFailedServers: vi.fn().mockReturnValue(new Map()),
+      closeSession: vi.fn(),
+      setResourceListChangedHandler: vi.fn(),
+      setPromptListChangedHandler: vi.fn(),
+      setToolListChangedHandler: vi.fn(),
+      setLoggingMessageHandler: vi.fn(),
+      close: vi.fn(),
+    } as unknown as IMCPClientManager;
+
+    preloader = new ServerInfoPreloader(mockLogger, mockClientManager);
   });
 
   describe("buildSkillInstructions", () => {
