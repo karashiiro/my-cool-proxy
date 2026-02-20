@@ -328,9 +328,7 @@ describe("ServerInfoPreloader", () => {
     });
 
     it("should omit resource templates line when server has no templates", () => {
-      const servers = [
-        { name: "no-tmpl-server", resourceTemplateNames: [] },
-      ];
+      const servers = [{ name: "no-tmpl-server", resourceTemplateNames: [] }];
 
       const result = preloader.buildAggregatedInstructions(servers);
 

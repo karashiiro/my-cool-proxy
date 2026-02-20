@@ -54,8 +54,7 @@ export class ServerInfoPreloader implements IServerInfoPreloader {
 
     // Gather info from successfully connected sessions
     const results: PreloadedServerInfo[] = [];
-    const sessions =
-      this.clientManager.getClientsBySession(PROBE_SESSION_ID);
+    const sessions = this.clientManager.getClientsBySession(PROBE_SESSION_ID);
 
     for (const [name, session] of sessions) {
       try {
@@ -114,8 +113,7 @@ export class ServerInfoPreloader implements IServerInfoPreloader {
     }
 
     // Include failed servers as minimal entries
-    const failedServers =
-      this.clientManager.getFailedServers(PROBE_SESSION_ID);
+    const failedServers = this.clientManager.getFailedServers(PROBE_SESSION_ID);
     for (const [name] of failedServers) {
       results.push({ name });
     }
