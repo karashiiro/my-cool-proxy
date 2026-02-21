@@ -87,6 +87,8 @@ export class SQLiteDatabase {
       );
       CREATE INDEX IF NOT EXISTS idx_lua_tool_calls_execution
         ON lua_tool_calls(execution_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_lua_tool_calls_tool
+        ON lua_tool_calls(server_name, tool_name);
     `);
   }
 

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Badge } from "$lib/components/ui/badge/index.js";
 	import type { LuaExecution } from "$lib/types.js";
+	import type { ToolUsage } from "$lib/api.js";
 
 	let {
 		executions,
@@ -9,6 +10,9 @@
 		hasMore = false,
 		loadingMore = false,
 		onloadmore,
+		tools = [],
+		activeFilter = null,
+		onfilter,
 	}: {
 		executions: LuaExecution[];
 		selectedId: string | null;
@@ -16,7 +20,18 @@
 		hasMore?: boolean;
 		loadingMore?: boolean;
 		onloadmore?: () => void;
+		tools?: ToolUsage[];
+		activeFilter?: string | null;
+		onfilter?: (tool: string | null) => void;
 	} = $props();
+
+	let filterOpen = $state(false);
+	let filterButtonEl = $state<HTMLButtonElement | null>(null);
+	let dropdownPos = $derived.by(() => {
+		if (!filterOpen || !filterButtonEl) return { top: 0, left: 0 };
+		const rect = filterButtonEl.getBoundingClientRect();
+		return { top: rect.bottom + 4, left: rect.left };
+	});
 
 	function formatTime(timestamp: number): string {
 		const diff = Date.now() - timestamp;
@@ -39,6 +54,11 @@
 				.find((l) => l.length > 0) ?? script.trim();
 		return firstLine.length > 60 ? firstLine.slice(0, 57) + "..." : firstLine;
 	}
+
+	function selectTool(tool: string | null) {
+		onfilter?.(tool);
+		filterOpen = false;
+	}
 </script>
 
 <div class="flex h-full flex-col overflow-hidden bg-card/50">
@@ -48,7 +68,83 @@
 			<rect x="9" y="3" width="6" height="4" rx="1" />
 		</svg>
 		<h2 class="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Executions</h2>
+		{#if tools.length > 0}
+			<div class="relative ml-auto">
+				<button
+					bind:this={filterButtonEl}
+					class="filter-button flex items-center gap-1.5 rounded-md px-2 py-1 text-[10px] font-medium transition-colors
+						{activeFilter ? 'bg-primary/15 text-primary border border-primary/30' : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'}"
+					onclick={() => (filterOpen = !filterOpen)}
+					aria-haspopup="listbox"
+					aria-expanded={filterOpen}
+					aria-label={activeFilter ? `Filtered by ${activeFilter}` : "Filter by tool"}
+				>
+					<svg class="size-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+						<path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z" />
+					</svg>
+					{#if activeFilter}
+						{activeFilter}
+					{:else}
+						Filter
+					{/if}
+				</button>
+				{#if filterOpen}
+					<div
+						class="filter-dropdown fixed z-50 min-w-[200px] max-w-[300px] rounded-lg border border-border bg-card shadow-xl"
+						style="top: {dropdownPos.top}px; left: {dropdownPos.left}px;"
+						role="listbox"
+						tabindex="-1"
+						aria-label="Filter by tool"
+						onkeydown={(e) => { if (e.key === "Escape") filterOpen = false; }}
+					>
+						<div class="max-h-[240px] overflow-y-auto p-1">
+							{#if activeFilter}
+								<button
+									class="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[11px] text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
+									onclick={() => selectTool(null)}
+								>
+									<svg class="size-3 opacity-50" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+										<path d="M18 6L6 18M6 6l12 12" />
+									</svg>
+									Clear filter
+								</button>
+								<div class="mx-2 my-1 border-t border-border/50"></div>
+							{/if}
+							{#each tools as t (t.tool)}
+								<button
+									role="option"
+									aria-selected={activeFilter === t.tool}
+									class="flex w-full items-center justify-between gap-2 rounded-md px-2.5 py-1.5 text-left text-[11px] transition-colors hover:bg-accent/50
+										{activeFilter === t.tool ? 'text-primary font-medium' : 'text-foreground/85'}"
+									onclick={() => selectTool(t.tool)}
+								>
+									<span class="truncate font-mono">{t.tool}</span>
+									<span class="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-medium text-muted-foreground">
+										{t.count}
+									</span>
+								</button>
+							{/each}
+						</div>
+					</div>
+				{/if}
+			</div>
+		{/if}
 	</div>
+	{#if activeFilter}
+		<div class="flex items-center gap-2 border-b border-border/50 bg-primary/5 px-3 py-1.5">
+			<span class="text-[10px] text-muted-foreground">Filtered by:</span>
+			<span class="font-mono text-[10px] text-primary">{activeFilter}</span>
+			<button
+				class="ml-auto text-muted-foreground transition-colors hover:text-foreground"
+				onclick={() => onfilter?.(null)}
+				aria-label={`Clear filter: ${activeFilter}`}
+			>
+				<svg class="size-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+					<path d="M18 6L6 18M6 6l12 12" />
+				</svg>
+			</button>
+		</div>
+	{/if}
 	{#if executions.length === 0}
 		<div class="flex flex-1 flex-col items-center justify-center gap-3 p-6">
 			<svg class="size-8 text-muted-foreground/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -56,7 +152,13 @@
 				<path d="M9.75 9.75L7.5 12l2.25 2.25" />
 				<circle cx="12" cy="12" r="10" />
 			</svg>
-			<span class="text-xs text-muted-foreground">No executions yet</span>
+			<span class="text-xs text-muted-foreground">
+				{#if activeFilter}
+					No executions match this filter
+				{:else}
+					No executions yet
+				{/if}
+			</span>
 		</div>
 	{:else}
 		<div class="min-h-0 flex-1 overflow-y-auto">
@@ -108,6 +210,16 @@
 	{/if}
 </div>
 
+<!-- Close filter dropdown when clicking outside -->
+{#if filterOpen}
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
+	<div
+		class="fixed inset-0 z-40"
+		onclick={() => (filterOpen = false)}
+		onkeydown={(e) => { if (e.key === "Escape") filterOpen = false; }}
+	></div>
+{/if}
+
 <style>
 	.section-header {
 		background: linear-gradient(
@@ -122,5 +234,9 @@
 		box-shadow:
 			inset 2px 0 0 oklch(0.78 0.145 70),
 			0 0 12px -4px oklch(0.78 0.145 70 / 0.15);
+	}
+
+	.filter-dropdown {
+		background: oklch(0.16 0.015 260);
 	}
 </style>

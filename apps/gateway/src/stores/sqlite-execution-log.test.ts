@@ -232,6 +232,35 @@ describe("SQLiteExecutionLog", () => {
       expect(log.getAllExecutions()).toEqual([]);
     });
 
+    it("should filter by tool when toolFilter is provided", () => {
+      const exec1 = log.logExecution("s", "script1");
+      log.logToolCall(exec1, "github", "search_code");
+      const exec2 = log.logExecution("s", "script2");
+      log.logToolCall(exec2, "github", "list_issues");
+      const exec3 = log.logExecution("s", "script3");
+      log.logToolCall(exec3, "github", "search_code");
+
+      const filtered = log.getAllExecutions(50, 0, "github.search_code");
+      expect(filtered).toHaveLength(2);
+      // Most recent first
+      expect(filtered[0]!.script).toBe("script3");
+      expect(filtered[1]!.script).toBe("script1");
+    });
+
+    it("should return empty array when toolFilter matches nothing", () => {
+      const exec1 = log.logExecution("s", "script1");
+      log.logToolCall(exec1, "github", "search_code");
+      expect(log.getAllExecutions(50, 0, "nonexistent.tool")).toEqual([]);
+    });
+
+    it("should not duplicate executions with multiple calls to the same tool", () => {
+      const exec1 = log.logExecution("s", "script1");
+      log.logToolCall(exec1, "github", "search_code");
+      log.logToolCall(exec1, "github", "search_code");
+      const filtered = log.getAllExecutions(50, 0, "github.search_code");
+      expect(filtered).toHaveLength(1);
+    });
+
     it("should respect offset parameter", () => {
       for (let i = 0; i < 10; i++) log.logExecution("s", `script${i}`);
       // rowid DESC tiebreaker: script9 is most recent, skip first 3
@@ -251,6 +280,44 @@ describe("SQLiteExecutionLog", () => {
       log.logExecution("s2", "b");
       log.logExecution("s1", "c");
       expect(log.countExecutions()).toBe(3);
+    });
+
+    it("should count only filtered executions when toolFilter is provided", () => {
+      const exec1 = log.logExecution("s", "a");
+      log.logToolCall(exec1, "github", "search_code");
+      const exec2 = log.logExecution("s", "b");
+      log.logToolCall(exec2, "github", "list_issues");
+      const exec3 = log.logExecution("s", "c");
+      log.logToolCall(exec3, "github", "search_code");
+      expect(log.countExecutions("github.search_code")).toBe(2);
+      expect(log.countExecutions("github.list_issues")).toBe(1);
+      expect(log.countExecutions("nonexistent.tool")).toBe(0);
+    });
+  });
+
+  describe("getDistinctTools", () => {
+    it("should return empty array when no tool calls exist", () => {
+      expect(log.getDistinctTools()).toEqual([]);
+    });
+
+    it("should return distinct tools ordered by count descending", () => {
+      const exec1 = log.logExecution("s", "a");
+      log.logToolCall(exec1, "github", "search_code");
+      log.logToolCall(exec1, "github", "search_code");
+      log.logToolCall(exec1, "github", "list_issues");
+      const exec2 = log.logExecution("s", "b");
+      log.logToolCall(exec2, "context7", "query_docs");
+      log.logToolCall(exec2, "context7", "query_docs");
+      log.logToolCall(exec2, "context7", "query_docs");
+
+      const tools = log.getDistinctTools();
+      expect(tools).toHaveLength(3);
+      // context7.query_docs has 3 calls (most)
+      expect(tools[0]).toEqual({ tool: "context7.query_docs", count: 3 });
+      // github.search_code has 2 calls
+      expect(tools[1]).toEqual({ tool: "github.search_code", count: 2 });
+      // github.list_issues has 1 call
+      expect(tools[2]).toEqual({ tool: "github.list_issues", count: 1 });
     });
   });
 

@@ -4,7 +4,8 @@
 	import ExecutionList from "$lib/components/ExecutionList.svelte";
 	import CodeViewer from "$lib/components/CodeViewer.svelte";
 	import ResultPane from "$lib/components/ResultPane.svelte";
-	import { fetchExecutions, fetchToolCalls } from "$lib/api.js";
+	import { fetchExecutions, fetchToolCalls, fetchTools } from "$lib/api.js";
+	import type { ToolUsage } from "$lib/api.js";
 	import { preloadHighlighter } from "$lib/highlight.js";
 	import type { LuaExecution, LuaToolCall } from "$lib/types.js";
 
@@ -17,11 +18,15 @@
 	let selectedToolCall = $state<LuaToolCall | null>(null);
 	let loadError = $state<string | null>(null);
 	let loadingMore = $state(false);
+	let availableTools = $state<ToolUsage[]>([]);
+	let toolFilter = $state<string | null>(null);
 
 	let hasMore = $derived(executions.length < totalExecutions);
 
 	/** Counter to guard against race conditions when rapidly selecting executions */
 	let selectGeneration = 0;
+	/** Counter to guard against race conditions when rapidly switching filters */
+	let filterGeneration = 0;
 
 	let resultLabel = $derived(
 		selectedToolCall
@@ -66,13 +71,40 @@
 		if (loadingMore || !hasMore) return;
 		loadingMore = true;
 		try {
-			const page = await fetchExecutions(PAGE_SIZE, executions.length);
+			const page = await fetchExecutions(PAGE_SIZE, executions.length, toolFilter);
 			executions = [...executions, ...page.executions];
 			totalExecutions = page.total;
 		} catch (err) {
 			loadError = err instanceof Error ? err.message : String(err);
 		} finally {
 			loadingMore = false;
+		}
+	}
+
+	async function handleFilter(tool: string | null) {
+		toolFilter = tool;
+		selectedExecution = null;
+		selectedToolCall = null;
+		toolCalls = [];
+		const generation = ++filterGeneration;
+		try {
+			const page = await fetchExecutions(PAGE_SIZE, 0, tool);
+			if (generation !== filterGeneration) return;
+			executions = page.executions;
+			totalExecutions = page.total;
+		} catch (err) {
+			if (generation !== filterGeneration) return;
+			loadError = err instanceof Error ? err.message : String(err);
+		}
+		// Refresh tool counts in the background
+		loadTools();
+	}
+
+	async function loadTools() {
+		try {
+			availableTools = await fetchTools();
+		} catch {
+			// Tools list is non-critical; silently fall back to empty
 		}
 	}
 
@@ -87,6 +119,9 @@
 		} catch (err) {
 			loadError = err instanceof Error ? err.message : String(err);
 		}
+
+		// Load tools list for filter dropdown (non-blocking)
+		loadTools();
 	});
 </script>
 
@@ -133,7 +168,7 @@
 		<div class="ml-auto flex items-center gap-2">
 			<div class="flex items-center gap-1.5 text-[10px] text-muted-foreground">
 				<span class="inline-block size-1.5 rounded-full bg-success animate-pulse"></span>
-				{totalExecutions} executions
+				{totalExecutions} execution{totalExecutions === 1 ? "" : "s"}{toolFilter ? " (filtered)" : ""}
 			</div>
 		</div>
 	</header>
@@ -149,6 +184,9 @@
 					{hasMore}
 					{loadingMore}
 					onloadmore={loadMore}
+					tools={availableTools}
+					activeFilter={toolFilter}
+					onfilter={handleFilter}
 				/>
 			</Pane>
 			<PaneResizer class="resizer-v group relative w-1.5 transition-colors" />

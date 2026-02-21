@@ -2,6 +2,7 @@ import type {
   IExecutionLog,
   LuaExecution,
   LuaToolCall,
+  ToolUsage,
 } from "../types/interfaces.js";
 import type { SQLiteDatabase } from "./sqlite-database.js";
 
@@ -202,8 +203,31 @@ export class SQLiteExecutionLog implements IExecutionLog {
   /**
    * Get recent executions across all sessions, ordered by timestamp descending.
    * @param limit Maximum number of executions to return (default 50)
+   * @param offset Number of executions to skip (default 0)
+   * @param toolFilter Optional "server.tool" string to filter by tool usage
    */
-  getAllExecutions(limit = 50, offset = 0): LuaExecution[] {
+  getAllExecutions(limit = 50, offset = 0, toolFilter?: string): LuaExecution[] {
+    if (toolFilter) {
+      return this.db
+        .getDatabase()
+        .prepare(
+          `SELECT DISTINCT
+             e.execution_id AS executionId,
+             e.session_id AS sessionId,
+             e.script,
+             e.status,
+             e.error,
+             e.result,
+             e.created_at AS createdAt
+           FROM lua_executions e
+           INNER JOIN lua_tool_calls tc ON tc.execution_id = e.execution_id
+           WHERE tc.server_name || '.' || tc.tool_name = ?
+           ORDER BY e.created_at DESC, e.rowid DESC
+           LIMIT ? OFFSET ?`,
+        )
+        .all(toolFilter, limit, offset) as LuaExecution[];
+    }
+
     return this.db
       .getDatabase()
       .prepare(
@@ -222,11 +246,43 @@ export class SQLiteExecutionLog implements IExecutionLog {
       .all(limit, offset) as LuaExecution[];
   }
 
-  countExecutions(): number {
+  /**
+   * Count total executions across all sessions.
+   * @param toolFilter Optional "server.tool" string to filter by tool usage
+   */
+  countExecutions(toolFilter?: string): number {
+    if (toolFilter) {
+      const row = this.db
+        .getDatabase()
+        .prepare(
+          `SELECT COUNT(DISTINCT e.execution_id) AS count
+           FROM lua_executions e
+           INNER JOIN lua_tool_calls tc ON tc.execution_id = e.execution_id
+           WHERE tc.server_name || '.' || tc.tool_name = ?`,
+        )
+        .get(toolFilter) as { count: number } | undefined;
+      return row?.count ?? 0;
+    }
+
     const row = this.db
       .getDatabase()
       .prepare(`SELECT COUNT(*) AS count FROM lua_executions`)
       .get() as { count: number } | undefined;
     return row?.count ?? 0;
+  }
+
+  /**
+   * Get distinct tool names with usage counts, ordered by count descending.
+   */
+  getDistinctTools(): ToolUsage[] {
+    return this.db
+      .getDatabase()
+      .prepare(
+        `SELECT server_name || '.' || tool_name AS tool, COUNT(*) AS count
+         FROM lua_tool_calls
+         GROUP BY server_name, tool_name
+         ORDER BY count DESC, tool ASC`,
+      )
+      .all() as ToolUsage[];
   }
 }

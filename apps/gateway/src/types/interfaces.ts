@@ -574,6 +574,12 @@ export interface LuaToolCall {
   createdAt: number;
 }
 
+/** A tool name with its usage count across all executions. */
+export interface ToolUsage {
+  tool: string;
+  count: number;
+}
+
 export interface IExecutionLog {
   /**
    * Log the start of a Lua script execution.
@@ -636,13 +642,24 @@ export interface IExecutionLog {
    * Get recent executions across ALL sessions, ordered by created_at DESC.
    * @param limit Maximum number of executions to return (default 50)
    * @param offset Number of executions to skip (default 0)
+   * @param toolFilter Optional "server.tool" string to filter by tool usage
    */
-  getAllExecutions(limit?: number, offset?: number): LuaExecution[];
+  getAllExecutions(
+    limit?: number,
+    offset?: number,
+    toolFilter?: string,
+  ): LuaExecution[];
 
   /**
    * Count total executions across ALL sessions.
+   * @param toolFilter Optional "server.tool" string to filter by tool usage
    */
-  countExecutions(): number;
+  countExecutions(toolFilter?: string): number;
+
+  /**
+   * Get distinct tool names with usage counts, ordered by count descending.
+   */
+  getDistinctTools(): ToolUsage[];
 }
 
 // Re-export skill types for convenience
