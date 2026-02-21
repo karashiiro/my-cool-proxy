@@ -4,6 +4,11 @@ import { SQLiteDatabase } from "../stores/sqlite-database.js";
 import { SQLiteExecutionLog } from "../stores/sqlite-execution-log.js";
 import type { LuaExecution, LuaToolCall } from "../types/interfaces.js";
 
+interface ExecutionsResponse {
+  executions: LuaExecution[];
+  total: number;
+}
+
 describe("Dashboard API", () => {
   let db: SQLiteDatabase;
   let log: SQLiteExecutionLog;
@@ -24,7 +29,9 @@ describe("Dashboard API", () => {
     it("should return empty array when no executions exist", async () => {
       const res = await app.request("/api/executions");
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual([]);
+      const data = (await res.json()) as ExecutionsResponse;
+      expect(data.executions).toEqual([]);
+      expect(data.total).toBe(0);
     });
 
     it("should return executions ordered by created_at DESC", async () => {
@@ -34,10 +41,11 @@ describe("Dashboard API", () => {
       log.logExecution("s2", "script2");
 
       const res = await app.request("/api/executions");
-      const data = (await res.json()) as LuaExecution[];
-      expect(data).toHaveLength(2);
-      expect(data[0]!.script).toBe("script2");
-      expect(data[1]!.script).toBe("script1");
+      const data = (await res.json()) as ExecutionsResponse;
+      expect(data.executions).toHaveLength(2);
+      expect(data.total).toBe(2);
+      expect(data.executions[0]!.script).toBe("script2");
+      expect(data.executions[1]!.script).toBe("script1");
     });
 
     it("should respect limit query param", async () => {
@@ -45,7 +53,24 @@ describe("Dashboard API", () => {
         log.logExecution("s", `s${i}`);
       }
       const res = await app.request("/api/executions?limit=3");
-      expect((await res.json()) as LuaExecution[]).toHaveLength(3);
+      const data = (await res.json()) as ExecutionsResponse;
+      expect(data.executions).toHaveLength(3);
+      expect(data.total).toBe(10);
+    });
+
+    it("should respect offset query param", async () => {
+      // Inserts happen in a tight synchronous loop so all rows share the same
+      // Date.now() timestamp. The ORDER BY uses `created_at DESC, rowid DESC`
+      // so rows are ordered by insertion order (highest rowid = most recent).
+      // s9 is most recent, s0 is oldest. Offset 3 skips s9, s8, s7.
+      for (let i = 0; i < 10; i++) {
+        log.logExecution("s", `s${i}`);
+      }
+      const res = await app.request("/api/executions?limit=3&offset=3");
+      const data = (await res.json()) as ExecutionsResponse;
+      expect(data.executions).toHaveLength(3);
+      expect(data.total).toBe(10);
+      expect(data.executions[0]!.script).toBe("s6");
     });
 
     it("should clamp limit to valid range", async () => {
@@ -54,11 +79,13 @@ describe("Dashboard API", () => {
       }
       // Negative limit gets clamped to 1
       const res1 = await app.request("/api/executions?limit=-5");
-      expect((await res1.json()) as LuaExecution[]).toHaveLength(1);
+      const data1 = (await res1.json()) as ExecutionsResponse;
+      expect(data1.executions).toHaveLength(1);
 
       // NaN limit falls back to 50
       const res2 = await app.request("/api/executions?limit=abc");
-      expect((await res2.json()) as LuaExecution[]).toHaveLength(5);
+      const data2 = (await res2.json()) as ExecutionsResponse;
+      expect(data2.executions).toHaveLength(5);
     });
 
     it("should return executions across all sessions", async () => {
@@ -67,8 +94,9 @@ describe("Dashboard API", () => {
       log.logExecution("session-c", "script-c");
 
       const res = await app.request("/api/executions");
-      const data = (await res.json()) as LuaExecution[];
-      expect(data).toHaveLength(3);
+      const data = (await res.json()) as ExecutionsResponse;
+      expect(data.executions).toHaveLength(3);
+      expect(data.total).toBe(3);
     });
   });
 

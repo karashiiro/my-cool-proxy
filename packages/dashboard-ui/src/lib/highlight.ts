@@ -21,6 +21,14 @@ function getHighlighter() {
 }
 
 /**
+ * Pre-warm the Shiki highlighter so the first highlight call doesn't block.
+ * Call this eagerly on page load to avoid a UI freeze on first execution click.
+ */
+export function preloadHighlighter(): void {
+  getHighlighter();
+}
+
+/**
  * Lua reserved keywords — identifiers matching these get prefixed with `_`.
  * Mirrors the gateway's `sanitizeLuaIdentifier` from mcp-utilities.
  */
@@ -82,16 +90,11 @@ function findToolCallRanges(
   const ranges: ToolCallRange[] = [];
   const claimed = new Set<number>();
 
-  // Sort by position in source for deterministic ordering
-  const sorted = [...toolCalls].sort((a, b) => {
-    const patA = `${toLuaIdentifier(a.serverName)}.${toLuaIdentifier(a.toolName)}(`;
-    const patB = `${toLuaIdentifier(b.serverName)}.${toLuaIdentifier(b.toolName)}(`;
-    const posA = code.indexOf(patA);
-    const posB = code.indexOf(patB);
-    return posA - posB;
-  });
-
-  for (const tc of sorted) {
+  // Match each tool call to the next unclaimed occurrence of its pattern in source order.
+  // The API returns tool calls in descending (newest-first) order, so reverse to get
+  // chronological order: the first call record binds to the first source occurrence, etc.
+  const chronological = [...toolCalls].reverse();
+  for (const tc of chronological) {
     const luaServer = toLuaIdentifier(tc.serverName);
     const luaTool = toLuaIdentifier(tc.toolName);
     const pattern = `${luaServer}.${luaTool}`;
@@ -123,12 +126,19 @@ function escapeHtml(str: string): string {
     .replace(/'/g, "&#39;");
 }
 
+/** Validate a CSS color value (hex, named, or oklch/hsl/rgb function). */
+const SAFE_COLOR_RE = /^#[0-9a-fA-F]{3,8}$|^[a-zA-Z]+$|^(?:oklch|hsl|rgb)a?\([^)]+\)$/;
+
+function sanitizeColor(color: string, fallback: string): string {
+  return SAFE_COLOR_RE.test(color) ? color : fallback;
+}
+
 /**
  * Render a token (or partial token) as a colored span.
  */
 function renderSpan(text: string, color: string): string {
   if (text.length === 0) return "";
-  return `<span style="color:${color}">${escapeHtml(text)}</span>`;
+  return `<span style="color:${sanitizeColor(color, "#E1E4E8")}">${escapeHtml(text)}</span>`;
 }
 
 /**
@@ -330,7 +340,7 @@ export async function highlightLua(
   }
 
   // Wrap in the same structure Shiki uses, with line spans
-  return `<pre class="shiki github-dark" style="background-color:${bg};color:#e1e4e8" tabindex="0"><code>${wrapLines(html)}</code></pre>`;
+  return `<pre class="shiki github-dark" style="background-color:${sanitizeColor(bg, "#24292e")};color:#e1e4e8" tabindex="0"><code>${wrapLines(html)}</code></pre>`;
 }
 
 /** Sentinel marker used to identify synthetic newline tokens in the HTML output. */

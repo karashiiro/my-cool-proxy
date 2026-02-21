@@ -635,8 +635,14 @@ export interface IExecutionLog {
   /**
    * Get recent executions across ALL sessions, ordered by created_at DESC.
    * @param limit Maximum number of executions to return (default 50)
+   * @param offset Number of executions to skip (default 0)
    */
-  getAllExecutions(limit?: number): LuaExecution[];
+  getAllExecutions(limit?: number, offset?: number): LuaExecution[];
+
+  /**
+   * Count total executions across ALL sessions.
+   */
+  countExecutions(): number;
 }
 
 // Re-export skill types for convenience

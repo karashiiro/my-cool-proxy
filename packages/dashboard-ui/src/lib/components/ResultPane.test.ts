@@ -55,4 +55,40 @@ describe("ResultPane", () => {
     });
     expect(screen.getByText(/no result/i)).toBeInTheDocument();
   });
+
+  it("renders MCP content array with text blocks", () => {
+    const content = JSON.stringify({
+      content: [
+        { type: "text", text: "Hello from MCP" },
+        { type: "text", text: "Second block" },
+      ],
+    });
+    render(ResultPane, {
+      props: { result: content, error: undefined, label: "Script Result" },
+    });
+    expect(screen.getByText("Hello from MCP")).toBeInTheDocument();
+    expect(screen.getByText("Second block")).toBeInTheDocument();
+  });
+
+  it("renders MCP content array with image blocks as img elements", () => {
+    const content = JSON.stringify({
+      content: [
+        { type: "image", data: "dGVzdA==", mimeType: "image/png" },
+      ],
+    });
+    const { container } = render(ResultPane, {
+      props: { result: content, error: undefined, label: "Script Result" },
+    });
+    const img = container.querySelector("img");
+    expect(img).toBeInTheDocument();
+    expect(img?.getAttribute("src")).toBe("data:image/png;base64,dGVzdA==");
+  });
+
+  it("falls back to JSON display for non-content objects", () => {
+    const result = JSON.stringify({ calculation: { text: "100 - 25 = 75" } });
+    render(ResultPane, {
+      props: { result, error: undefined, label: "Script Result" },
+    });
+    expect(screen.getByText(/calculation/)).toBeInTheDocument();
+  });
 });

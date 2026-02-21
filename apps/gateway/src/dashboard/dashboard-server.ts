@@ -43,10 +43,17 @@ export function createDashboardApp(
 
   // API routes
   app.get("/api/executions", (c) => {
-    const raw = Number(c.req.query("limit") ?? 50);
-    const limit = clamp(Number.isFinite(raw) ? raw : 50, 1, 1000);
-    const executions = executionLog.getAllExecutions(limit);
-    return c.json(executions);
+    const rawLimit = Number(c.req.query("limit") ?? 50);
+    const rawOffset = Number(c.req.query("offset") ?? 0);
+    const limit = Math.trunc(
+      clamp(Number.isFinite(rawLimit) ? rawLimit : 50, 1, 1000),
+    );
+    const offset = Math.trunc(
+      clamp(Number.isFinite(rawOffset) ? rawOffset : 0, 0, Number.MAX_SAFE_INTEGER),
+    );
+    const executions = executionLog.getAllExecutions(limit, offset);
+    const total = executionLog.countExecutions();
+    return c.json({ executions, total });
   });
 
   app.get("/api/executions/:id", (c) => {
