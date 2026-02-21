@@ -1,12 +1,17 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { WebSocketServer, type WebSocket } from "ws";
 import { Hono } from "hono";
 import { serve } from "@hono/node-server";
+import type { IMCPClientManager } from "@my-cool-proxy/mcp-client";
 import type {
   IExecutionLog,
   ILogger,
+  ICapabilityStore,
   DashboardConfig,
 } from "../types/interfaces.js";
+import type { SQLiteDatabase } from "../stores/sqlite-database.js";
+import type { DashboardHandle, DashboardEvent, SessionInfo } from "./types.js";
 
 /** MIME types for static file serving. Text types include charset=utf-8. */
 const MIME_TYPES: Record<string, string> = {
@@ -32,10 +37,16 @@ function clamp(value: number, min: number, max: number): number {
  * Create a Hono app for the dashboard REST API and static file serving.
  *
  * @param executionLog - The execution log to query
+ * @param clientManager - The MCP client manager for session info
+ * @param capabilityStore - Store for session capabilities
+ * @param db - SQLite database for session timestamps
  * @param staticDir - Absolute path to the directory containing static dashboard files
  */
 export function createDashboardApp(
   executionLog: IExecutionLog,
+  clientManager: IMCPClientManager,
+  capabilityStore: ICapabilityStore,
+  db: SQLiteDatabase,
   staticDir: string,
 ): Hono {
   const app = new Hono();
@@ -74,6 +85,59 @@ export function createDashboardApp(
     if (!execution) return c.json({ error: "Not found" }, 404);
     const toolCalls = executionLog.getToolCalls(c.req.param("id"));
     return c.json(toolCalls);
+  });
+
+  app.get("/api/sessions", (c) => {
+    const sessionIds = clientManager.getActiveSessions();
+
+    // Get timestamps from SQLite sessions table
+    const placeholders = sessionIds.map(() => "?").join(", ");
+    const rows =
+      sessionIds.length > 0
+        ? (db
+            .getDatabase()
+            .prepare(
+              `SELECT session_id, created_at, last_activity FROM sessions WHERE session_id IN (${placeholders})`,
+            )
+            .all(...sessionIds) as Array<{
+            session_id: string;
+            created_at: number;
+            last_activity: number;
+          }>)
+        : [];
+    const timestampMap = new Map(
+      rows.map((r) => [
+        r.session_id,
+        { createdAt: r.created_at, lastActivity: r.last_activity },
+      ]),
+    );
+
+    const sessions: SessionInfo[] = sessionIds.map((sessionId) => {
+      const clients = clientManager.getClientsBySession(sessionId);
+      const failed = clientManager.getFailedServers(sessionId);
+      const caps = capabilityStore.getCapabilities(sessionId);
+      const timestamps = timestampMap.get(sessionId);
+
+      return {
+        sessionId,
+        createdAt: timestamps?.createdAt ?? 0,
+        lastActivity: timestamps?.lastActivity ?? 0,
+        capabilities: {
+          sampling: !!caps?.sampling,
+          elicitation: !!caps?.elicitation,
+          roots: !!caps?.roots,
+        },
+        workingDirectory:
+          capabilityStore.getWorkingDirectory(sessionId) ?? null,
+        connectedServers: [...clients.keys()],
+        failedServers: [...failed.entries()].map(([name, error]) => ({
+          name,
+          error,
+        })),
+      };
+    });
+
+    return c.json(sessions);
   });
 
   // Static file serving with SPA fallback (async I/O)
@@ -120,29 +184,103 @@ export function createDashboardApp(
 }
 
 /**
- * Start the dashboard HTTP server.
+ * Start the dashboard HTTP server with WebSocket support.
  *
- * @returns A handle with a close() method for graceful shutdown
+ * @returns A handle with close() and broadcast() methods for lifecycle management
  */
 export async function startDashboardServer(
   executionLog: IExecutionLog,
+  clientManager: IMCPClientManager,
+  capabilityStore: ICapabilityStore,
+  db: SQLiteDatabase,
   config: DashboardConfig,
   staticDir: string,
   logger: ILogger,
-): Promise<{ close: () => Promise<void> }> {
+): Promise<DashboardHandle> {
   const port = config.port ?? 3100;
   const host = config.host ?? "localhost";
-  const app = createDashboardApp(executionLog, staticDir);
+  const app = createDashboardApp(
+    executionLog,
+    clientManager,
+    capabilityStore,
+    db,
+    staticDir,
+  );
   const server = serve({
     fetch: app.fetch,
     port,
     hostname: host,
   });
-  logger.info({ port, host }, `Dashboard available at http://${host}:${port}`);
+
+  // WebSocket server
+  const wss = new WebSocketServer({ noServer: true });
+  const clients = new Set<WebSocket>();
+
+  server.on("upgrade", (request, socket, head) => {
+    let pathname: string;
+    try {
+      const base = `http://${request.headers.host ?? "localhost"}`;
+      pathname = new URL(request.url ?? "/", base).pathname;
+    } catch {
+      socket.destroy();
+      return;
+    }
+    if (pathname === "/ws") {
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        wss.emit("connection", ws, request);
+      });
+    } else {
+      socket.destroy();
+    }
+  });
+
+  // Heartbeat: ping every 30s, terminate unresponsive after 10s
+  const alive = new WeakMap<WebSocket, boolean>();
+  wss.on("connection", (ws) => {
+    clients.add(ws);
+    alive.set(ws, true);
+    ws.on("close", () => clients.delete(ws));
+    ws.on("error", () => clients.delete(ws));
+    ws.on("pong", () => alive.set(ws, true));
+  });
+
+  const heartbeat = setInterval(() => {
+    for (const ws of clients) {
+      if (!alive.get(ws)) {
+        ws.terminate();
+        clients.delete(ws);
+        continue;
+      }
+      alive.set(ws, false);
+      ws.ping();
+    }
+  }, 30_000);
+
+  const broadcast = (event: DashboardEvent) => {
+    const data = JSON.stringify(event);
+    for (const ws of clients) {
+      if (ws.readyState === ws.OPEN) {
+        ws.send(data);
+      }
+    }
+  };
+
+  logger.info(
+    { port, host },
+    `Dashboard available at http://${host}:${port}`,
+  );
+
   return {
     close: () =>
-      new Promise<void>((resolve) => {
-        server.close(() => resolve());
+      new Promise<void>((resolve, reject) => {
+        clearInterval(heartbeat);
+        for (const ws of clients) ws.terminate();
+        clients.clear();
+        wss.close((err) => {
+          if (err) reject(err);
+          else server.close(() => resolve());
+        });
       }),
+    broadcast,
   };
 }

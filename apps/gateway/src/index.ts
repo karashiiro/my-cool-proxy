@@ -7,8 +7,10 @@ import { createContainer } from "./container/inversify.config.js";
 import type { ContainerBindingMap } from "./container/binding-map.js";
 import { TYPES } from "./types/index.js";
 import type {
+  ICapabilityStore,
   IExecutionLog,
   ILogger,
+  IMCPClientManager,
   IShutdownHandler,
   IToolInspectionStore,
   ServerConfig,
@@ -29,6 +31,9 @@ import {
   handleDownstreamInitialized,
 } from "./startup.js";
 import { startDashboardServer } from "./dashboard/dashboard-server.js";
+import { NotifyingExecutionLog } from "./dashboard/notifying-execution-log.js";
+import type { DashboardHandle, DashboardEvent } from "./dashboard/types.js";
+import type { SQLiteDatabase } from "./stores/sqlite-database.js";
 
 /**
  * Session inactivity timeout in milliseconds.
@@ -81,13 +86,19 @@ const DASHBOARD_STATIC_DIR = (() => {
 async function maybeStartDashboard(
   container: TypedContainer<ContainerBindingMap>,
   config: ServerConfig,
+  sqliteDb: SQLiteDatabase,
   logger: ILogger,
-): Promise<{ close: () => Promise<void> } | undefined> {
+): Promise<DashboardHandle | undefined> {
   if (!config.dashboard) return undefined;
 
   const executionLog = container.get<IExecutionLog>(TYPES.ExecutionLog);
+  const clientManager = container.get<IMCPClientManager>(TYPES.MCPClientManager);
+  const capabilityStore = container.get<ICapabilityStore>(TYPES.CapabilityStore);
   return startDashboardServer(
     executionLog,
+    clientManager,
+    capabilityStore,
+    sqliteDb,
     config.dashboard,
     DASHBOARD_STATIC_DIR,
     logger,
@@ -109,6 +120,18 @@ async function startHttpMode(
   const { sqliteDb } = initializeSqlite(container, config, logger, {
     rebindCapabilityStore: true,
   });
+
+  // Install NotifyingExecutionLog for dashboard WebSocket broadcasts
+  let broadcastFn: ((event: DashboardEvent) => void) | undefined;
+  if (config.dashboard) {
+    const innerLog = container.get<IExecutionLog>(TYPES.ExecutionLog);
+    const notifyingLog = new NotifyingExecutionLog(
+      innerLog,
+      (event) => broadcastFn?.(event),
+    );
+    container.unbind(TYPES.ExecutionLog);
+    container.bind<IExecutionLog>(TYPES.ExecutionLog).toConstantValue(notifyingLog);
+  }
 
   // Resolve shared services (after SQLite rebindings so we get the SQLite-backed stores)
   const services = resolveCommonServices(container);
@@ -194,6 +217,7 @@ async function startHttpMode(
         // Signal that this session is fully initialized (upstream servers connected)
         // This allows restored sessions to wait for completion before accepting requests
         getSessionInitPromise(sessionId).resolve();
+        broadcastFn?.({ type: "session:changed" });
       });
 
       return gatewayServer.getServer();
@@ -210,6 +234,7 @@ async function startHttpMode(
         // Clean up session-scoped state when sessions are closed
         onSessionClosed: async (sessionId) => {
           logger.info(`Session ${sessionId} closed, cleaning up...`);
+          broadcastFn?.({ type: "session:changed" });
           try {
             await services.clientManager.closeSession(sessionId);
 
@@ -268,7 +293,10 @@ async function startHttpMode(
   );
 
   // Start dashboard server if configured
-  const dashboardHandle = await maybeStartDashboard(container, config, logger);
+  const dashboardHandle = await maybeStartDashboard(container, config, sqliteDb, logger);
+  if (dashboardHandle) {
+    broadcastFn = dashboardHandle.broadcast;
+  }
 
   // Graceful shutdown with double-shutdown guard
   let shuttingDown = false;
@@ -331,6 +359,18 @@ async function startStdioMode(
   // Initialize SQLite for execution logging (no capability store rebind for stdio)
   const { sqliteDb } = initializeSqlite(container, config, logger);
 
+  // Install NotifyingExecutionLog for dashboard WebSocket broadcasts
+  let broadcastFn: ((event: DashboardEvent) => void) | undefined;
+  if (config.dashboard) {
+    const innerLog = container.get<IExecutionLog>(TYPES.ExecutionLog);
+    const notifyingLog = new NotifyingExecutionLog(
+      innerLog,
+      (event) => broadcastFn?.(event),
+    );
+    container.unbind(TYPES.ExecutionLog);
+    container.bind<IExecutionLog>(TYPES.ExecutionLog).toConstantValue(notifyingLog);
+  }
+
   // Resolve shared services (after SQLite rebindings)
   const services = resolveCommonServices(container);
 
@@ -376,7 +416,10 @@ async function startStdioMode(
   logger.info("MCP Lua Gateway running in stdio mode");
 
   // Start dashboard server if configured
-  const dashboardHandle = await maybeStartDashboard(container, config, logger);
+  const dashboardHandle = await maybeStartDashboard(container, config, sqliteDb, logger);
+  if (dashboardHandle) {
+    broadcastFn = dashboardHandle.broadcast;
+  }
 
   // Graceful shutdown with double-shutdown guard
   let shuttingDown = false;

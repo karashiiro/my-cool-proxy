@@ -61,3 +61,24 @@ export async function fetchToolCalls(
     throw new Error(`Failed to fetch tool calls: ${res.statusText}`);
   return res.json();
 }
+
+/** Session info returned by the sessions API. */
+export interface SessionInfo {
+  sessionId: string;
+  createdAt: number;
+  lastActivity: number;
+  capabilities: { sampling: boolean; elicitation: boolean; roots: boolean };
+  workingDirectory: string | null;
+  connectedServers: string[];
+  failedServers: Array<{ name: string; error: string }>;
+}
+
+/**
+ * Fetch active sessions with their server connections and capabilities.
+ */
+export async function fetchSessions(): Promise<SessionInfo[]> {
+  const res = await fetch("/api/sessions");
+  if (!res.ok)
+    throw new Error(`Failed to fetch sessions: ${res.statusText}`);
+  return res.json();
+}

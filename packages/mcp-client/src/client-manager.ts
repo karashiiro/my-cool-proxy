@@ -16,6 +16,7 @@ export class MCPClientManager implements IMCPClientManager {
   private clients = new Map<string, MCPClientSession>();
   private failedServers = new Map<string, string>(); // key -> error message
   private stderrStreams = new Map<string, WriteStream>(); // key -> stderr file stream
+  private activeSessions = new Set<string>();
   private onResourceListChanged?: (
     serverName: string,
     sessionId: string,
@@ -132,6 +133,7 @@ export class MCPClientManager implements IMCPClientManager {
       );
 
       this.clients.set(key, wrappedClient);
+      this.activeSessions.add(sessionId);
 
       // Clear from failed servers if previously failed
       this.failedServers.delete(key);
@@ -246,6 +248,7 @@ export class MCPClientManager implements IMCPClientManager {
       );
 
       this.clients.set(key, wrappedClient);
+      this.activeSessions.add(sessionId);
 
       // Clear from failed servers if previously failed
       this.failedServers.delete(key);
@@ -349,7 +352,13 @@ export class MCPClientManager implements IMCPClientManager {
       }
     }
 
+    this.activeSessions.delete(sessionId);
+
     this.logger.info(`Cleaned up session ${sessionId}`);
+  }
+
+  getActiveSessions(): string[] {
+    return [...this.activeSessions];
   }
 
   /**

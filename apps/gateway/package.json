@@ -41,6 +41,7 @@
     "@suites/unit": "4.0.0-beta.0",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^25.0.3",
+    "@types/ws": "^8.5.0",
     "@typescript/native-preview": "7.0.0-dev.20251217.1",
     "jiti": "^2.6.1",
     "tsup": "^8.5.1",
@@ -60,6 +61,7 @@
     "inversify": "^7.10.7",
     "reflect-metadata": "^0.2.2",
     "wasmoon": "^1.16.0",
+    "ws": "^8.18.0",
     "yaml": "^2.8.2",
     "zod": "^4.3.5"
   }

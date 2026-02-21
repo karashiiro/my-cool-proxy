@@ -8,6 +8,7 @@ export default defineConfig({
   resolve: {
     alias: {
       $lib: resolve(__dirname, "src/lib"),
+      "$app/state": resolve(__dirname, "src/__mocks__/app-state.ts"),
     },
   },
   test: {

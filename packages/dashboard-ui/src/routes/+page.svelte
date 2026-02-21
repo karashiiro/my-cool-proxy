@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { Pane, PaneGroup, PaneResizer } from "paneforge";
-	import { onMount } from "svelte";
+	import { getContext, onMount } from "svelte";
 	import ExecutionList from "$lib/components/ExecutionList.svelte";
 	import CodeViewer from "$lib/components/CodeViewer.svelte";
 	import ResultPane from "$lib/components/ResultPane.svelte";
@@ -8,6 +8,7 @@
 	import type { ToolUsage } from "$lib/api.js";
 	import { preloadHighlighter } from "$lib/highlight.js";
 	import type { LuaExecution, LuaToolCall } from "$lib/types.js";
+	import type { DashboardWsClient } from "$lib/ws.js";
 
 	const PAGE_SIZE = 50;
 
@@ -22,6 +23,10 @@
 	let toolFilter = $state<string | null>(null);
 
 	let hasMore = $derived(executions.length < totalExecutions);
+
+	let pendingCount = $state(0);
+
+	const wsState = getContext<{ client: DashboardWsClient | null; connected: boolean }>('ws');
 
 	/** Counter to guard against race conditions when rapidly selecting executions */
 	let selectGeneration = 0;
@@ -108,6 +113,19 @@
 		}
 	}
 
+	async function handleRefresh() {
+		try {
+			const page = await fetchExecutions(PAGE_SIZE, 0, toolFilter);
+			executions = page.executions;
+			totalExecutions = page.total;
+			pendingCount = 0;
+			wsState?.client?.clearPending();
+		} catch (err) {
+			loadError = err instanceof Error ? err.message : String(err);
+		}
+		loadTools();
+	}
+
 	onMount(async () => {
 		// Pre-warm Shiki so first execution click doesn't freeze the UI
 		preloadHighlighter();
@@ -122,6 +140,24 @@
 
 		// Load tools list for filter dropdown (non-blocking)
 		loadTools();
+
+		// Subscribe to WS execution events when client becomes available
+		let cleanupWs: (() => void) | null = null;
+		const checkInterval = setInterval(() => {
+			const client = wsState?.client;
+			if (client) {
+				clearInterval(checkInterval);
+				const unsub = client.onExecutionNew(() => {
+					pendingCount = client.pendingExecutions;
+				});
+				cleanupWs = unsub;
+			}
+		}, 100);
+
+		return () => {
+			clearInterval(checkInterval);
+			cleanupWs?.();
+		};
 	});
 </script>
 
@@ -129,7 +165,7 @@
 	<title>Dashboard</title>
 </svelte:head>
 
-<div class="flex h-screen w-screen flex-col">
+<div class="flex h-full w-full flex-col">
 	{#if loadError}
 		<div
 			class="absolute top-12 right-3 z-50 flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-red-400 shadow-lg backdrop-blur-sm"
@@ -187,6 +223,8 @@
 					tools={availableTools}
 					activeFilter={toolFilter}
 					onfilter={handleFilter}
+					{pendingCount}
+					onrefresh={handleRefresh}
 				/>
 			</Pane>
 			<PaneResizer class="resizer-v group relative w-1.5 transition-colors" />

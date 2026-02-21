@@ -27,6 +27,7 @@ describe("ServerInfoPreloader", () => {
       getClientsBySession: vi.fn().mockReturnValue(new Map()),
       getFailedServers: vi.fn().mockReturnValue(new Map()),
       closeSession: vi.fn(),
+      getActiveSessions: vi.fn().mockReturnValue([]),
       setResourceListChangedHandler: vi.fn(),
       setPromptListChangedHandler: vi.fn(),
       setToolListChangedHandler: vi.fn(),

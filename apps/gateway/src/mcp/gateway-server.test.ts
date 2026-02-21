@@ -60,6 +60,7 @@ const createMockClientManager = (
   getClientsBySession: vi.fn(() => clients),
   getFailedServers: vi.fn(() => new Map()),
   closeSession: vi.fn(),
+  getActiveSessions: vi.fn().mockReturnValue([]),
   setResourceListChangedHandler: vi.fn(),
   setPromptListChangedHandler: vi.fn(),
   setToolListChangedHandler: vi.fn(),

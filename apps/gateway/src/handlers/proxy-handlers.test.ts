@@ -58,6 +58,7 @@ function createMockClientManager(
     removeSession: vi.fn(),
     closeAll: vi.fn(),
     closeSession: vi.fn(),
+    getActiveSessions: vi.fn().mockReturnValue([]),
     setResourceListChangedHandler: vi.fn(),
     setPromptListChangedHandler: vi.fn(),
     setToolListChangedHandler: vi.fn(),

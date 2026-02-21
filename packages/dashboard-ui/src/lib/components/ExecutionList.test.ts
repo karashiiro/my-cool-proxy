@@ -160,4 +160,45 @@ describe("ExecutionList", () => {
     });
     expect(screen.getByLabelText("Filtered by github.search_code")).toBeInTheDocument();
   });
+
+  it("shows refresh button", () => {
+    render(ExecutionList, {
+      props: { executions: mockExecutions, selectedId: null },
+    });
+    expect(screen.getByLabelText("Refresh executions")).toBeInTheDocument();
+  });
+
+  it("refresh button calls onrefresh when clicked", async () => {
+    const user = userEvent.setup();
+    const onrefresh = vi.fn();
+    render(ExecutionList, {
+      props: { executions: mockExecutions, selectedId: null, onrefresh },
+    });
+    await user.click(screen.getByLabelText("Refresh executions"));
+    expect(onrefresh).toHaveBeenCalled();
+  });
+
+  it("refresh button shows pending count badge when pendingCount > 0", () => {
+    render(ExecutionList, {
+      props: { executions: mockExecutions, selectedId: null, pendingCount: 3 },
+    });
+    expect(screen.getByText("3")).toBeInTheDocument();
+    expect(screen.getByLabelText("Refresh executions (3 new)")).toBeInTheDocument();
+  });
+
+  it("refresh button does not show badge when pendingCount is 0", () => {
+    render(ExecutionList, {
+      props: { executions: mockExecutions, selectedId: null, pendingCount: 0 },
+    });
+    // Badge should not exist — no single-digit number in the header area
+    const badge = screen.queryByText("0");
+    expect(badge).not.toBeInTheDocument();
+  });
+
+  it("refresh button caps badge display at 9+", () => {
+    render(ExecutionList, {
+      props: { executions: mockExecutions, selectedId: null, pendingCount: 15 },
+    });
+    expect(screen.getByText("9+")).toBeInTheDocument();
+  });
 });
