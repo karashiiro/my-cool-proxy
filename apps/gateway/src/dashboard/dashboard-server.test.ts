@@ -2,16 +2,30 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { createDashboardApp } from "./dashboard-server.js";
 import { SQLiteDatabase } from "../stores/sqlite-database.js";
 import { SQLiteExecutionLog } from "../stores/sqlite-execution-log.js";
+import type { IMCPClientManager } from "@my-cool-proxy/mcp-client";
 import type {
+  ICapabilityStore,
   LuaExecution,
   LuaToolCall,
   ToolUsage,
 } from "../types/interfaces.js";
+import type { SessionInfo } from "./types.js";
 
 interface ExecutionsResponse {
   executions: LuaExecution[];
   total: number;
 }
+
+const mockClientManager = {
+  getActiveSessions: () => [] as string[],
+  getClientsBySession: () => new Map(),
+  getFailedServers: () => new Map(),
+} as unknown as IMCPClientManager;
+
+const mockCapabilityStore = {
+  getCapabilities: () => undefined,
+  getWorkingDirectory: () => undefined,
+} as unknown as ICapabilityStore;
 
 describe("Dashboard API", () => {
   let db: SQLiteDatabase;
@@ -22,7 +36,13 @@ describe("Dashboard API", () => {
     db = new SQLiteDatabase(":memory:");
     log = new SQLiteExecutionLog(db);
     // Static dir doesn't matter for API tests
-    app = createDashboardApp(log, "/nonexistent");
+    app = createDashboardApp(
+      log,
+      mockClientManager,
+      mockCapabilityStore,
+      db,
+      "/nonexistent",
+    );
   });
 
   afterEach(() => {
@@ -228,6 +248,90 @@ describe("Dashboard API", () => {
       // Descending order
       expect(data[0]!.toolName).toBe("second-tool");
       expect(data[1]!.toolName).toBe("first-tool");
+    });
+  });
+
+  describe("GET /api/sessions", () => {
+    it("should return empty array when no active sessions", async () => {
+      const res = await app.request("/api/sessions");
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual([]);
+    });
+
+    it("should return session info with connected servers", async () => {
+      // Create a custom app with a mock that returns sessions
+      const clientMgr = {
+        getActiveSessions: () => ["session-1"],
+        getClientsBySession: (_id: string) =>
+          new Map([
+            ["github", {} as any],
+            ["context7", {} as any],
+          ]),
+        getFailedServers: () => new Map(),
+      } as unknown as IMCPClientManager;
+
+      const capStore = {
+        getCapabilities: () => ({
+          sampling: {},
+          roots: { listChanged: true },
+        }),
+        getWorkingDirectory: () => "/tmp/test",
+      } as unknown as ICapabilityStore;
+
+      // Insert a session row in the SQLite sessions table for timestamps
+      db.getDatabase()
+        .prepare(
+          "INSERT OR REPLACE INTO sessions (session_id, created_at, last_activity) VALUES (?, ?, ?)",
+        )
+        .run("session-1", 1000, 2000);
+
+      const customApp = createDashboardApp(
+        log,
+        clientMgr,
+        capStore,
+        db,
+        "/nonexistent",
+      );
+      const res = await customApp.request("/api/sessions");
+      const data = (await res.json()) as SessionInfo[];
+
+      expect(data).toHaveLength(1);
+      expect(data[0]!.sessionId).toBe("session-1");
+      expect(data[0]!.connectedServers).toEqual(["github", "context7"]);
+      expect(data[0]!.capabilities.sampling).toBe(true);
+      expect(data[0]!.capabilities.roots).toBe(true);
+      expect(data[0]!.capabilities.elicitation).toBe(false);
+      expect(data[0]!.workingDirectory).toBe("/tmp/test");
+      expect(data[0]!.createdAt).toBe(1000);
+      expect(data[0]!.lastActivity).toBe(2000);
+    });
+
+    it("should include failed servers", async () => {
+      const clientMgr = {
+        getActiveSessions: () => ["session-2"],
+        getClientsBySession: () => new Map([["github", {} as any]]),
+        getFailedServers: () =>
+          new Map([["broken-server", "Connection refused"]]),
+      } as unknown as IMCPClientManager;
+
+      const capStore = {
+        getCapabilities: () => undefined,
+        getWorkingDirectory: () => undefined,
+      } as unknown as ICapabilityStore;
+
+      const customApp = createDashboardApp(
+        log,
+        clientMgr,
+        capStore,
+        db,
+        "/nonexistent",
+      );
+      const res = await customApp.request("/api/sessions");
+      const data = (await res.json()) as SessionInfo[];
+
+      expect(data[0]!.failedServers).toEqual([
+        { name: "broken-server", error: "Connection refused" },
+      ]);
     });
   });
 });

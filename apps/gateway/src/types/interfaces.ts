@@ -70,6 +70,7 @@ export interface IMCPClientManager {
    * @param sessionId - The session ID to clean up
    */
   closeSession(sessionId: string): Promise<void>;
+  getActiveSessions(): string[];
   setResourceListChangedHandler(
     handler: (serverName: string, sessionId: string) => void,
   ): void;

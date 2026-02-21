@@ -19,6 +19,7 @@ const createMockClientManager = (): IMCPClientManager => ({
   getClientsBySession: vi.fn(),
   getFailedServers: vi.fn(),
   closeSession: vi.fn(),
+  getActiveSessions: vi.fn().mockReturnValue([]),
   setResourceListChangedHandler: vi.fn(),
   setPromptListChangedHandler: vi.fn(),
   setToolListChangedHandler: vi.fn(),

@@ -13,6 +13,8 @@
 		tools = [],
 		activeFilter = null,
 		onfilter,
+		pendingCount = 0,
+		onrefresh,
 	}: {
 		executions: LuaExecution[];
 		selectedId: string | null;
@@ -23,6 +25,8 @@
 		tools?: ToolUsage[];
 		activeFilter?: string | null;
 		onfilter?: (tool: string | null) => void;
+		pendingCount?: number;
+		onrefresh?: () => void;
 	} = $props();
 
 	let filterOpen = $state(false);
@@ -68,17 +72,36 @@
 			<rect x="9" y="3" width="6" height="4" rx="1" />
 		</svg>
 		<h2 class="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Executions</h2>
-		{#if tools.length > 0}
-			<div class="relative ml-auto">
+		<div class="ml-auto flex items-center gap-1.5">
+			<div class="relative">
 				<button
-					bind:this={filterButtonEl}
-					class="filter-button flex items-center gap-1.5 rounded-md px-2 py-1 text-[10px] font-medium transition-colors
-						{activeFilter ? 'bg-primary/15 text-primary border border-primary/30' : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'}"
-					onclick={() => (filterOpen = !filterOpen)}
-					aria-haspopup="listbox"
-					aria-expanded={filterOpen}
-					aria-label={activeFilter ? `Filtered by ${activeFilter}` : "Filter by tool"}
+					class="flex items-center justify-center rounded-md p-1 transition-colors
+						{pendingCount > 0 ? 'text-amber-400 hover:text-amber-300 refresh-glow' : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'}"
+					onclick={() => onrefresh?.()}
+					aria-label={pendingCount > 0 ? `Refresh executions (${pendingCount} new)` : "Refresh executions"}
 				>
+					<svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+						<path d="M1 4v6h6" />
+						<path d="M3.51 15a9 9 0 102.13-9.36L1 10" />
+					</svg>
+					{#if pendingCount > 0}
+						<span class="absolute -top-1 -right-1 flex size-3.5 items-center justify-center rounded-full bg-primary text-[8px] font-bold text-primary-foreground">
+							{pendingCount > 9 ? "9+" : pendingCount}
+						</span>
+					{/if}
+				</button>
+			</div>
+			{#if tools.length > 0}
+				<div class="relative">
+					<button
+						bind:this={filterButtonEl}
+						class="filter-button flex items-center gap-1.5 rounded-md px-2 py-1 text-[10px] font-medium transition-colors
+							{activeFilter ? 'bg-primary/15 text-primary border border-primary/30' : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'}"
+						onclick={() => (filterOpen = !filterOpen)}
+						aria-haspopup="listbox"
+						aria-expanded={filterOpen}
+						aria-label={activeFilter ? `Filtered by ${activeFilter}` : "Filter by tool"}
+					>
 					<svg class="size-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 						<path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z" />
 					</svg>
@@ -128,7 +151,8 @@
 					</div>
 				{/if}
 			</div>
-		{/if}
+			{/if}
+		</div>
 	</div>
 	{#if activeFilter}
 		<div class="flex items-center gap-2 border-b border-border/50 bg-primary/5 px-3 py-1.5">
@@ -238,5 +262,14 @@
 
 	.filter-dropdown {
 		background: oklch(0.16 0.015 260);
+	}
+
+	@keyframes glow-pulse {
+		0%, 100% { box-shadow: 0 0 4px 0 oklch(0.78 0.145 70 / 0.4); }
+		50% { box-shadow: 0 0 12px 2px oklch(0.78 0.145 70 / 0.6); }
+	}
+
+	.refresh-glow {
+		animation: glow-pulse 2s ease-in-out infinite;
 	}
 </style>
