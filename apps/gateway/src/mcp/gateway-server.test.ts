@@ -97,6 +97,10 @@ const createMockExecutionLog = (): IExecutionLog => ({
   logToolCall: vi.fn().mockReturnValue("call-1"),
   markToolCallError: vi.fn(),
   markToolCallResult: vi.fn(),
+  getExecutions: vi.fn().mockReturnValue([]),
+  getToolCalls: vi.fn().mockReturnValue([]),
+  getExecution: vi.fn().mockReturnValue(undefined),
+  getAllExecutions: vi.fn().mockReturnValue([]),
 });
 
 // Helper to create a tool registry with all tools

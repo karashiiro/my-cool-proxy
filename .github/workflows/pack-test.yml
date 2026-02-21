@@ -28,6 +28,15 @@ jobs:
       - name: Build
         run: pnpm build
 
+      - name: Verify dashboard UI is in build output
+        run: |
+          if [ ! -f apps/gateway/dist/dashboard/index.html ]; then
+            echo "Dashboard UI files missing from apps/gateway/dist/dashboard/"
+            echo "Expected index.html but it was not found."
+            exit 1
+          fi
+          echo "Dashboard UI files present in build output."
+
       - name: Pack package
         working-directory: apps/gateway
         run: pnpm pack

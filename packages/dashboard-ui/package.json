@@ -1,0 +1,42 @@
+{
+  "name": "@my-cool-proxy/dashboard-ui",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "preview": "vite preview",
+    "prepare": "svelte-kit sync || echo ''",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
+    "test": "vitest run --config vitest.config.ts",
+    "test:watch": "vitest --config vitest.config.ts"
+  },
+  "devDependencies": {
+    "@sveltejs/adapter-auto": "^7.0.0",
+    "@sveltejs/adapter-static": "^3.0.10",
+    "@sveltejs/kit": "^2.50.2",
+    "@sveltejs/vite-plugin-svelte": "^6.2.4",
+    "@tailwindcss/vite": "^4.1.18",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/svelte": "^5.3.1",
+    "@testing-library/user-event": "^14.6.1",
+    "jsdom": "^28.1.0",
+    "prettier-plugin-tailwindcss": "^0.7.2",
+    "shadcn-svelte": "^1.1.1",
+    "svelte": "^5.51.0",
+    "svelte-check": "^4.3.6",
+    "tailwindcss": "^4.1.18",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.1"
+  },
+  "dependencies": {
+    "bits-ui": "^2.16.1",
+    "clsx": "^2.1.1",
+    "paneforge": "^1.0.2",
+    "shiki": "^3.22.0",
+    "tailwind-merge": "^3.5.0",
+    "tailwind-variants": "^3.2.2"
+  }
+}

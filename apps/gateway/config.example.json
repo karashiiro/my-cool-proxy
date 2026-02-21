@@ -35,5 +35,9 @@
       "args": ["path/to/trusted-server.js"],
       "dangerouslyEnableSampling": true
     }
+  },
+  "dashboard": {
+    "port": 3100,
+    "host": "localhost"
   }
 }

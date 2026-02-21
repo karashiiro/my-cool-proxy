@@ -44,7 +44,8 @@
     "@typescript/native-preview": "7.0.0-dev.20251217.1",
     "jiti": "^2.6.1",
     "tsup": "^8.5.1",
-    "tsx": "^4.21.0"
+    "tsx": "^4.21.0",
+    "@my-cool-proxy/dashboard-ui": "workspace:*"
   },
   "dependencies": {
     "@hono/node-server": "^1.19.9",

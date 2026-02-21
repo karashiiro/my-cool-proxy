@@ -1,9 +1,13 @@
 import "reflect-metadata";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import type { TypedContainer } from "@inversifyjs/strongly-typed";
 import { createContainer } from "./container/inversify.config.js";
 import type { ContainerBindingMap } from "./container/binding-map.js";
 import { TYPES } from "./types/index.js";
 import type {
+  IExecutionLog,
   ILogger,
   IShutdownHandler,
   IToolInspectionStore,
@@ -24,12 +28,71 @@ import {
   preloadInstructions,
   handleDownstreamInitialized,
 } from "./startup.js";
+import { startDashboardServer } from "./dashboard/dashboard-server.js";
 
 /**
  * Session inactivity timeout in milliseconds.
  * Sessions expire after this duration of inactivity.
  */
 const SESSION_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * Resolve the dashboard static files directory.
+ *
+ * In production (built with tsup), __dirname is dist/ and dashboard files are in dist/dashboard/.
+ * In dev mode (tsx), __dirname is src/ so we fall back to dist/dashboard/ relative to the
+ * gateway package root, or directly to the dashboard-ui build output.
+ */
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const DASHBOARD_STATIC_DIR = (() => {
+  // Production: co-located in dist/dashboard/
+  const prodPath = path.join(__dirname, "dashboard");
+  if (fs.existsSync(path.join(prodPath, "index.html"))) {
+    return prodPath;
+  }
+  // Dev mode (tsx): try dist/dashboard/ relative to gateway package root
+  const devDistPath = path.resolve(__dirname, "..", "dist", "dashboard");
+  if (fs.existsSync(path.join(devDistPath, "index.html"))) {
+    return devDistPath;
+  }
+  // Dev mode fallback: try the dashboard-ui build output directly
+  const directPath = path.resolve(
+    __dirname,
+    "..",
+    "..",
+    "packages",
+    "dashboard-ui",
+    "build",
+  );
+  if (!fs.existsSync(path.join(directPath, "index.html"))) {
+    // Log to stderr since logger isn't available yet at module scope
+    console.error(
+      "Warning: Dashboard UI static files not found in any expected location. " +
+        "Run 'pnpm build' to build the dashboard UI.",
+    );
+  }
+  return directPath;
+})();
+
+/**
+ * Start the dashboard server if configured.
+ * Returns a handle for graceful shutdown, or undefined if dashboard is not configured.
+ */
+async function maybeStartDashboard(
+  container: TypedContainer<ContainerBindingMap>,
+  config: ServerConfig,
+  logger: ILogger,
+): Promise<{ close: () => Promise<void> } | undefined> {
+  if (!config.dashboard) return undefined;
+
+  const executionLog = container.get<IExecutionLog>(TYPES.ExecutionLog);
+  return startDashboardServer(
+    executionLog,
+    config.dashboard,
+    DASHBOARD_STATIC_DIR,
+    logger,
+  );
+}
 
 async function startHttpMode(
   container: TypedContainer<ContainerBindingMap>,
@@ -204,13 +267,59 @@ async function startHttpMode(
     `MCP Lua Gateway listening on http://${config.host}:${config.port}`,
   );
 
-  // Graceful shutdown
-  process.on("SIGINT", async () => {
-    await handle.close();
-    await shutdownHandler.shutdown();
-    sqliteDb.close();
-    logger.info("SQLite database closed");
-  });
+  // Start dashboard server if configured
+  const dashboardHandle = await maybeStartDashboard(container, config, logger);
+
+  // Graceful shutdown with double-shutdown guard
+  let shuttingDown = false;
+  const shutdown = async () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    logger.info("Shutting down HTTP mode...");
+
+    try {
+      if (dashboardHandle) {
+        await dashboardHandle.close();
+        logger.info("Dashboard server closed");
+      }
+    } catch (err) {
+      logger.error(
+        "Error closing dashboard server",
+        err instanceof Error ? err : new Error(String(err)),
+      );
+    }
+
+    try {
+      await handle.close();
+    } catch (err) {
+      logger.error(
+        "Error closing HTTP server",
+        err instanceof Error ? err : new Error(String(err)),
+      );
+    }
+
+    try {
+      await shutdownHandler.shutdown();
+    } catch (err) {
+      logger.error(
+        "Error in shutdown handler",
+        err instanceof Error ? err : new Error(String(err)),
+      );
+    }
+
+    try {
+      sqliteDb.close();
+      logger.info("SQLite database closed");
+    } catch (err) {
+      logger.error(
+        "Error closing SQLite",
+        err instanceof Error ? err : new Error(String(err)),
+      );
+    }
+  };
+
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
 }
 
 async function startStdioMode(
@@ -266,27 +375,88 @@ async function startStdioMode(
 
   logger.info("MCP Lua Gateway running in stdio mode");
 
-  // Graceful shutdown
-  process.on("SIGINT", async () => {
-    await handle.close();
-    await services.clientManager.close();
+  // Start dashboard server if configured
+  const dashboardHandle = await maybeStartDashboard(container, config, logger);
+
+  // Graceful shutdown with double-shutdown guard
+  let shuttingDown = false;
+  const shutdown = async () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    logger.info("Shutting down stdio mode...");
+
+    try {
+      if (dashboardHandle) {
+        await dashboardHandle.close();
+        logger.info("Dashboard server closed");
+      }
+    } catch (err) {
+      logger.error(
+        "Error closing dashboard server",
+        err instanceof Error ? err : new Error(String(err)),
+      );
+    }
+
+    try {
+      await handle.close();
+    } catch (err) {
+      logger.error(
+        "Error closing stdio server",
+        err instanceof Error ? err : new Error(String(err)),
+      );
+    }
+
+    try {
+      await services.clientManager.close();
+    } catch (err) {
+      logger.error(
+        "Error closing client manager",
+        err instanceof Error ? err : new Error(String(err)),
+      );
+    }
 
     // Clean up working directory if it's a tempdir
-    const workingDir = services.capabilityStore.getWorkingDirectory(SESSION_ID);
-    if (workingDir && workingDir.includes("mcp-gateway-")) {
-      cleanupSessionTempDir(workingDir);
-      logger.debug(`Cleaned up tempdir: ${workingDir}`);
+    try {
+      const workingDir =
+        services.capabilityStore.getWorkingDirectory(SESSION_ID);
+      if (workingDir && workingDir.includes("mcp-gateway-")) {
+        cleanupSessionTempDir(workingDir);
+        logger.debug(`Cleaned up tempdir: ${workingDir}`);
+      }
+    } catch (err) {
+      logger.error(
+        "Error cleaning up tempdir",
+        err instanceof Error ? err : new Error(String(err)),
+      );
     }
 
     // Clean up sampling shim if active
-    if (services.samplingShim) {
-      await services.samplingShim.closeAll();
+    try {
+      if (services.samplingShim) {
+        await services.samplingShim.closeAll();
+      }
+    } catch (err) {
+      logger.error(
+        "Error closing sampling shim",
+        err instanceof Error ? err : new Error(String(err)),
+      );
     }
 
-    sqliteDb.close();
+    try {
+      sqliteDb.close();
+    } catch (err) {
+      logger.error(
+        "Error closing SQLite",
+        err instanceof Error ? err : new Error(String(err)),
+      );
+    }
+
     logger.info("Shutdown complete");
     process.exit(0);
-  });
+  };
+
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
 }
 
 /**

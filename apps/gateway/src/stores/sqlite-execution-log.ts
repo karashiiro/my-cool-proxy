@@ -1,33 +1,12 @@
-import type { IExecutionLog } from "../types/interfaces.js";
+import type {
+  IExecutionLog,
+  LuaExecution,
+  LuaToolCall,
+} from "../types/interfaces.js";
 import type { SQLiteDatabase } from "./sqlite-database.js";
 
-/**
- * A logged Lua script execution.
- */
-export interface LuaExecution {
-  executionId: string;
-  sessionId: string;
-  script: string;
-  status: "success" | "error";
-  error?: string;
-  result?: string;
-  createdAt: number;
-}
-
-/**
- * A logged tool call made within a Lua script execution.
- */
-export interface LuaToolCall {
-  callId: string;
-  executionId: string;
-  serverName: string;
-  toolName: string;
-  arguments?: string;
-  status: "success" | "error";
-  error?: string;
-  result?: string;
-  createdAt: number;
-}
+// Re-export types for backward compatibility
+export type { LuaExecution, LuaToolCall };
 
 /**
  * Generate a unique ID with a timestamp prefix for chronological ordering.
@@ -196,5 +175,50 @@ export class SQLiteExecutionLog implements IExecutionLog {
          ORDER BY created_at DESC`,
       )
       .all(executionId) as LuaToolCall[];
+  }
+
+  /**
+   * Get a single execution by ID.
+   * @param executionId The execution to retrieve
+   */
+  getExecution(executionId: string): LuaExecution | undefined {
+    return this.db
+      .getDatabase()
+      .prepare(
+        `SELECT
+           execution_id AS executionId,
+           session_id AS sessionId,
+           script,
+           status,
+           error,
+           result,
+           created_at AS createdAt
+         FROM lua_executions
+         WHERE execution_id = ?`,
+      )
+      .get(executionId) as LuaExecution | undefined;
+  }
+
+  /**
+   * Get recent executions across all sessions, ordered by timestamp descending.
+   * @param limit Maximum number of executions to return (default 50)
+   */
+  getAllExecutions(limit = 50): LuaExecution[] {
+    return this.db
+      .getDatabase()
+      .prepare(
+        `SELECT
+           execution_id AS executionId,
+           session_id AS sessionId,
+           script,
+           status,
+           error,
+           result,
+           created_at AS createdAt
+         FROM lua_executions
+         ORDER BY created_at DESC
+         LIMIT ?`,
+      )
+      .all(limit) as LuaExecution[];
   }
 }
