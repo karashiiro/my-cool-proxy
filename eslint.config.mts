@@ -5,7 +5,14 @@ import { defineConfig } from "eslint/config";
 
 export default defineConfig([
   {
-    ignores: ["**/dist/", "node_modules/"],
+    ignores: [
+      "**/dist/",
+      "**/build/",
+      "node_modules/",
+      // Dashboard UI uses Svelte files which need a separate eslint plugin
+      "packages/dashboard-ui/**/*.svelte",
+      "packages/dashboard-ui/.svelte-kit/",
+    ],
   },
   js.configs.recommended,
   {

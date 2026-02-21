@@ -282,6 +282,39 @@ function validateLoggingConfig(config: ServerConfig): void {
 }
 
 /**
+ * Validates the dashboard configuration if provided.
+ */
+function validateDashboardConfig(config: ServerConfig): void {
+  if (config.dashboard === undefined) return;
+
+  if (typeof config.dashboard !== "object" || config.dashboard === null) {
+    throw new Error("Config 'dashboard' must be an object if specified");
+  }
+
+  if (config.dashboard.port !== undefined) {
+    if (typeof config.dashboard.port !== "number") {
+      throw new Error("Config 'dashboard.port' must be a number if specified");
+    }
+    if (
+      !Number.isInteger(config.dashboard.port) ||
+      config.dashboard.port < 1 ||
+      config.dashboard.port > 65535
+    ) {
+      throw new Error(
+        "Config 'dashboard.port' must be an integer between 1 and 65535",
+      );
+    }
+  }
+
+  if (
+    config.dashboard.host !== undefined &&
+    typeof config.dashboard.host !== "string"
+  ) {
+    throw new Error("Config 'dashboard.host' must be a string if specified");
+  }
+}
+
+/**
  * Validates a single MCP client configuration.
  */
 function validateMcpClientConfig(
@@ -432,6 +465,7 @@ export function loadConfig(): ServerConfig {
     validateACPConfig(config);
     validateLoggingConfig(config);
     validateDatabaseConfig(config);
+    validateDashboardConfig(config);
 
     return config;
   } catch (error) {

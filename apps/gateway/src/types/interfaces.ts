@@ -315,6 +315,17 @@ export interface DatabaseConfig {
   retentionDays?: number;
 }
 
+/**
+ * Configuration for the dashboard web UI.
+ * The dashboard runs as a separate HTTP server alongside the MCP transport.
+ */
+export interface DashboardConfig {
+  /** Port for the dashboard HTTP server. Default: 3100 */
+  port?: number;
+  /** Host to bind the dashboard server. Default: "localhost" */
+  host?: string;
+}
+
 export interface ServerConfig {
   port?: number;
   host?: string;
@@ -348,6 +359,12 @@ export interface ServerConfig {
    * - Data older than 7 days is purged on startup
    */
   database?: DatabaseConfig;
+  /**
+   * Dashboard web UI configuration.
+   * When present, a separate HTTP server serves the dashboard UI and REST API.
+   * The dashboard starts in both HTTP and stdio modes.
+   */
+  dashboard?: DashboardConfig;
 }
 
 export type { ILogger } from "@my-cool-proxy/logger";
@@ -529,6 +546,34 @@ export interface IToolInspectionStore {
  * Service for logging Lua script executions and their tool calls.
  * Backed by SQLite in HTTP mode; no-op in stdio mode.
  */
+/**
+ * A logged Lua script execution.
+ */
+export interface LuaExecution {
+  executionId: string;
+  sessionId: string;
+  script: string;
+  status: "success" | "error";
+  error?: string;
+  result?: string;
+  createdAt: number;
+}
+
+/**
+ * A logged tool call made within a Lua script execution.
+ */
+export interface LuaToolCall {
+  callId: string;
+  executionId: string;
+  serverName: string;
+  toolName: string;
+  arguments?: string;
+  status: "success" | "error";
+  error?: string;
+  result?: string;
+  createdAt: number;
+}
+
 export interface IExecutionLog {
   /**
    * Log the start of a Lua script execution.
@@ -568,6 +613,30 @@ export interface IExecutionLog {
    * @param result JSON-serialized result value
    */
   markToolCallResult(callId: string, result: string): void;
+
+  /**
+   * Get recent executions for a session, ordered by created_at DESC.
+   * @param sessionId The session to query
+   * @param limit Maximum number of executions to return (default 50)
+   */
+  getExecutions(sessionId: string, limit?: number): LuaExecution[];
+
+  /**
+   * Get tool calls for an execution, ordered by created_at DESC.
+   * @param executionId The execution to query
+   */
+  getToolCalls(executionId: string): LuaToolCall[];
+
+  /**
+   * Get a single execution by ID.
+   */
+  getExecution(executionId: string): LuaExecution | undefined;
+
+  /**
+   * Get recent executions across ALL sessions, ordered by created_at DESC.
+   * @param limit Maximum number of executions to return (default 50)
+   */
+  getAllExecutions(limit?: number): LuaExecution[];
 }
 
 // Re-export skill types for convenience

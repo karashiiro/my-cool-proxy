@@ -1,4 +1,12 @@
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "tsup";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const dashboardBuildDir = resolve(
+  __dirname,
+  "../../packages/dashboard-ui/build",
+);
 
 export default defineConfig({
   entry: ["src/index.ts"],
@@ -37,4 +45,5 @@ export default defineConfig({
   splitting: false,
   minify: false,
   target: "node22",
+  onSuccess: `rm -rf dist/dashboard && cp -r "${dashboardBuildDir}" dist/dashboard`,
 });

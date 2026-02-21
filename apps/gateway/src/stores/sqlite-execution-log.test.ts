@@ -178,6 +178,61 @@ describe("SQLiteExecutionLog", () => {
     });
   });
 
+  describe("getExecution", () => {
+    it("should return a single execution by ID", () => {
+      const id = log.logExecution("session-1", "result('hello')");
+      log.markExecutionResult(id, JSON.stringify("hello"));
+      const execution = log.getExecution(id);
+      expect(execution).toBeDefined();
+      expect(execution!.executionId).toBe(id);
+      expect(execution!.script).toBe("result('hello')");
+      expect(execution!.status).toBe("success");
+    });
+
+    it("should return undefined for non-existent execution", () => {
+      expect(log.getExecution("nonexistent")).toBeUndefined();
+    });
+
+    it("should return execution with error status", () => {
+      const id = log.logExecution("session-1", "bad()");
+      log.markExecutionError(id, "attempt to call a nil value");
+      const execution = log.getExecution(id);
+      expect(execution).toBeDefined();
+      expect(execution!.status).toBe("error");
+      expect(execution!.error).toBe("attempt to call a nil value");
+    });
+  });
+
+  describe("getAllExecutions", () => {
+    it("should return executions across all sessions ordered by created_at DESC", async () => {
+      log.logExecution("session-1", "script1");
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      log.logExecution("session-2", "script2");
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      log.logExecution("session-1", "script3");
+
+      const all = log.getAllExecutions();
+      expect(all).toHaveLength(3);
+      // Most recent first
+      expect(all[0]!.script).toBe("script3");
+      expect(all[2]!.script).toBe("script1");
+    });
+
+    it("should respect limit parameter", () => {
+      for (let i = 0; i < 10; i++) log.logExecution("s", `script${i}`);
+      expect(log.getAllExecutions(3)).toHaveLength(3);
+    });
+
+    it("should default limit to 50", () => {
+      for (let i = 0; i < 60; i++) log.logExecution("s", `script${i}`);
+      expect(log.getAllExecutions()).toHaveLength(50);
+    });
+
+    it("should return empty array when no executions exist", () => {
+      expect(log.getAllExecutions()).toEqual([]);
+    });
+  });
+
   describe("getToolCalls", () => {
     it("should return tool calls in descending order by timestamp", async () => {
       const execId = log.logExecution("session-1", "multi-call script");
