@@ -51,9 +51,15 @@ export function createDashboardApp(
     const offset = Math.trunc(
       clamp(Number.isFinite(rawOffset) ? rawOffset : 0, 0, Number.MAX_SAFE_INTEGER),
     );
-    const executions = executionLog.getAllExecutions(limit, offset);
-    const total = executionLog.countExecutions();
+    const tool = c.req.query("tool") || undefined;
+    const executions = executionLog.getAllExecutions(limit, offset, tool);
+    const total = executionLog.countExecutions(tool);
     return c.json({ executions, total });
+  });
+
+  app.get("/api/tools", (c) => {
+    const tools = executionLog.getDistinctTools();
+    return c.json(tools);
   });
 
   app.get("/api/executions/:id", (c) => {

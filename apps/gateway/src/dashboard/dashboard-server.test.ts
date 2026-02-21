@@ -2,7 +2,11 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { createDashboardApp } from "./dashboard-server.js";
 import { SQLiteDatabase } from "../stores/sqlite-database.js";
 import { SQLiteExecutionLog } from "../stores/sqlite-execution-log.js";
-import type { LuaExecution, LuaToolCall } from "../types/interfaces.js";
+import type {
+  LuaExecution,
+  LuaToolCall,
+  ToolUsage,
+} from "../types/interfaces.js";
 
 interface ExecutionsResponse {
   executions: LuaExecution[];
@@ -88,6 +92,36 @@ describe("Dashboard API", () => {
       expect(data2.executions).toHaveLength(5);
     });
 
+    it("should filter executions by tool query param", async () => {
+      const exec1 = log.logExecution("s", "script1");
+      log.logToolCall(exec1, "github", "search_code");
+      const exec2 = log.logExecution("s", "script2");
+      log.logToolCall(exec2, "github", "list_issues");
+      const exec3 = log.logExecution("s", "script3");
+      log.logToolCall(exec3, "github", "search_code");
+
+      const res = await app.request(
+        "/api/executions?tool=github.search_code",
+      );
+      const data = (await res.json()) as ExecutionsResponse;
+      expect(data.executions).toHaveLength(2);
+      expect(data.total).toBe(2);
+      expect(data.executions.map((e) => e.script)).toContain("script1");
+      expect(data.executions.map((e) => e.script)).toContain("script3");
+    });
+
+    it("should return empty results for non-existent tool filter", async () => {
+      const exec1 = log.logExecution("s", "script1");
+      log.logToolCall(exec1, "github", "search_code");
+
+      const res = await app.request(
+        "/api/executions?tool=nonexistent.tool",
+      );
+      const data = (await res.json()) as ExecutionsResponse;
+      expect(data.executions).toEqual([]);
+      expect(data.total).toBe(0);
+    });
+
     it("should return executions across all sessions", async () => {
       log.logExecution("session-a", "script-a");
       log.logExecution("session-b", "script-b");
@@ -97,6 +131,32 @@ describe("Dashboard API", () => {
       const data = (await res.json()) as ExecutionsResponse;
       expect(data.executions).toHaveLength(3);
       expect(data.total).toBe(3);
+    });
+  });
+
+  describe("GET /api/tools", () => {
+    it("should return empty array when no tool calls exist", async () => {
+      const res = await app.request("/api/tools");
+      expect(res.status).toBe(200);
+      expect((await res.json()) as ToolUsage[]).toEqual([]);
+    });
+
+    it("should return distinct tools ordered by count descending", async () => {
+      const exec1 = log.logExecution("s", "a");
+      log.logToolCall(exec1, "github", "search_code");
+      log.logToolCall(exec1, "github", "search_code");
+      const exec2 = log.logExecution("s", "b");
+      log.logToolCall(exec2, "context7", "query_docs");
+      log.logToolCall(exec2, "context7", "query_docs");
+      log.logToolCall(exec2, "context7", "query_docs");
+      log.logToolCall(exec2, "github", "list_issues");
+
+      const res = await app.request("/api/tools");
+      const data = (await res.json()) as ToolUsage[];
+      expect(data).toHaveLength(3);
+      expect(data[0]).toEqual({ tool: "context7.query_docs", count: 3 });
+      expect(data[1]).toEqual({ tool: "github.search_code", count: 2 });
+      expect(data[2]).toEqual({ tool: "github.list_issues", count: 1 });
     });
   });
 

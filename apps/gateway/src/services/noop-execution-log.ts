@@ -3,6 +3,7 @@ import type {
   IExecutionLog,
   LuaExecution,
   LuaToolCall,
+  ToolUsage,
 } from "../types/interfaces.js";
 
 /**
@@ -45,5 +46,9 @@ export class NoopExecutionLog implements IExecutionLog {
 
   countExecutions(): number {
     return 0;
+  }
+
+  getDistinctTools(): ToolUsage[] {
+    return [];
   }
 }
