@@ -231,6 +231,27 @@ describe("SQLiteExecutionLog", () => {
     it("should return empty array when no executions exist", () => {
       expect(log.getAllExecutions()).toEqual([]);
     });
+
+    it("should respect offset parameter", () => {
+      for (let i = 0; i < 10; i++) log.logExecution("s", `script${i}`);
+      // rowid DESC tiebreaker: script9 is most recent, skip first 3
+      const page = log.getAllExecutions(3, 3);
+      expect(page).toHaveLength(3);
+      expect(page[0]!.script).toBe("script6");
+    });
+  });
+
+  describe("countExecutions", () => {
+    it("should return 0 when no executions exist", () => {
+      expect(log.countExecutions()).toBe(0);
+    });
+
+    it("should return the total number of executions", () => {
+      log.logExecution("s1", "a");
+      log.logExecution("s2", "b");
+      log.logExecution("s1", "c");
+      expect(log.countExecutions()).toBe(3);
+    });
   });
 
   describe("getToolCalls", () => {

@@ -146,7 +146,7 @@ export class SQLiteExecutionLog implements IExecutionLog {
            created_at AS createdAt
          FROM lua_executions
          WHERE session_id = ?
-         ORDER BY created_at DESC
+         ORDER BY created_at DESC, rowid DESC
          LIMIT ?`,
       )
       .all(sessionId, limit) as LuaExecution[];
@@ -172,7 +172,7 @@ export class SQLiteExecutionLog implements IExecutionLog {
            created_at AS createdAt
          FROM lua_tool_calls
          WHERE execution_id = ?
-         ORDER BY created_at DESC`,
+         ORDER BY created_at DESC, rowid DESC`,
       )
       .all(executionId) as LuaToolCall[];
   }
@@ -203,7 +203,7 @@ export class SQLiteExecutionLog implements IExecutionLog {
    * Get recent executions across all sessions, ordered by timestamp descending.
    * @param limit Maximum number of executions to return (default 50)
    */
-  getAllExecutions(limit = 50): LuaExecution[] {
+  getAllExecutions(limit = 50, offset = 0): LuaExecution[] {
     return this.db
       .getDatabase()
       .prepare(
@@ -216,9 +216,17 @@ export class SQLiteExecutionLog implements IExecutionLog {
            result,
            created_at AS createdAt
          FROM lua_executions
-         ORDER BY created_at DESC
-         LIMIT ?`,
+         ORDER BY created_at DESC, rowid DESC
+         LIMIT ? OFFSET ?`,
       )
-      .all(limit) as LuaExecution[];
+      .all(limit, offset) as LuaExecution[];
+  }
+
+  countExecutions(): number {
+    const row = this.db
+      .getDatabase()
+      .prepare(`SELECT COUNT(*) AS count FROM lua_executions`)
+      .get() as { count: number } | undefined;
+    return row?.count ?? 0;
   }
 }

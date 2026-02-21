@@ -1,11 +1,23 @@
 import type { LuaExecution, LuaToolCall } from "./types.js";
 
+/** Paginated response from the executions endpoint. */
+export interface ExecutionsPage {
+  executions: LuaExecution[];
+  total: number;
+}
+
 /**
- * Fetch recent executions from the dashboard API.
+ * Fetch a page of executions from the dashboard API.
  */
-export async function fetchExecutions(limit = 50): Promise<LuaExecution[]> {
-  const res = await fetch(`/api/executions?limit=${limit}`);
-  if (!res.ok) throw new Error(`Failed to fetch executions: ${res.statusText}`);
+export async function fetchExecutions(
+  limit = 50,
+  offset = 0,
+): Promise<ExecutionsPage> {
+  const res = await fetch(
+    `/api/executions?limit=${limit}&offset=${offset}`,
+  );
+  if (!res.ok)
+    throw new Error(`Failed to fetch executions: ${res.statusText}`);
   return res.json();
 }
 
@@ -14,7 +26,8 @@ export async function fetchExecutions(limit = 50): Promise<LuaExecution[]> {
  */
 export async function fetchExecution(id: string): Promise<LuaExecution> {
   const res = await fetch(`/api/executions/${encodeURIComponent(id)}`);
-  if (!res.ok) throw new Error(`Failed to fetch execution: ${res.statusText}`);
+  if (!res.ok)
+    throw new Error(`Failed to fetch execution: ${res.statusText}`);
   return res.json();
 }
 
@@ -27,6 +40,7 @@ export async function fetchToolCalls(
   const res = await fetch(
     `/api/executions/${encodeURIComponent(executionId)}/tool-calls`,
   );
-  if (!res.ok) throw new Error(`Failed to fetch tool calls: ${res.statusText}`);
+  if (!res.ok)
+    throw new Error(`Failed to fetch tool calls: ${res.statusText}`);
   return res.json();
 }

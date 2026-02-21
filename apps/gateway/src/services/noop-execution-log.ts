@@ -42,4 +42,8 @@ export class NoopExecutionLog implements IExecutionLog {
   getAllExecutions(): LuaExecution[] {
     return [];
   }
+
+  countExecutions(): number {
+    return 0;
+  }
 }
