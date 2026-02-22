@@ -1,7 +1,16 @@
 /** Events broadcast over the dashboard WebSocket. */
 export type DashboardEvent =
-  | { type: "execution:new"; executionId: string; sessionId: string; createdAt: number }
-  | { type: "execution:completed"; executionId: string; status: "success" | "error" }
+  | {
+      type: "execution:new";
+      executionId: string;
+      sessionId: string;
+      createdAt: number;
+    }
+  | {
+      type: "execution:completed";
+      executionId: string;
+      status: "success" | "error";
+    }
   | { type: "session:changed" };
 
 /** Handle returned by startDashboardServer for lifecycle management. */

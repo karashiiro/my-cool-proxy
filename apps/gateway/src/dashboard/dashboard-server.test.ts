@@ -120,9 +120,7 @@ describe("Dashboard API", () => {
       const exec3 = log.logExecution("s", "script3");
       log.logToolCall(exec3, "github", "search_code");
 
-      const res = await app.request(
-        "/api/executions?tool=github.search_code",
-      );
+      const res = await app.request("/api/executions?tool=github.search_code");
       const data = (await res.json()) as ExecutionsResponse;
       expect(data.executions).toHaveLength(2);
       expect(data.total).toBe(2);
@@ -134,9 +132,7 @@ describe("Dashboard API", () => {
       const exec1 = log.logExecution("s", "script1");
       log.logToolCall(exec1, "github", "search_code");
 
-      const res = await app.request(
-        "/api/executions?tool=nonexistent.tool",
-      );
+      const res = await app.request("/api/executions?tool=nonexistent.tool");
       const data = (await res.json()) as ExecutionsResponse;
       expect(data.executions).toEqual([]);
       expect(data.total).toBe(0);
@@ -262,10 +258,10 @@ describe("Dashboard API", () => {
       // Create a custom app with a mock that returns sessions
       const clientMgr = {
         getActiveSessions: () => ["session-1"],
-        getClientsBySession: (_id: string) =>
+        getClientsBySession: () =>
           new Map([
-            ["github", {} as any],
-            ["context7", {} as any],
+            ["github", {} as unknown],
+            ["context7", {} as unknown],
           ]),
         getFailedServers: () => new Map(),
       } as unknown as IMCPClientManager;
@@ -309,7 +305,7 @@ describe("Dashboard API", () => {
     it("should include failed servers", async () => {
       const clientMgr = {
         getActiveSessions: () => ["session-2"],
-        getClientsBySession: () => new Map([["github", {} as any]]),
+        getClientsBySession: () => new Map([["github", {} as unknown]]),
         getFailedServers: () =>
           new Map([["broken-server", "Connection refused"]]),
       } as unknown as IMCPClientManager;

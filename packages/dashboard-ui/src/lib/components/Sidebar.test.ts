@@ -9,7 +9,9 @@ vi.mock("$app/state", () => ({
 describe("Sidebar", () => {
   it("renders navigation links for Executions and Sessions", () => {
     render(Sidebar);
-    expect(screen.getByRole("link", { name: "Executions" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Executions" }),
+    ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Sessions" })).toBeInTheDocument();
   });
 

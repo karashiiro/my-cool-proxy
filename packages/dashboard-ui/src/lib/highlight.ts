@@ -127,7 +127,8 @@ function escapeHtml(str: string): string {
 }
 
 /** Validate a CSS color value (hex, named, or oklch/hsl/rgb function). */
-const SAFE_COLOR_RE = /^#[0-9a-fA-F]{3,8}$|^[a-zA-Z]+$|^(?:oklch|hsl|rgb)a?\([^)]+\)$/;
+const SAFE_COLOR_RE =
+  /^#[0-9a-fA-F]{3,8}$|^[a-zA-Z]+$|^(?:oklch|hsl|rgb)a?\([^)]+\)$/;
 
 function sanitizeColor(color: string, fallback: string): string {
   return SAFE_COLOR_RE.test(color) ? color : fallback;

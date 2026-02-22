@@ -72,9 +72,7 @@ describe("ResultPane", () => {
 
   it("renders MCP content array with image blocks as img elements", () => {
     const content = JSON.stringify({
-      content: [
-        { type: "image", data: "dGVzdA==", mimeType: "image/png" },
-      ],
+      content: [{ type: "image", data: "dGVzdA==", mimeType: "image/png" }],
     });
     const { container } = render(ResultPane, {
       props: { result: content, error: undefined, label: "Script Result" },

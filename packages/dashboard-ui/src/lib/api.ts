@@ -23,8 +23,7 @@ export async function fetchExecutions(
   let url = `/api/executions?limit=${limit}&offset=${offset}`;
   if (tool) url += `&tool=${encodeURIComponent(tool)}`;
   const res = await fetch(url);
-  if (!res.ok)
-    throw new Error(`Failed to fetch executions: ${res.statusText}`);
+  if (!res.ok) throw new Error(`Failed to fetch executions: ${res.statusText}`);
   return res.json();
 }
 
@@ -33,8 +32,7 @@ export async function fetchExecutions(
  */
 export async function fetchTools(): Promise<ToolUsage[]> {
   const res = await fetch("/api/tools");
-  if (!res.ok)
-    throw new Error(`Failed to fetch tools: ${res.statusText}`);
+  if (!res.ok) throw new Error(`Failed to fetch tools: ${res.statusText}`);
   return res.json();
 }
 
@@ -43,8 +41,7 @@ export async function fetchTools(): Promise<ToolUsage[]> {
  */
 export async function fetchExecution(id: string): Promise<LuaExecution> {
   const res = await fetch(`/api/executions/${encodeURIComponent(id)}`);
-  if (!res.ok)
-    throw new Error(`Failed to fetch execution: ${res.statusText}`);
+  if (!res.ok) throw new Error(`Failed to fetch execution: ${res.statusText}`);
   return res.json();
 }
 
@@ -57,8 +54,7 @@ export async function fetchToolCalls(
   const res = await fetch(
     `/api/executions/${encodeURIComponent(executionId)}/tool-calls`,
   );
-  if (!res.ok)
-    throw new Error(`Failed to fetch tool calls: ${res.statusText}`);
+  if (!res.ok) throw new Error(`Failed to fetch tool calls: ${res.statusText}`);
   return res.json();
 }
 
@@ -78,7 +74,6 @@ export interface SessionInfo {
  */
 export async function fetchSessions(): Promise<SessionInfo[]> {
   const res = await fetch("/api/sessions");
-  if (!res.ok)
-    throw new Error(`Failed to fetch sessions: ${res.statusText}`);
+  if (!res.ok) throw new Error(`Failed to fetch sessions: ${res.statusText}`);
   return res.json();
 }

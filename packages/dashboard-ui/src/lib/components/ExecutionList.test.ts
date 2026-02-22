@@ -109,7 +109,9 @@ describe("ExecutionList", () => {
       },
     });
     expect(screen.getByText("Filtered by:")).toBeInTheDocument();
-    expect(screen.getByLabelText("Clear filter: github.search_code")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Clear filter: github.search_code"),
+    ).toBeInTheDocument();
   });
 
   it("calls onfilter with null when clear filter is clicked", async () => {
@@ -145,7 +147,9 @@ describe("ExecutionList", () => {
     // Open the dropdown
     await user.click(screen.getByLabelText("Filter by tool"));
     // Select a tool
-    await user.click(screen.getByRole("option", { name: /context7\.query_docs/ }));
+    await user.click(
+      screen.getByRole("option", { name: /context7\.query_docs/ }),
+    );
     expect(onfilter).toHaveBeenCalledWith("context7.query_docs");
   });
 
@@ -158,7 +162,9 @@ describe("ExecutionList", () => {
         tools: [{ tool: "github.search_code", count: 5 }],
       },
     });
-    expect(screen.getByLabelText("Filtered by github.search_code")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Filtered by github.search_code"),
+    ).toBeInTheDocument();
   });
 
   it("shows refresh button", () => {
@@ -183,7 +189,9 @@ describe("ExecutionList", () => {
       props: { executions: mockExecutions, selectedId: null, pendingCount: 3 },
     });
     expect(screen.getByText("3")).toBeInTheDocument();
-    expect(screen.getByLabelText("Refresh executions (3 new)")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Refresh executions (3 new)"),
+    ).toBeInTheDocument();
   });
 
   it("refresh button does not show badge when pendingCount is 0", () => {
