@@ -264,11 +264,21 @@ export async function startDashboardServer(
   return {
     close: () =>
       new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          logger.warn("Dashboard shutdown timed out, forcing close");
+          resolve();
+        }, 5_000);
+
         clearInterval(heartbeat);
         for (const ws of clients) ws.terminate();
         clients.clear();
         wss.close(() => {
+          // server.close() only stops accepting new connections — existing
+          // keep-alive connections will keep the process alive indefinitely.
+          // Force-close them so the callback fires promptly.
+          server.closeAllConnections();
           server.close((err) => {
+            clearTimeout(timeout);
             if (err) reject(err);
             else resolve();
           });
