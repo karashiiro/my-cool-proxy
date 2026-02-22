@@ -1,16 +1,16 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.karashiir/my-cool-proxy",
+  "name": "io.github.karashiiro/my-cool-proxy",
   "description": "An MCP server gateway that minimizes context usage via progressive Lua-driven discovery 🌙",
   "repository": {
-    "url": "https://github.com/karashiir/my-cool-proxy",
+    "url": "https://github.com/karashiiro/my-cool-proxy",
     "source": "github"
   },
   "version": "1.5.4",
   "packages": [
     {
       "registryType": "npm",
-      "identifier": "@karashiir/my-cool-proxy",
+      "identifier": "@karashiiro/my-cool-proxy",
       "version": "1.5.4",
       "transport": {
         "type": "stdio"
