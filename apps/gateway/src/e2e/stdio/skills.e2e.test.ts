@@ -201,15 +201,6 @@ A second test skill.
   });
 
   describe("Server Instructions", () => {
-    it("should include skill instructions in server info", async () => {
-      const serverInfo = gatewayClient.getServerVersion();
-
-      // The server instructions should mention skills
-      // Note: We can't directly access instructions, but we can verify
-      // the server name is correct
-      expect(serverInfo?.name).toBe("my-cool-proxy");
-    });
-
     it("should receive instructions from gateway", async () => {
       const instructions = gatewayClient.getInstructions();
 
