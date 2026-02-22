@@ -174,12 +174,12 @@ Port and host settings are ignored in stdio mode.
 
 ## Implementation Details
 
-### Entry Point (`src/index.ts`)
+### Entry Point (`apps/gateway/src/index.ts`)
 
 The entry point reads the transport configuration and starts the appropriate mode using the `@karashiiro/mcp` abstraction layer:
 
-- **HTTP mode**: Uses `serveHttp()` with a session factory that creates isolated Gateway instances per session
-- **Stdio mode**: Uses `serveStdio()` with a single Gateway instance
+- **HTTP mode**: Uses `serveHttp()` (from `@karashiiro/mcp/http`) with a session factory that creates isolated Gateway instances per session
+- **Stdio mode**: Uses `serveStdio()` (from `@karashiiro/mcp/stdio`) with a single Gateway instance
 
 Session management in HTTP mode is handled via callbacks:
 

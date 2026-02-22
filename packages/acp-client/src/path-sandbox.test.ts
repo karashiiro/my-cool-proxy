@@ -168,42 +168,48 @@ describe("path-sandbox", () => {
       ).rejects.toThrow(PathSandboxError);
     });
 
-    it("rejects symlinks pointing outside sandbox", async () => {
-      // Create a file outside the sandbox
-      const outsideFile = join(outsideDir, "secret.txt");
-      writeFileSync(outsideFile, "secret content");
+    it.runIf(process.env.CI)(
+      "rejects symlinks pointing outside sandbox",
+      async () => {
+        // Create a file outside the sandbox
+        const outsideFile = join(outsideDir, "secret.txt");
+        writeFileSync(outsideFile, "secret content");
 
-      // Create a symlink inside sandbox pointing outside
-      const symlinkPath = join(sandbox, "evil-link");
-      symlinkSync(outsideFile, symlinkPath);
+        // Create a symlink inside sandbox pointing outside
+        const symlinkPath = join(sandbox, "evil-link");
+        symlinkSync(outsideFile, symlinkPath);
 
-      // The symlink exists inside sandbox, but points outside
-      await expect(sandboxPathForRead("evil-link", sandbox)).rejects.toThrow(
-        PathSandboxError,
-      );
-    });
+        // The symlink exists inside sandbox, but points outside
+        await expect(sandboxPathForRead("evil-link", sandbox)).rejects.toThrow(
+          PathSandboxError,
+        );
+      },
+    );
 
-    it("allows symlinks pointing within sandbox", async () => {
-      // Create a real file inside sandbox
-      const realFile = join(sandbox, "real.txt");
-      const realContent = "real content";
-      writeFileSync(realFile, realContent);
+    it.runIf(process.env.CI)(
+      "allows symlinks pointing within sandbox",
+      async () => {
+        // Create a real file inside sandbox
+        const realFile = join(sandbox, "real.txt");
+        const realContent = "real content";
+        writeFileSync(realFile, realContent);
 
-      // Create a symlink to it
-      const symlinkPath = join(sandbox, "link.txt");
-      symlinkSync(realFile, symlinkPath);
+        // Create a symlink to it
+        const symlinkPath = join(sandbox, "link.txt");
+        symlinkSync(realFile, symlinkPath);
 
-      const result = await sandboxPathForRead("link.txt", sandbox);
+        const result = await sandboxPathForRead("link.txt", sandbox);
 
-      // Verify behavior instead of exact path strings (Windows has inconsistent short/long names)
-      // If sandboxPathForRead returns successfully, the path is guaranteed to be within sandbox
-      expect(isAbsolute(result)).toBe(true);
-      // Should resolve to real.txt, not link.txt (symlink resolved)
-      expect(result.toLowerCase()).toContain("real.txt");
-      expect(result.toLowerCase()).not.toContain("link.txt");
-      // Verify the path is accessible and has the right content
-      expect(readFileSync(result, "utf-8")).toBe(realContent);
-    });
+        // Verify behavior instead of exact path strings (Windows has inconsistent short/long names)
+        // If sandboxPathForRead returns successfully, the path is guaranteed to be within sandbox
+        expect(isAbsolute(result)).toBe(true);
+        // Should resolve to real.txt, not link.txt (symlink resolved)
+        expect(result.toLowerCase()).toContain("real.txt");
+        expect(result.toLowerCase()).not.toContain("link.txt");
+        // Verify the path is accessible and has the right content
+        expect(readFileSync(result, "utf-8")).toBe(realContent);
+      },
+    );
 
     it("rejects path traversal before checking existence", async () => {
       await expect(

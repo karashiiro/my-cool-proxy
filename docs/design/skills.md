@@ -20,21 +20,21 @@ gw-skill://{skill-name}              → Main SKILL.md content
 gw-skill://{skill-name}/{path}       → Nested resources (scripts/, references/, assets/)
 ```
 
-This is separate from the `gw://` scheme used for upstream server resources. The `gw-skill://` scheme indicates gateway-local skills rather than proxied resources.
+This is separate from upstream server resource URIs, which pass through **unchanged** (see [Resource Routing](./resource-namespacing.md)). The `gw-skill://` scheme indicates gateway-local skills rather than proxied resources.
 
 ```mermaid
 flowchart LR
     subgraph URIs["Resource URI Schemes"]
-        GW["gw://server/uri"]
+        Upstream_URI["file:///..., custom://...<br/>(original URIs, unchanged)"]
         Skill["gw-skill://skill-name"]
     end
 
     subgraph Sources["Resource Sources"]
-        Upstream["Upstream MCP Servers"]
+        Upstream["Upstream MCP Servers<br/>(routed via routing table)"]
         Local["Local Skills Directory"]
     end
 
-    GW --> Upstream
+    Upstream_URI --> Upstream
     Skill --> Local
 ```
 
@@ -120,10 +120,11 @@ Instructions for the agent on how to perform code reviews...
 
 When skills are enabled, these Lua builtins become available in the `_gateway` global table (within `execute` scripts):
 
-| Builtin                                 | Requires                                          | Description                                          |
-| --------------------------------------- | ------------------------------------------------- | ---------------------------------------------------- |
-| `_gateway.invoke_skill_script({ ... })` | `skills.enabled: true`                            | Execute a script from a skill's `scripts/` directory |
-| `_gateway.write_skill({ ... })`         | `skills.enabled: true` AND `skills.mutable: true` | Create or modify skills                              |
+| Builtin                                 | Requires                                          | Description                                            |
+| --------------------------------------- | ------------------------------------------------- | ------------------------------------------------------ |
+| `_gateway.invoke_skill_script({ ... })` | `skills.enabled: true`                            | Execute a script from a skill's `scripts/` directory   |
+| `_gateway.write_skill({ ... })`         | `skills.enabled: true` AND `skills.mutable: true` | Create or modify skills and their files                |
+| `_gateway.update_skill({ ... })`        | `skills.enabled: true` AND `skills.mutable: true` | Partially update a skill file using string replacement |
 
 Additionally, these builtins are always available (not skill-specific):
 
@@ -266,11 +267,12 @@ The native resource protocol handlers exist for clients that _do_ support resour
 
 ### Key Components
 
-| Component               | File                                      | Purpose                                          |
-| ----------------------- | ----------------------------------------- | ------------------------------------------------ |
-| `SkillDiscoveryService` | `src/services/skill-discovery-service.ts` | Scans skill directories, resolves skill content  |
-| `SkillResourceProvider` | `src/services/skill-resource-provider.ts` | Provides skills as MCP resources                 |
-| `ExecuteLuaTool`        | `src/tools/execute-lua-tool.ts`           | Hosts `_gateway.*` builtins for skill operations |
+| Component                | File                                                    | Purpose                                         |
+| ------------------------ | ------------------------------------------------------- | ----------------------------------------------- |
+| `SkillDiscoveryService`  | `apps/gateway/src/services/skill-discovery-service.ts`  | Scans skill directories, resolves skill content |
+| `SkillOperationsService` | `apps/gateway/src/services/skill-operations-service.ts` | Creates, modifies, and updates skills           |
+| `SkillResourceProvider`  | `apps/gateway/src/services/skill-resource-provider.ts`  | Provides skills as MCP resources                |
+| `GatewayBuiltinsBuilder` | `apps/gateway/src/tools/gateway-builtins-builder.ts`    | Constructs `_gateway.*` builtins for skill ops  |
 
 ### Resource Integration
 
@@ -288,7 +290,7 @@ flowchart TB
     end
 
     subgraph Providers["Resource Providers"]
-        Upstream["Upstream MCP Servers<br/>(gw:// URIs)"]
+        Upstream["Upstream MCP Servers<br/>(original URIs via routing table)"]
         Skills["Skill Resource Provider<br/>(gw-skill:// URIs)"]
     end
 

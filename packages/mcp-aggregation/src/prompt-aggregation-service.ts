@@ -3,13 +3,10 @@ import type {
   GetPromptResult,
   Prompt,
 } from "@modelcontextprotocol/sdk/types.js";
-import {
-  namespacePrompt,
-  parsePromptName,
-  namespaceGetPromptResultResources,
-} from "@my-cool-proxy/mcp-utilities";
+import { namespacePrompt, parsePromptName } from "@my-cool-proxy/mcp-utilities";
 import { createCache } from "@my-cool-proxy/mcp-client";
 import type { IMCPClientManager, ILogger, ICacheService } from "./types.js";
+import type { IResourceRoutingService } from "./resource-routing-service.js";
 import { lookupServerOrThrow } from "./utils/server-lookup.js";
 
 export class PromptAggregationService {
@@ -18,6 +15,7 @@ export class PromptAggregationService {
   constructor(
     private clientPool: IMCPClientManager,
     private logger: ILogger,
+    private routingService: IResourceRoutingService,
   ) {
     // Create a cache instance for this service
     this.cache = createCache<Prompt[]>(logger);
@@ -110,7 +108,12 @@ export class PromptAggregationService {
       this.logger.debug(
         `Got prompt '${originalName}' from server '${serverName}'`,
       );
-      return namespaceGetPromptResultResources(serverName, result);
+
+      // Register any resource URIs found in prompt message content
+      // so they can be routed correctly via readResource later
+      this.registerPromptResultResources(session, serverName, result);
+
+      return result;
     } catch (error) {
       this.logger.error(
         `Failed to get prompt '${originalName}' from server '${serverName}':`,
@@ -125,6 +128,51 @@ export class PromptAggregationService {
       `Prompt list changed for server '${serverName}' in session '${sessionId}'`,
     );
     this.cache.delete(sessionId);
+  }
+
+  /**
+   * Walk through a GetPromptResult and register any resource URIs
+   * found in message content blocks for future routing.
+   */
+  private registerPromptResultResources(
+    sessionId: string,
+    serverName: string,
+    result: GetPromptResult,
+  ): void {
+    for (const message of result.messages) {
+      const content = message.content;
+      if (
+        typeof content !== "object" ||
+        content === null ||
+        !("type" in content)
+      ) {
+        continue;
+      }
+
+      // resource_link content blocks (flat structure)
+      if (content.type === "resource_link" && "uri" in content) {
+        this.routingService.registerEncounteredUri(
+          sessionId,
+          content.uri as string,
+          serverName,
+        );
+      }
+
+      // embedded resource content blocks (nested structure)
+      if (
+        content.type === "resource" &&
+        "resource" in content &&
+        typeof content.resource === "object" &&
+        content.resource !== null &&
+        "uri" in content.resource
+      ) {
+        this.routingService.registerEncounteredUri(
+          sessionId,
+          content.resource.uri as string,
+          serverName,
+        );
+      }
+    }
   }
 }
 

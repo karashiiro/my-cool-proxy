@@ -16,3 +16,8 @@ export { MCPFormatterService } from "./mcp-formatter-service.js";
 export { ToolDiscoveryService } from "./tool-discovery-service.js";
 export { ResourceAggregationService } from "./resource-aggregation-service.js";
 export { PromptAggregationService } from "./prompt-aggregation-service.js";
+export { CompletionAggregationService } from "./completion-aggregation-service.js";
+export {
+  ResourceRoutingService,
+  type IResourceRoutingService,
+} from "./resource-routing-service.js";

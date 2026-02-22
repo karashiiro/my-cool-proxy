@@ -122,6 +122,9 @@ CONFIG_PATH=/path/to/custom-config.json pnpm dev
   - `"http"`: Run as HTTP server (requires port and host)
   - `"stdio"`: Run as stdio-based MCP server (port and host are optional)
 - **mcpClients** (object, required): Map of MCP server configurations, keyed by server name
+- **database** (object, optional): Database configuration for data retention
+  - **retentionDays** (number, optional): Number of days to retain data before automatic cleanup on startup (default: `7`)
+- **dashboard** (object, optional): Dashboard web UI configuration (see [Dashboard](#dashboard))
 
 #### MCP Client Configuration
 
@@ -629,6 +632,50 @@ Registered sampling request handler for upstream server 'trusted-server'
 - **Trust model**: Only enable for servers you fully trust
 - **Best practice**: Leave disabled unless you have a specific need
 
+## Dashboard
+
+The gateway includes an optional web dashboard for browsing Lua execution history and monitoring active sessions in real time. The dashboard runs as a separate HTTP server alongside the main MCP transport (in both HTTP and stdio modes).
+
+### Configuration
+
+```json
+{
+  "dashboard": {
+    "port": 3100,
+    "host": "localhost"
+  }
+}
+```
+
+#### Fields
+
+- **port** (number, optional): Port for the dashboard HTTP server. Default: `3100`
+- **host** (string, optional): Hostname to bind the dashboard server to. Default: `"localhost"`
+
+When the `dashboard` field is present in your config, the dashboard server starts automatically. Omit the field entirely to disable it.
+
+### Features
+
+- **Execution history** — Browse all Lua script executions with script content, results, and timing
+- **Tool call log** — See which tools were called during each execution, with server and tool names
+- **Session monitoring** — View active sessions, their connected servers, and capabilities
+- **Real-time updates** — WebSocket connection pushes new executions and tool calls to the UI as they happen
+- **Syntax highlighting** — Lua scripts and JSON results are syntax-highlighted in the browser
+
+### Endpoints
+
+The dashboard exposes:
+
+- `GET /` — Dashboard web UI (static SvelteKit app)
+- `GET /api/executions` — Paginated execution history (supports `?tool=server.tool` filter)
+- `GET /api/executions/:id` — Single execution with tool calls
+- `GET /api/sessions` — Active session info with capabilities
+- `WebSocket /` — Real-time event stream for new executions and tool calls
+
+### Build Dependency
+
+The dashboard UI is built from `packages/dashboard-ui/`. Running `pnpm build` from the workspace root builds all packages in the correct order, including the dashboard. The gateway's build step copies the SvelteKit output into `dist/dashboard/` for static serving.
+
 ## Skills
 
 Skills are reusable instruction sets that extend the gateway's capabilities. They can include scripts, reference materials, and specialized guidance for specific tasks.
@@ -655,7 +702,7 @@ Skills are reusable instruction sets that extend the gateway's capabilities. The
 
 - **mutable** (boolean, optional): Allow creating and modifying skills. Default: `false`
   - Only takes effect if `enabled` is `true`
-  - When `true`, enables the `_gateway.write_skill()` Lua builtin
+  - When `true`, enables the `_gateway.write_skill()` and `_gateway.update_skill()` Lua builtins
   - When `false`, skills are read-only (can read via resources and invoke scripts, but not create/modify)
 
 ### Accessing Skills
@@ -671,10 +718,11 @@ Use the standard `resources/list` and `resources/read` MCP operations to discove
 
 When skills are enabled, these Lua builtins become available in the `_gateway` table:
 
-| Builtin                                 | Requires                            | Description                                         |
-| --------------------------------------- | ----------------------------------- | --------------------------------------------------- |
-| `_gateway.invoke_skill_script({ ... })` | `enabled: true`                     | Execute scripts from a skill's `scripts/` directory |
-| `_gateway.write_skill({ ... })`         | `enabled: true` AND `mutable: true` | Create or modify skills and their files             |
+| Builtin                                 | Requires                            | Description                                            |
+| --------------------------------------- | ----------------------------------- | ------------------------------------------------------ |
+| `_gateway.invoke_skill_script({ ... })` | `enabled: true`                     | Execute scripts from a skill's `scripts/` directory    |
+| `_gateway.write_skill({ ... })`         | `enabled: true` AND `mutable: true` | Create or modify skills and their files                |
+| `_gateway.update_skill({ ... })`        | `enabled: true` AND `mutable: true` | Partially update a skill file using string replacement |
 
 Note: `_gateway.list_resources()` and `_gateway.read_resource()` are always available (not skill-specific) and can be used to discover and read skills.
 
@@ -1062,6 +1110,22 @@ cp ~/.local/share/my-cool-proxy/sessions.db ~/backup/sessions.db
 # Or use SQLite backup (safe while gateway is running)
 sqlite3 ~/.local/share/my-cool-proxy/sessions.db ".backup ~/backup/sessions.db"
 ```
+
+### Data Retention
+
+On startup, the gateway automatically purges data older than the configured retention period from all database tables (sessions, events, execution logs, and tool call logs). This prevents unbounded database growth over time.
+
+```json
+{
+  "database": {
+    "retentionDays": 7
+  }
+}
+```
+
+- **retentionDays** (number, optional): Number of days of data to retain. Data older than this is deleted on startup. Default: `7`.
+
+The cleanup runs once at server startup in both HTTP and stdio modes. It logs the number of purged rows when any data is removed.
 
 ### Stdio Mode
 

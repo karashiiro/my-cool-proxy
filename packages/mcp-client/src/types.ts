@@ -42,6 +42,7 @@ export interface IMCPClientManager {
   getClientsBySession(sessionId: string): Map<string, MCPClientSession>;
   getFailedServers(sessionId: string): Map<string, string>;
   closeSession(sessionId: string): Promise<void>;
+  getActiveSessions(): string[];
   setResourceListChangedHandler(
     handler: (serverName: string, sessionId: string) => void,
   ): void;

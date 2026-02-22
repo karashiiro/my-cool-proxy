@@ -18,6 +18,9 @@ import type {
   IMCPClientManager,
   ServerConfig,
   ISkillDiscoveryService,
+  ISkillOperationsService,
+  IToolInspectionStore,
+  IExecutionLog,
 } from "../types/interfaces.js";
 import * as z from "zod";
 import { MCPClientSession } from "@my-cool-proxy/mcp-client";
@@ -25,7 +28,10 @@ import {
   ToolDiscoveryService,
   ResourceAggregationService,
   PromptAggregationService,
+  CompletionAggregationService,
   MCPFormatterService,
+  ResourceRoutingService,
+  type IResourceRoutingService,
 } from "@my-cool-proxy/mcp-aggregation";
 import { ExecuteLuaTool } from "../tools/execute-lua-tool.js";
 import { ListServersTool } from "../tools/list-servers-tool.js";
@@ -54,6 +60,7 @@ const createMockClientManager = (
   getClientsBySession: vi.fn(() => clients),
   getFailedServers: vi.fn(() => new Map()),
   closeSession: vi.fn(),
+  getActiveSessions: vi.fn().mockReturnValue([]),
   setResourceListChangedHandler: vi.fn(),
   setPromptListChangedHandler: vi.fn(),
   setToolListChangedHandler: vi.fn(),
@@ -69,12 +76,43 @@ const createMockSkillDiscoveryService = (): ISkillDiscoveryService => ({
   ensureSkillsDirectory: vi.fn(),
 });
 
+// Mock skill operations service
+const createMockSkillOperationsService = (): ISkillOperationsService => ({
+  executeSkillScript: vi.fn().mockResolvedValue({ success: true }),
+  writeSkillFiles: vi.fn().mockResolvedValue({ success: true }),
+  updateSkillFile: vi.fn().mockResolvedValue({ success: true }),
+});
+
+// Mock tool inspection store
+const createMockToolInspectionStore = (): IToolInspectionStore => ({
+  markInspected: vi.fn(),
+  isInspected: vi.fn().mockReturnValue(true),
+  deleteSession: vi.fn(),
+});
+
+// Mock execution log
+const createMockExecutionLog = (): IExecutionLog => ({
+  logExecution: vi.fn().mockReturnValue("exec-1"),
+  markExecutionError: vi.fn(),
+  markExecutionResult: vi.fn(),
+  logToolCall: vi.fn().mockReturnValue("call-1"),
+  markToolCallError: vi.fn(),
+  markToolCallResult: vi.fn(),
+  getExecutions: vi.fn().mockReturnValue([]),
+  getToolCalls: vi.fn().mockReturnValue([]),
+  getExecution: vi.fn().mockReturnValue(undefined),
+  getAllExecutions: vi.fn().mockReturnValue([]),
+  countExecutions: vi.fn().mockReturnValue(0),
+  getDistinctTools: vi.fn().mockReturnValue([]),
+});
+
 // Helper to create a tool registry with all tools
 const createToolRegistry = (
   luaRuntime: ILuaRuntime,
   clientManager: IMCPClientManager,
   logger: ILogger,
   config: ServerConfig = { port: 3000, host: "localhost", mcpClients: {} },
+  sharedRoutingService?: IResourceRoutingService,
 ): IToolRegistry => {
   const toolDiscovery = new ToolDiscoveryService(
     clientManager,
@@ -83,14 +121,32 @@ const createToolRegistry = (
     new MCPFormatterService(),
   );
 
-  // Create mock aggregation services for ExecuteLuaTool
+  // Use shared routing service if provided, otherwise create an internal one.
+  // Tests that need tool-result URI registration to flow through to readResource
+  // must pass a shared routing service.
+  const routingService =
+    sharedRoutingService ?? new ResourceRoutingService(logger);
   const resourceAggregation = new ResourceAggregationService(
     clientManager,
     logger,
+    routingService,
     [],
   );
-  const promptAggregation = new PromptAggregationService(clientManager, logger);
+  const promptAggregation = new PromptAggregationService(
+    clientManager,
+    logger,
+    routingService,
+  );
+  const completionAggregation = new CompletionAggregationService(
+    clientManager,
+    logger,
+    routingService,
+  );
   const skillDiscoveryService = createMockSkillDiscoveryService();
+  const skillOperationsService = createMockSkillOperationsService();
+  const toolInspectionStore = createMockToolInspectionStore();
+
+  const executionLog = createMockExecutionLog();
 
   const registry = new ToolRegistry();
   registry.register(
@@ -102,12 +158,19 @@ const createToolRegistry = (
       resourceAggregation,
       promptAggregation,
       skillDiscoveryService,
+      routingService,
+      completionAggregation,
+      skillOperationsService,
+      toolInspectionStore,
+      executionLog,
     ),
   );
   registry.register(new ListServersTool(toolDiscovery, config));
   registry.register(new ListServerToolsTool(toolDiscovery, config));
-  registry.register(new ToolDetailsTool(toolDiscovery));
-  registry.register(new InspectToolResponseTool(toolDiscovery, config));
+  registry.register(new ToolDetailsTool(toolDiscovery, toolInspectionStore));
+  registry.register(
+    new InspectToolResponseTool(toolDiscovery, config, toolInspectionStore),
+  );
 
   return registry;
 };
@@ -482,8 +545,20 @@ describe("MCPGatewayServer - execute tool", () => {
         createToolRegistry(luaRuntime, clientManager, logger),
         clientManager,
         logger,
-        new ResourceAggregationService(clientManager, logger),
-        new PromptAggregationService(clientManager, logger),
+        (() => {
+          const rs = new ResourceRoutingService(logger);
+          return new ResourceAggregationService(clientManager, logger, rs);
+        })(),
+        new PromptAggregationService(
+          clientManager,
+          logger,
+          new ResourceRoutingService(logger),
+        ),
+        new CompletionAggregationService(
+          clientManager,
+          logger,
+          new ResourceRoutingService(logger),
+        ),
       );
       gateway = gatewayServer.getServer();
 
@@ -548,8 +623,20 @@ describe("MCPGatewayServer - execute tool", () => {
         createToolRegistry(luaRuntime, clientManager, logger),
         clientManager,
         logger,
-        new ResourceAggregationService(clientManager, logger),
-        new PromptAggregationService(clientManager, logger),
+        (() => {
+          const rs = new ResourceRoutingService(logger);
+          return new ResourceAggregationService(clientManager, logger, rs);
+        })(),
+        new PromptAggregationService(
+          clientManager,
+          logger,
+          new ResourceRoutingService(logger),
+        ),
+        new CompletionAggregationService(
+          clientManager,
+          logger,
+          new ResourceRoutingService(logger),
+        ),
       );
       gateway = gatewayServer.getServer();
 
@@ -614,8 +701,20 @@ describe("MCPGatewayServer - execute tool", () => {
         createToolRegistry(luaRuntime, clientManager, logger),
         clientManager,
         logger,
-        new ResourceAggregationService(clientManager, logger),
-        new PromptAggregationService(clientManager, logger),
+        (() => {
+          const rs = new ResourceRoutingService(logger);
+          return new ResourceAggregationService(clientManager, logger, rs);
+        })(),
+        new PromptAggregationService(
+          clientManager,
+          logger,
+          new ResourceRoutingService(logger),
+        ),
+        new CompletionAggregationService(
+          clientManager,
+          logger,
+          new ResourceRoutingService(logger),
+        ),
       );
       gateway = gatewayServer.getServer();
 
@@ -674,8 +773,20 @@ describe("MCPGatewayServer - execute tool", () => {
         createToolRegistry(luaRuntime, clientManager, logger),
         clientManager,
         logger,
-        new ResourceAggregationService(clientManager, logger),
-        new PromptAggregationService(clientManager, logger),
+        (() => {
+          const rs = new ResourceRoutingService(logger);
+          return new ResourceAggregationService(clientManager, logger, rs);
+        })(),
+        new PromptAggregationService(
+          clientManager,
+          logger,
+          new ResourceRoutingService(logger),
+        ),
+        new CompletionAggregationService(
+          clientManager,
+          logger,
+          new ResourceRoutingService(logger),
+        ),
       );
       gateway = gatewayServer.getServer();
 
@@ -719,8 +830,20 @@ describe("MCPGatewayServer - execute tool", () => {
         createToolRegistry(luaRuntime, clientManager, logger),
         clientManager,
         logger,
-        new ResourceAggregationService(clientManager, logger),
-        new PromptAggregationService(clientManager, logger),
+        (() => {
+          const rs = new ResourceRoutingService(logger);
+          return new ResourceAggregationService(clientManager, logger, rs);
+        })(),
+        new PromptAggregationService(
+          clientManager,
+          logger,
+          new ResourceRoutingService(logger),
+        ),
+        new CompletionAggregationService(
+          clientManager,
+          logger,
+          new ResourceRoutingService(logger),
+        ),
       );
       gateway = gatewayServer.getServer();
 
@@ -768,8 +891,20 @@ describe("MCPGatewayServer - execute tool", () => {
         createToolRegistry(luaRuntime, clientManager, logger),
         clientManager,
         logger,
-        new ResourceAggregationService(clientManager, logger),
-        new PromptAggregationService(clientManager, logger),
+        (() => {
+          const rs = new ResourceRoutingService(logger);
+          return new ResourceAggregationService(clientManager, logger, rs);
+        })(),
+        new PromptAggregationService(
+          clientManager,
+          logger,
+          new ResourceRoutingService(logger),
+        ),
+        new CompletionAggregationService(
+          clientManager,
+          logger,
+          new ResourceRoutingService(logger),
+        ),
       );
       gateway = gatewayServer.getServer();
 
@@ -824,8 +959,20 @@ describe("MCPGatewayServer - execute tool", () => {
         createToolRegistry(luaRuntime, clientManager, logger),
         clientManager,
         logger,
-        new ResourceAggregationService(clientManager, logger),
-        new PromptAggregationService(clientManager, logger),
+        (() => {
+          const rs = new ResourceRoutingService(logger);
+          return new ResourceAggregationService(clientManager, logger, rs);
+        })(),
+        new PromptAggregationService(
+          clientManager,
+          logger,
+          new ResourceRoutingService(logger),
+        ),
+        new CompletionAggregationService(
+          clientManager,
+          logger,
+          new ResourceRoutingService(logger),
+        ),
       );
       gateway = gatewayServer.getServer();
 
@@ -866,8 +1013,20 @@ describe("MCPGatewayServer - execute tool", () => {
         createToolRegistry(luaRuntime, clientManager, logger),
         clientManager,
         logger,
-        new ResourceAggregationService(clientManager, logger),
-        new PromptAggregationService(clientManager, logger),
+        (() => {
+          const rs = new ResourceRoutingService(logger);
+          return new ResourceAggregationService(clientManager, logger, rs);
+        })(),
+        new PromptAggregationService(
+          clientManager,
+          logger,
+          new ResourceRoutingService(logger),
+        ),
+        new CompletionAggregationService(
+          clientManager,
+          logger,
+          new ResourceRoutingService(logger),
+        ),
       );
       gateway = gatewayServer.getServer();
 
@@ -905,8 +1064,20 @@ describe("MCPGatewayServer - execute tool", () => {
         createToolRegistry(luaRuntime, clientManager, logger),
         clientManager,
         logger,
-        new ResourceAggregationService(clientManager, logger),
-        new PromptAggregationService(clientManager, logger),
+        (() => {
+          const rs = new ResourceRoutingService(logger);
+          return new ResourceAggregationService(clientManager, logger, rs);
+        })(),
+        new PromptAggregationService(
+          clientManager,
+          logger,
+          new ResourceRoutingService(logger),
+        ),
+        new CompletionAggregationService(
+          clientManager,
+          logger,
+          new ResourceRoutingService(logger),
+        ),
       );
       gateway = gatewayServer.getServer();
 
@@ -944,8 +1115,20 @@ describe("MCPGatewayServer - execute tool", () => {
         createToolRegistry(luaRuntime, clientManager, logger),
         clientManager,
         logger,
-        new ResourceAggregationService(clientManager, logger),
-        new PromptAggregationService(clientManager, logger),
+        (() => {
+          const rs = new ResourceRoutingService(logger);
+          return new ResourceAggregationService(clientManager, logger, rs);
+        })(),
+        new PromptAggregationService(
+          clientManager,
+          logger,
+          new ResourceRoutingService(logger),
+        ),
+        new CompletionAggregationService(
+          clientManager,
+          logger,
+          new ResourceRoutingService(logger),
+        ),
       );
       gateway = gatewayServer.getServer();
 
@@ -983,8 +1166,20 @@ describe("MCPGatewayServer - execute tool", () => {
         createToolRegistry(luaRuntime, clientManager, logger),
         clientManager,
         logger,
-        new ResourceAggregationService(clientManager, logger),
-        new PromptAggregationService(clientManager, logger),
+        (() => {
+          const rs = new ResourceRoutingService(logger);
+          return new ResourceAggregationService(clientManager, logger, rs);
+        })(),
+        new PromptAggregationService(
+          clientManager,
+          logger,
+          new ResourceRoutingService(logger),
+        ),
+        new CompletionAggregationService(
+          clientManager,
+          logger,
+          new ResourceRoutingService(logger),
+        ),
       );
       gateway = gatewayServer.getServer();
 
@@ -1050,8 +1245,20 @@ describe("MCPGatewayServer - execute tool", () => {
         createToolRegistry(luaRuntime, clientManager, logger),
         clientManager,
         logger,
-        new ResourceAggregationService(clientManager, logger),
-        new PromptAggregationService(clientManager, logger),
+        (() => {
+          const rs = new ResourceRoutingService(logger);
+          return new ResourceAggregationService(clientManager, logger, rs);
+        })(),
+        new PromptAggregationService(
+          clientManager,
+          logger,
+          new ResourceRoutingService(logger),
+        ),
+        new CompletionAggregationService(
+          clientManager,
+          logger,
+          new ResourceRoutingService(logger),
+        ),
       );
       gateway = gatewayServer.getServer();
 
@@ -1111,8 +1318,20 @@ describe("MCPGatewayServer - execute tool", () => {
         createToolRegistry(luaRuntime, clientManager, logger),
         clientManager,
         logger,
-        new ResourceAggregationService(clientManager, logger),
-        new PromptAggregationService(clientManager, logger),
+        (() => {
+          const rs = new ResourceRoutingService(logger);
+          return new ResourceAggregationService(clientManager, logger, rs);
+        })(),
+        new PromptAggregationService(
+          clientManager,
+          logger,
+          new ResourceRoutingService(logger),
+        ),
+        new CompletionAggregationService(
+          clientManager,
+          logger,
+          new ResourceRoutingService(logger),
+        ),
       );
       gateway = gatewayServer.getServer();
 
@@ -1163,8 +1382,20 @@ describe("MCPGatewayServer - execute tool", () => {
         createToolRegistry(luaRuntime, clientManager, logger),
         clientManager,
         logger,
-        new ResourceAggregationService(clientManager, logger),
-        new PromptAggregationService(clientManager, logger),
+        (() => {
+          const rs = new ResourceRoutingService(logger);
+          return new ResourceAggregationService(clientManager, logger, rs);
+        })(),
+        new PromptAggregationService(
+          clientManager,
+          logger,
+          new ResourceRoutingService(logger),
+        ),
+        new CompletionAggregationService(
+          clientManager,
+          logger,
+          new ResourceRoutingService(logger),
+        ),
       );
       gateway = gatewayServer.getServer();
 
@@ -1203,8 +1434,20 @@ describe("MCPGatewayServer - execute tool", () => {
         createToolRegistry(luaRuntime, clientManager, logger),
         clientManager,
         logger,
-        new ResourceAggregationService(clientManager, logger),
-        new PromptAggregationService(clientManager, logger),
+        (() => {
+          const rs = new ResourceRoutingService(logger);
+          return new ResourceAggregationService(clientManager, logger, rs);
+        })(),
+        new PromptAggregationService(
+          clientManager,
+          logger,
+          new ResourceRoutingService(logger),
+        ),
+        new CompletionAggregationService(
+          clientManager,
+          logger,
+          new ResourceRoutingService(logger),
+        ),
       );
       gateway = gatewayServer.getServer();
 
@@ -1359,8 +1602,20 @@ describe("MCPGatewayServer - Resource Aggregation", () => {
         createToolRegistry(luaRuntime, clientManager, logger),
         clientManager,
         logger,
-        new ResourceAggregationService(clientManager, logger),
-        new PromptAggregationService(clientManager, logger),
+        (() => {
+          const rs = new ResourceRoutingService(logger);
+          return new ResourceAggregationService(clientManager, logger, rs);
+        })(),
+        new PromptAggregationService(
+          clientManager,
+          logger,
+          new ResourceRoutingService(logger),
+        ),
+        new CompletionAggregationService(
+          clientManager,
+          logger,
+          new ResourceRoutingService(logger),
+        ),
       );
       gateway = gatewayServer.getServer();
 
@@ -1378,14 +1633,14 @@ describe("MCPGatewayServer - Resource Aggregation", () => {
       // List resources through the gateway
       const result = await gatewayClient.listResources();
 
-      // Should have 3 resources total, all namespaced
+      // Should have 3 resources total, with original URIs (no namespacing)
       expect(result.resources).toHaveLength(3);
 
-      // Check that URIs are namespaced
+      // Check that URIs are passed through unchanged
       const uris = result.resources.map((r) => r.uri);
-      expect(uris).toContain("gw://docs-server/file:///docs/README.md");
-      expect(uris).toContain("gw://docs-server/file:///docs/API.md");
-      expect(uris).toContain("gw://config-server/file:///config/settings.json");
+      expect(uris).toContain("file:///docs/README.md");
+      expect(uris).toContain("file:///docs/API.md");
+      expect(uris).toContain("file:///config/settings.json");
 
       // Check that original metadata is preserved
       const readmeResource = result.resources.find((r) =>
@@ -1403,8 +1658,20 @@ describe("MCPGatewayServer - Resource Aggregation", () => {
         createToolRegistry(luaRuntime, clientManager, logger),
         clientManager,
         logger,
-        new ResourceAggregationService(clientManager, logger),
-        new PromptAggregationService(clientManager, logger),
+        (() => {
+          const rs = new ResourceRoutingService(logger);
+          return new ResourceAggregationService(clientManager, logger, rs);
+        })(),
+        new PromptAggregationService(
+          clientManager,
+          logger,
+          new ResourceRoutingService(logger),
+        ),
+        new CompletionAggregationService(
+          clientManager,
+          logger,
+          new ResourceRoutingService(logger),
+        ),
       );
       gateway = gatewayServer.getServer();
 
@@ -1459,8 +1726,20 @@ describe("MCPGatewayServer - Resource Aggregation", () => {
         createToolRegistry(luaRuntime, clientManager, logger),
         clientManager,
         logger,
-        new ResourceAggregationService(clientManager, logger),
-        new PromptAggregationService(clientManager, logger),
+        (() => {
+          const rs = new ResourceRoutingService(logger);
+          return new ResourceAggregationService(clientManager, logger, rs);
+        })(),
+        new PromptAggregationService(
+          clientManager,
+          logger,
+          new ResourceRoutingService(logger),
+        ),
+        new CompletionAggregationService(
+          clientManager,
+          logger,
+          new ResourceRoutingService(logger),
+        ),
       );
       gateway = gatewayServer.getServer();
 
@@ -1488,7 +1767,7 @@ describe("MCPGatewayServer - Resource Aggregation", () => {
   });
 
   describe("readResource - routing to correct server", () => {
-    it("should read resource from correct server based on namespaced URI", async () => {
+    it("should read resource from correct server via routing table", async () => {
       const { server, client } = await createTestServerWithResources(
         "docs-server",
         [
@@ -1519,12 +1798,14 @@ describe("MCPGatewayServer - Resource Aggregation", () => {
 
       const clients = new Map([["docs-server", client]]);
       const clientManager = createMockClientManager(clients);
+      const routingService = new ResourceRoutingService(logger);
       gatewayServer = new MCPGatewayServer(
         createToolRegistry(luaRuntime, clientManager, logger),
         clientManager,
         logger,
-        new ResourceAggregationService(clientManager, logger),
-        new PromptAggregationService(clientManager, logger),
+        new ResourceAggregationService(clientManager, logger, routingService),
+        new PromptAggregationService(clientManager, logger, routingService),
+        new CompletionAggregationService(clientManager, logger, routingService),
       );
       gateway = gatewayServer.getServer();
 
@@ -1538,14 +1819,17 @@ describe("MCPGatewayServer - Resource Aggregation", () => {
       );
       await gatewayClient.connect(clientTransport);
 
-      // Read resource using namespaced URI
+      // List resources first to populate the routing table
+      await gatewayClient.listResources();
+
+      // Read resource using original URI — routing table resolves to correct server
       const result = await gatewayClient.readResource({
-        uri: "gw://docs-server/file:///docs/README.md",
+        uri: "file:///docs/README.md",
       });
 
       expect(result.contents).toHaveLength(1);
       expect(result.contents[0]).toMatchObject({
-        uri: "gw://docs-server/file:///docs/README.md",
+        uri: "file:///docs/README.md",
         mimeType: "text/markdown",
         text: "# Project Documentation\n\nWelcome!",
       });
@@ -1558,8 +1842,20 @@ describe("MCPGatewayServer - Resource Aggregation", () => {
         createToolRegistry(luaRuntime, clientManager, logger),
         clientManager,
         logger,
-        new ResourceAggregationService(clientManager, logger),
-        new PromptAggregationService(clientManager, logger),
+        (() => {
+          const rs = new ResourceRoutingService(logger);
+          return new ResourceAggregationService(clientManager, logger, rs);
+        })(),
+        new PromptAggregationService(
+          clientManager,
+          logger,
+          new ResourceRoutingService(logger),
+        ),
+        new CompletionAggregationService(
+          clientManager,
+          logger,
+          new ResourceRoutingService(logger),
+        ),
       );
       gateway = gatewayServer.getServer();
 
@@ -1579,15 +1875,27 @@ describe("MCPGatewayServer - Resource Aggregation", () => {
       ).rejects.toThrow();
     });
 
-    it("should throw error for non-existent server", async () => {
+    it("should throw error for unroutable URI", async () => {
       const clients = new Map();
       const clientManager = createMockClientManager(clients);
       gatewayServer = new MCPGatewayServer(
         createToolRegistry(luaRuntime, clientManager, logger),
         clientManager,
         logger,
-        new ResourceAggregationService(clientManager, logger),
-        new PromptAggregationService(clientManager, logger),
+        (() => {
+          const rs = new ResourceRoutingService(logger);
+          return new ResourceAggregationService(clientManager, logger, rs);
+        })(),
+        new PromptAggregationService(
+          clientManager,
+          logger,
+          new ResourceRoutingService(logger),
+        ),
+        new CompletionAggregationService(
+          clientManager,
+          logger,
+          new ResourceRoutingService(logger),
+        ),
       );
       gateway = gatewayServer.getServer();
 
@@ -1601,12 +1909,12 @@ describe("MCPGatewayServer - Resource Aggregation", () => {
       );
       await gatewayClient.connect(clientTransport);
 
-      // Try to read from non-existent server
+      // Try to read a URI that hasn't been registered in the routing table
       await expect(
         gatewayClient.readResource({
-          uri: "gw://non-existent-server/file:///test.txt",
+          uri: "file:///nonexistent.txt",
         }),
-      ).rejects.toThrow(/not found/);
+      ).rejects.toThrow(/No route found/);
     });
   });
 
@@ -1664,12 +1972,27 @@ describe("MCPGatewayServer - Resource Aggregation", () => {
 
       const clients = new Map([["data-server", client]]);
       const clientManager = createMockClientManager(clients);
-      gatewayServer = new MCPGatewayServer(
-        createToolRegistry(luaRuntime, clientManager, logger),
+      // Share a single routing service so tool-result URI registrations are
+      // visible to the resource aggregation service for subsequent reads
+      const routingService = new ResourceRoutingService(logger);
+      const resourceAgg = new ResourceAggregationService(
         clientManager,
         logger,
-        new ResourceAggregationService(clientManager, logger),
-        new PromptAggregationService(clientManager, logger),
+        routingService,
+      );
+      gatewayServer = new MCPGatewayServer(
+        createToolRegistry(
+          luaRuntime,
+          clientManager,
+          logger,
+          undefined,
+          routingService,
+        ),
+        clientManager,
+        logger,
+        resourceAgg,
+        new PromptAggregationService(clientManager, logger, routingService),
+        new CompletionAggregationService(clientManager, logger, routingService),
       );
       gateway = gatewayServer.getServer();
 
@@ -1682,6 +2005,9 @@ describe("MCPGatewayServer - Resource Aggregation", () => {
         { capabilities: {} },
       );
       await gatewayClient.connect(clientTransport);
+
+      // Populate the routing table by listing resources first
+      await gatewayClient.listResources();
 
       // Step 1: Call the tool to get the resource link
       const script = `
@@ -1720,28 +2046,143 @@ describe("MCPGatewayServer - Resource Aggregation", () => {
 
       expect(resourceUri).toBeDefined();
 
-      // Step 2: Verify the URI is automatically namespaced!
-      // The gateway should have automatically rewritten the URI from
-      // "file:///data/report.json" to "gw://data-server/file:///data/report.json"
-      expect(resourceUri).toBe("gw://data-server/file:///data/report.json");
+      // Step 2: Verify the URI is unchanged (no namespacing)
+      expect(resourceUri).toBe("file:///data/report.json");
 
-      // Step 3: Now we can directly use this URI to read the resource!
-      // No manual namespacing needed - the gateway did it for us!
+      // Step 3: Read the resource using the original URI — routing table resolves it
       const readResult = await gatewayClient.readResource({
         uri: resourceUri!,
       });
 
       expect(readResult.contents).toHaveLength(1);
       expect(readResult.contents[0]).toMatchObject({
-        uri: "gw://data-server/file:///data/report.json",
+        uri: "file:///data/report.json",
         mimeType: "application/json",
         text: '{"sales": 1000, "users": 50}',
       });
     });
+
+    it("should read resource returned as resource_link without prior listResources call", async () => {
+      // The gateway client never calls listResources, but auto-populate
+      // (triggered on readResource) discovers the route from the upstream
+      // server. The tool also returns a resource_link which registers in
+      // the encounter map — either path enables the read.
+      const { server, client } = await createTestServerWithToolsAndResources(
+        "dynamic-server",
+        [
+          {
+            name: "create-report",
+            description: "Creates a report and returns a link to it",
+            handler: async () => ({
+              content: [
+                {
+                  type: "resource_link" as const,
+                  name: "Dynamic Report",
+                  uri: "file:///dynamic/report.json",
+                },
+              ],
+            }),
+          },
+        ],
+        [
+          {
+            uri: "file:///dynamic/report.json",
+            name: "Dynamic Report",
+            mimeType: "application/json",
+          },
+        ],
+        {
+          "file:///dynamic/report.json": async () => ({
+            contents: [
+              {
+                uri: "file:///dynamic/report.json",
+                mimeType: "application/json",
+                text: '{"dynamic": true}',
+              },
+            ],
+          }),
+        },
+      );
+
+      cleanupFns.push(async () => {
+        await client.close();
+        await server.close();
+      });
+
+      const clients = new Map([["dynamic-server", client]]);
+      const clientManager = createMockClientManager(clients);
+      // Share routing service between ExecuteLuaTool and aggregation services
+      // so tool-result encounter registrations flow through to readResource
+      const routingService = new ResourceRoutingService(logger);
+      const resourceAgg = new ResourceAggregationService(
+        clientManager,
+        logger,
+        routingService,
+        [],
+      );
+      gatewayServer = new MCPGatewayServer(
+        createToolRegistry(
+          luaRuntime,
+          clientManager,
+          logger,
+          undefined,
+          routingService,
+        ),
+        clientManager,
+        logger,
+        resourceAgg,
+        new PromptAggregationService(clientManager, logger, routingService),
+        new CompletionAggregationService(clientManager, logger, routingService),
+      );
+      gateway = gatewayServer.getServer();
+
+      const [clientTransport, serverTransport] =
+        InMemoryTransport.createLinkedPair();
+      await gateway.connect(serverTransport);
+
+      gatewayClient = new Client(
+        { name: "test-gateway-client", version: "1.0.0" },
+        { capabilities: {} },
+      );
+      await gatewayClient.connect(clientTransport);
+
+      // Do NOT call listResources — verify auto-populate handles routing
+
+      // Step 1: Call the tool — this returns a resource_link
+      const toolResult = await gatewayClient.callTool({
+        name: "execute",
+        arguments: {
+          script: `result(dynamic_server.create_report({}):await())`,
+        },
+      });
+
+      // Verify tool returned the resource_link
+      const content = toolResult.content as Array<ContentBlock>;
+      const resourceLink = content.find(
+        (block: unknown) =>
+          typeof block === "object" &&
+          block !== null &&
+          "type" in block &&
+          block.type === "resource_link",
+      );
+      expect(resourceLink).toBeDefined();
+
+      // Step 2: Read the resource — should succeed without prior listResources
+      const readResult = await gatewayClient.readResource({
+        uri: "file:///dynamic/report.json",
+      });
+
+      expect(readResult.contents).toHaveLength(1);
+      expect(readResult.contents[0]).toMatchObject({
+        uri: "file:///dynamic/report.json",
+        mimeType: "application/json",
+        text: '{"dynamic": true}',
+      });
+    });
   });
 
-  describe("URI namespacing", () => {
-    it("should correctly namespace URIs with special characters", async () => {
+  describe("URI passthrough", () => {
+    it("should pass through URIs with special characters unchanged", async () => {
       const { server, client } = await createTestServerWithResources(
         "special-server",
         [
@@ -1776,8 +2217,20 @@ describe("MCPGatewayServer - Resource Aggregation", () => {
         createToolRegistry(luaRuntime, clientManager, logger),
         clientManager,
         logger,
-        new ResourceAggregationService(clientManager, logger),
-        new PromptAggregationService(clientManager, logger),
+        (() => {
+          const rs = new ResourceRoutingService(logger);
+          return new ResourceAggregationService(clientManager, logger, rs);
+        })(),
+        new PromptAggregationService(
+          clientManager,
+          logger,
+          new ResourceRoutingService(logger),
+        ),
+        new CompletionAggregationService(
+          clientManager,
+          logger,
+          new ResourceRoutingService(logger),
+        ),
       );
       gateway = gatewayServer.getServer();
 
@@ -1793,12 +2246,13 @@ describe("MCPGatewayServer - Resource Aggregation", () => {
 
       const result = await gatewayClient.listResources();
 
+      // URI passes through unchanged — no namespacing
       expect(result.resources[0]?.uri).toBe(
-        "gw://special-server/https://example.com/path?query=value&other=123",
+        "https://example.com/path?query=value&other=123",
       );
     });
 
-    it("should handle resources from servers with similar names", async () => {
+    it("should list resources from servers with colliding URIs", async () => {
       const { server: server1, client: client1 } =
         await createTestServerWithResources(
           "docs",
@@ -1861,12 +2315,14 @@ describe("MCPGatewayServer - Resource Aggregation", () => {
         ["docs-v2", client2],
       ]);
       const clientManager = createMockClientManager(clients);
+      const routingService = new ResourceRoutingService(logger);
       gatewayServer = new MCPGatewayServer(
         createToolRegistry(luaRuntime, clientManager, logger),
         clientManager,
         logger,
-        new ResourceAggregationService(clientManager, logger),
-        new PromptAggregationService(clientManager, logger),
+        new ResourceAggregationService(clientManager, logger, routingService),
+        new PromptAggregationService(clientManager, logger, routingService),
+        new CompletionAggregationService(clientManager, logger, routingService),
       );
       gateway = gatewayServer.getServer();
 
@@ -1880,30 +2336,274 @@ describe("MCPGatewayServer - Resource Aggregation", () => {
       );
       await gatewayClient.connect(clientTransport);
 
-      // Both resources should be listed with different namespaces
+      // Both resources are listed (same URI from different servers)
       const result = await gatewayClient.listResources();
 
       expect(result.resources).toHaveLength(2);
+      // Both have the same original URI
       const uris = result.resources.map((r) => r.uri);
-      expect(uris).toContain("gw://docs/file:///README.md");
-      expect(uris).toContain("gw://docs-v2/file:///README.md");
+      expect(uris).toEqual(["file:///README.md", "file:///README.md"]);
 
-      // Read from each server to verify routing works
-      const result1 = await gatewayClient.readResource({
-        uri: "gw://docs/file:///README.md",
+      // Reading routes to the last-registered server (collision: last wins)
+      const readResult = await gatewayClient.readResource({
+        uri: "file:///README.md",
       });
-      const content1 = result1.contents[0];
-      expect(content1 && "text" in content1 ? content1.text : undefined).toBe(
-        "Docs content",
+      const content = readResult.contents[0];
+      expect(
+        content && "text" in content ? content.text : undefined,
+      ).toBeDefined();
+    });
+
+    it("should route same-scheme different-path URIs to correct servers", async () => {
+      // Two servers both using file:// but with different paths
+      const { server: server1, client: client1 } =
+        await createTestServerWithResources(
+          "config-server",
+          [
+            {
+              uri: "file:///config.json",
+              name: "Config",
+              mimeType: "application/json",
+            },
+          ],
+          {
+            "file:///config.json": async () => ({
+              contents: [
+                {
+                  uri: "file:///config.json",
+                  mimeType: "application/json",
+                  text: '{"env": "production"}',
+                },
+              ],
+            }),
+          },
+        );
+
+      const { server: server2, client: client2 } =
+        await createTestServerWithResources(
+          "data-server",
+          [
+            {
+              uri: "file:///data.json",
+              name: "Data",
+              mimeType: "application/json",
+            },
+          ],
+          {
+            "file:///data.json": async () => ({
+              contents: [
+                {
+                  uri: "file:///data.json",
+                  mimeType: "application/json",
+                  text: '{"users": ["Alice", "Bob"]}',
+                },
+              ],
+            }),
+          },
+        );
+
+      cleanupFns.push(
+        async () => {
+          await client1.close();
+          await server1.close();
+        },
+        async () => {
+          await client2.close();
+          await server2.close();
+        },
       );
 
-      const result2 = await gatewayClient.readResource({
-        uri: "gw://docs-v2/file:///README.md",
-      });
-      const content2 = result2.contents[0];
-      expect(content2 && "text" in content2 ? content2.text : undefined).toBe(
-        "Docs v2 content",
+      const clients = new Map([
+        ["config-server", client1],
+        ["data-server", client2],
+      ]);
+      const clientManager = createMockClientManager(clients);
+      const routingService = new ResourceRoutingService(logger);
+      gatewayServer = new MCPGatewayServer(
+        createToolRegistry(luaRuntime, clientManager, logger),
+        clientManager,
+        logger,
+        new ResourceAggregationService(clientManager, logger, routingService),
+        new PromptAggregationService(clientManager, logger, routingService),
+        new CompletionAggregationService(clientManager, logger, routingService),
       );
+      gateway = gatewayServer.getServer();
+
+      const [clientTransport, serverTransport] =
+        InMemoryTransport.createLinkedPair();
+      await gateway.connect(serverTransport);
+
+      gatewayClient = new Client(
+        { name: "test-gateway-client", version: "1.0.0" },
+        { capabilities: {} },
+      );
+      await gatewayClient.connect(clientTransport);
+
+      // List to populate routing table
+      const result = await gatewayClient.listResources();
+      expect(result.resources).toHaveLength(2);
+
+      // Read from config-server
+      const configResult = await gatewayClient.readResource({
+        uri: "file:///config.json",
+      });
+      expect(configResult.contents[0]).toMatchObject({
+        uri: "file:///config.json",
+        text: '{"env": "production"}',
+      });
+
+      // Read from data-server — different file:// path routes to different server
+      const dataResult = await gatewayClient.readResource({
+        uri: "file:///data.json",
+      });
+      expect(dataResult.contents[0]).toMatchObject({
+        uri: "file:///data.json",
+        text: '{"users": ["Alice", "Bob"]}',
+      });
+    });
+
+    it("should handle mix of colliding and non-colliding URIs", async () => {
+      // server-a: unique resource + shared resource
+      const { server: server1, client: client1 } =
+        await createTestServerWithResources(
+          "server-a",
+          [
+            {
+              uri: "file:///only-a.txt",
+              name: "Only A",
+              mimeType: "text/plain",
+            },
+            {
+              uri: "file:///shared.txt",
+              name: "Shared from A",
+              mimeType: "text/plain",
+            },
+          ],
+          {
+            "file:///only-a.txt": async () => ({
+              contents: [
+                {
+                  uri: "file:///only-a.txt",
+                  mimeType: "text/plain",
+                  text: "content from server-a",
+                },
+              ],
+            }),
+            "file:///shared.txt": async () => ({
+              contents: [
+                {
+                  uri: "file:///shared.txt",
+                  mimeType: "text/plain",
+                  text: "shared from server-a",
+                },
+              ],
+            }),
+          },
+        );
+
+      // server-b: unique resource + shared resource (same URI as server-a)
+      const { server: server2, client: client2 } =
+        await createTestServerWithResources(
+          "server-b",
+          [
+            {
+              uri: "file:///only-b.txt",
+              name: "Only B",
+              mimeType: "text/plain",
+            },
+            {
+              uri: "file:///shared.txt",
+              name: "Shared from B",
+              mimeType: "text/plain",
+            },
+          ],
+          {
+            "file:///only-b.txt": async () => ({
+              contents: [
+                {
+                  uri: "file:///only-b.txt",
+                  mimeType: "text/plain",
+                  text: "content from server-b",
+                },
+              ],
+            }),
+            "file:///shared.txt": async () => ({
+              contents: [
+                {
+                  uri: "file:///shared.txt",
+                  mimeType: "text/plain",
+                  text: "shared from server-b",
+                },
+              ],
+            }),
+          },
+        );
+
+      cleanupFns.push(
+        async () => {
+          await client1.close();
+          await server1.close();
+        },
+        async () => {
+          await client2.close();
+          await server2.close();
+        },
+      );
+
+      const clients = new Map([
+        ["server-a", client1],
+        ["server-b", client2],
+      ]);
+      const clientManager = createMockClientManager(clients);
+      const routingService = new ResourceRoutingService(logger);
+      gatewayServer = new MCPGatewayServer(
+        createToolRegistry(luaRuntime, clientManager, logger),
+        clientManager,
+        logger,
+        new ResourceAggregationService(clientManager, logger, routingService),
+        new PromptAggregationService(clientManager, logger, routingService),
+        new CompletionAggregationService(clientManager, logger, routingService),
+      );
+      gateway = gatewayServer.getServer();
+
+      const [clientTransport, serverTransport] =
+        InMemoryTransport.createLinkedPair();
+      await gateway.connect(serverTransport);
+
+      gatewayClient = new Client(
+        { name: "test-gateway-client", version: "1.0.0" },
+        { capabilities: {} },
+      );
+      await gatewayClient.connect(clientTransport);
+
+      // List to populate routing table
+      const result = await gatewayClient.listResources();
+      // All 4 resources listed (including both copies of shared.txt)
+      expect(result.resources).toHaveLength(4);
+
+      // Unique URIs route to their respective servers
+      const resultA = await gatewayClient.readResource({
+        uri: "file:///only-a.txt",
+      });
+      expect(resultA.contents[0]).toMatchObject({
+        text: "content from server-a",
+      });
+
+      const resultB = await gatewayClient.readResource({
+        uri: "file:///only-b.txt",
+      });
+      expect(resultB.contents[0]).toMatchObject({
+        text: "content from server-b",
+      });
+
+      // Colliding URI resolves to one server (last-registered wins)
+      const sharedResult = await gatewayClient.readResource({
+        uri: "file:///shared.txt",
+      });
+      const sharedContent = sharedResult.contents[0];
+      expect(sharedContent && "text" in sharedContent).toBe(true);
+      // We don't assert which server wins since Map iteration order
+      // determines registration order, which is implementation-specific
     });
   });
 
@@ -2036,8 +2736,20 @@ describe("MCPGatewayServer - Resource Aggregation", () => {
           createToolRegistry(luaRuntime, clientManager, logger),
           clientManager,
           logger,
-          new ResourceAggregationService(clientManager, logger),
-          new PromptAggregationService(clientManager, logger),
+          (() => {
+            const rs = new ResourceRoutingService(logger);
+            return new ResourceAggregationService(clientManager, logger, rs);
+          })(),
+          new PromptAggregationService(
+            clientManager,
+            logger,
+            new ResourceRoutingService(logger),
+          ),
+          new CompletionAggregationService(
+            clientManager,
+            logger,
+            new ResourceRoutingService(logger),
+          ),
         );
         gateway = gatewayServer.getServer();
 
@@ -2095,8 +2807,20 @@ describe("MCPGatewayServer - Resource Aggregation", () => {
           createToolRegistry(luaRuntime, clientManager, logger),
           clientManager,
           logger,
-          new ResourceAggregationService(clientManager, logger),
-          new PromptAggregationService(clientManager, logger),
+          (() => {
+            const rs = new ResourceRoutingService(logger);
+            return new ResourceAggregationService(clientManager, logger, rs);
+          })(),
+          new PromptAggregationService(
+            clientManager,
+            logger,
+            new ResourceRoutingService(logger),
+          ),
+          new CompletionAggregationService(
+            clientManager,
+            logger,
+            new ResourceRoutingService(logger),
+          ),
         );
         gateway = gatewayServer.getServer();
 
@@ -2185,8 +2909,20 @@ describe("MCPGatewayServer - Resource Aggregation", () => {
           createToolRegistry(luaRuntime, clientManager, logger),
           clientManager,
           logger,
-          new ResourceAggregationService(clientManager, logger),
-          new PromptAggregationService(clientManager, logger),
+          (() => {
+            const rs = new ResourceRoutingService(logger);
+            return new ResourceAggregationService(clientManager, logger, rs);
+          })(),
+          new PromptAggregationService(
+            clientManager,
+            logger,
+            new ResourceRoutingService(logger),
+          ),
+          new CompletionAggregationService(
+            clientManager,
+            logger,
+            new ResourceRoutingService(logger),
+          ),
         );
         gateway = gatewayServer.getServer();
 
@@ -2283,8 +3019,20 @@ describe("MCPGatewayServer - Resource Aggregation", () => {
           createToolRegistry(luaRuntime, clientManager, logger),
           clientManager,
           logger,
-          new ResourceAggregationService(clientManager, logger),
-          new PromptAggregationService(clientManager, logger),
+          (() => {
+            const rs = new ResourceRoutingService(logger);
+            return new ResourceAggregationService(clientManager, logger, rs);
+          })(),
+          new PromptAggregationService(
+            clientManager,
+            logger,
+            new ResourceRoutingService(logger),
+          ),
+          new CompletionAggregationService(
+            clientManager,
+            logger,
+            new ResourceRoutingService(logger),
+          ),
         );
         gateway = gatewayServer.getServer();
 
@@ -2375,8 +3123,20 @@ describe("MCPGatewayServer - Resource Aggregation", () => {
           createToolRegistry(luaRuntime, clientManager, logger),
           clientManager,
           logger,
-          new ResourceAggregationService(clientManager, logger),
-          new PromptAggregationService(clientManager, logger),
+          (() => {
+            const rs = new ResourceRoutingService(logger);
+            return new ResourceAggregationService(clientManager, logger, rs);
+          })(),
+          new PromptAggregationService(
+            clientManager,
+            logger,
+            new ResourceRoutingService(logger),
+          ),
+          new CompletionAggregationService(
+            clientManager,
+            logger,
+            new ResourceRoutingService(logger),
+          ),
         );
         gateway = gatewayServer.getServer();
 
@@ -2429,8 +3189,20 @@ describe("MCPGatewayServer - Resource Aggregation", () => {
           createToolRegistry(luaRuntime, clientManager, logger),
           clientManager,
           logger,
-          new ResourceAggregationService(clientManager, logger),
-          new PromptAggregationService(clientManager, logger),
+          (() => {
+            const rs = new ResourceRoutingService(logger);
+            return new ResourceAggregationService(clientManager, logger, rs);
+          })(),
+          new PromptAggregationService(
+            clientManager,
+            logger,
+            new ResourceRoutingService(logger),
+          ),
+          new CompletionAggregationService(
+            clientManager,
+            logger,
+            new ResourceRoutingService(logger),
+          ),
         );
         gateway = gatewayServer.getServer();
 
@@ -2488,8 +3260,20 @@ describe("MCPGatewayServer - Resource Aggregation", () => {
           createToolRegistry(luaRuntime, clientManager, logger),
           clientManager,
           logger,
-          new ResourceAggregationService(clientManager, logger),
-          new PromptAggregationService(clientManager, logger),
+          (() => {
+            const rs = new ResourceRoutingService(logger);
+            return new ResourceAggregationService(clientManager, logger, rs);
+          })(),
+          new PromptAggregationService(
+            clientManager,
+            logger,
+            new ResourceRoutingService(logger),
+          ),
+          new CompletionAggregationService(
+            clientManager,
+            logger,
+            new ResourceRoutingService(logger),
+          ),
         );
         gateway = gatewayServer.getServer();
 
@@ -2575,8 +3359,20 @@ describe("MCPGatewayServer - Progressive Discovery with inspect-tool-response", 
       createToolRegistry(luaRuntime, clientManager, logger),
       clientManager,
       logger,
-      new ResourceAggregationService(clientManager, logger),
-      new PromptAggregationService(clientManager, logger),
+      (() => {
+        const rs = new ResourceRoutingService(logger);
+        return new ResourceAggregationService(clientManager, logger, rs);
+      })(),
+      new PromptAggregationService(
+        clientManager,
+        logger,
+        new ResourceRoutingService(logger),
+      ),
+      new CompletionAggregationService(
+        clientManager,
+        logger,
+        new ResourceRoutingService(logger),
+      ),
     );
     gateway = gatewayServer.getServer();
 
@@ -2704,8 +3500,20 @@ describe("MCPGatewayServer - Progressive Discovery with inspect-tool-response", 
       createToolRegistry(luaRuntime, clientManager, logger),
       clientManager,
       logger,
-      new ResourceAggregationService(clientManager, logger),
-      new PromptAggregationService(clientManager, logger),
+      (() => {
+        const rs = new ResourceRoutingService(logger);
+        return new ResourceAggregationService(clientManager, logger, rs);
+      })(),
+      new PromptAggregationService(
+        clientManager,
+        logger,
+        new ResourceRoutingService(logger),
+      ),
+      new CompletionAggregationService(
+        clientManager,
+        logger,
+        new ResourceRoutingService(logger),
+      ),
     );
     gateway = gatewayServer.getServer();
 
@@ -2773,8 +3581,20 @@ describe("MCPGatewayServer - Progressive Discovery with inspect-tool-response", 
       createToolRegistry(luaRuntime, clientManager, logger),
       clientManager,
       logger,
-      new ResourceAggregationService(clientManager, logger),
-      new PromptAggregationService(clientManager, logger),
+      (() => {
+        const rs = new ResourceRoutingService(logger);
+        return new ResourceAggregationService(clientManager, logger, rs);
+      })(),
+      new PromptAggregationService(
+        clientManager,
+        logger,
+        new ResourceRoutingService(logger),
+      ),
+      new CompletionAggregationService(
+        clientManager,
+        logger,
+        new ResourceRoutingService(logger),
+      ),
     );
     gateway = gatewayServer.getServer();
 
@@ -2826,8 +3646,20 @@ describe("MCPGatewayServer - Progressive Discovery with inspect-tool-response", 
       createToolRegistry(luaRuntime, clientManager, logger),
       clientManager,
       logger,
-      new ResourceAggregationService(clientManager, logger),
-      new PromptAggregationService(clientManager, logger),
+      (() => {
+        const rs = new ResourceRoutingService(logger);
+        return new ResourceAggregationService(clientManager, logger, rs);
+      })(),
+      new PromptAggregationService(
+        clientManager,
+        logger,
+        new ResourceRoutingService(logger),
+      ),
+      new CompletionAggregationService(
+        clientManager,
+        logger,
+        new ResourceRoutingService(logger),
+      ),
     );
     gateway = gatewayServer.getServer();
 

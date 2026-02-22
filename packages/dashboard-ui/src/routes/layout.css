@@ -1,0 +1,88 @@
+@import "tailwindcss";
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap");
+
+@theme inline {
+  /* Deep slate-blue base — richer than pure black */
+  --color-background: oklch(0.125 0.012 260);
+  --color-foreground: oklch(0.93 0.005 260);
+
+  --color-card: oklch(0.155 0.012 260);
+  --color-card-foreground: oklch(0.93 0.005 260);
+  --color-popover: oklch(0.155 0.012 260);
+  --color-popover-foreground: oklch(0.93 0.005 260);
+
+  /* Warm amber accent */
+  --color-primary: oklch(0.78 0.145 70);
+  --color-primary-foreground: oklch(0.16 0.02 70);
+
+  --color-secondary: oklch(0.22 0.012 260);
+  --color-secondary-foreground: oklch(0.85 0.01 260);
+
+  --color-muted: oklch(0.22 0.012 260);
+  --color-muted-foreground: oklch(0.55 0.015 260);
+
+  --color-accent: oklch(0.19 0.015 260);
+  --color-accent-foreground: oklch(0.93 0.005 260);
+
+  --color-destructive: oklch(0.55 0.2 25);
+
+  --color-border: oklch(0.24 0.015 260);
+  --color-input: oklch(0.24 0.015 260);
+  --color-ring: oklch(0.78 0.145 70);
+
+  /* Success teal for badges */
+  --color-success: oklch(0.65 0.14 162);
+  --color-success-foreground: oklch(0.16 0.03 162);
+
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+
+  --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Code", monospace;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Subtle noise overlay for depth */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0.015;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 256px;
+}
+
+/* Custom scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: oklch(0.3 0.015 260);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.4 0.015 260);
+}

@@ -65,6 +65,13 @@ describe("ExecuteLuaTool", () => {
           listResources: expect.any(Function),
           readResource: expect.any(Function),
           summaryStats: expect.any(Function),
+          complete: expect.any(Function),
+        }),
+        undefined,
+        expect.objectContaining({
+          onToolCallStart: expect.any(Function),
+          onToolCallEnd: expect.any(Function),
+          onToolCallError: expect.any(Function),
         }),
       );
     });
@@ -266,6 +273,13 @@ describe("ExecuteLuaTool", () => {
           listResources: expect.any(Function),
           readResource: expect.any(Function),
           summaryStats: expect.any(Function),
+          complete: expect.any(Function),
+        }),
+        undefined,
+        expect.objectContaining({
+          onToolCallStart: expect.any(Function),
+          onToolCallEnd: expect.any(Function),
+          onToolCallError: expect.any(Function),
         }),
       );
     });

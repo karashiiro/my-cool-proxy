@@ -6,6 +6,7 @@ import { TYPES } from "../types/index.js";
 describe("InspectToolResponseTool", () => {
   let tool: InspectToolResponseTool;
   let toolDiscovery: ReturnType<typeof unitRef.get>;
+  let inspectionStore: ReturnType<typeof unitRef.get>;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let unitRef: any;
 
@@ -16,6 +17,7 @@ describe("InspectToolResponseTool", () => {
     tool = unit;
     unitRef = ref;
     toolDiscovery = unitRef.get(TYPES.ToolDiscoveryService);
+    inspectionStore = unitRef.get(TYPES.ToolInspectionStore);
   });
 
   describe("tool metadata", () => {
@@ -141,6 +143,37 @@ describe("InspectToolResponseTool", () => {
       const result = await tool.execute(args, { sessionId: "test" });
 
       expect(result.isError).toBe(true);
+    });
+
+    it("should mark tool as inspected after successful call", async () => {
+      toolDiscovery.inspectToolResponse.mockResolvedValue({
+        content: [{ type: "text", text: "Sample response" }],
+      });
+
+      await tool.execute(
+        { luaServerName: "github", luaToolName: "search_issues" },
+        { sessionId: "test-session" },
+      );
+
+      expect(inspectionStore.markInspected).toHaveBeenCalledWith(
+        "test-session",
+        "github",
+        "search_issues",
+      );
+    });
+
+    it("should not mark tool as inspected when result is error", async () => {
+      toolDiscovery.inspectToolResponse.mockResolvedValue({
+        content: [{ type: "text", text: "Server not found" }],
+        isError: true,
+      });
+
+      await tool.execute(
+        { luaServerName: "invalid", luaToolName: "some_tool" },
+        { sessionId: "test-session" },
+      );
+
+      expect(inspectionStore.markInspected).not.toHaveBeenCalled();
     });
   });
 });

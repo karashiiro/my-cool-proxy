@@ -215,6 +215,28 @@ function validateACPConfig(config: ServerConfig): void {
 }
 
 /**
+ * Validates the database configuration if provided.
+ */
+function validateDatabaseConfig(config: ServerConfig): void {
+  if (config.database === undefined) return;
+
+  if (typeof config.database !== "object" || config.database === null) {
+    throw new Error("Config 'database' must be an object if specified");
+  }
+
+  if (config.database.retentionDays !== undefined) {
+    if (
+      typeof config.database.retentionDays !== "number" ||
+      config.database.retentionDays <= 0
+    ) {
+      throw new Error(
+        "Config 'database.retentionDays' must be a positive number if specified",
+      );
+    }
+  }
+}
+
+/**
  * Validates the logging configuration if provided.
  */
 function validateLoggingConfig(config: ServerConfig): void {
@@ -256,6 +278,39 @@ function validateLoggingConfig(config: ServerConfig): void {
         );
       }
     }
+  }
+}
+
+/**
+ * Validates the dashboard configuration if provided.
+ */
+function validateDashboardConfig(config: ServerConfig): void {
+  if (config.dashboard === undefined) return;
+
+  if (typeof config.dashboard !== "object" || config.dashboard === null) {
+    throw new Error("Config 'dashboard' must be an object if specified");
+  }
+
+  if (config.dashboard.port !== undefined) {
+    if (typeof config.dashboard.port !== "number") {
+      throw new Error("Config 'dashboard.port' must be a number if specified");
+    }
+    if (
+      !Number.isInteger(config.dashboard.port) ||
+      config.dashboard.port < 1 ||
+      config.dashboard.port > 65535
+    ) {
+      throw new Error(
+        "Config 'dashboard.port' must be an integer between 1 and 65535",
+      );
+    }
+  }
+
+  if (
+    config.dashboard.host !== undefined &&
+    typeof config.dashboard.host !== "string"
+  ) {
+    throw new Error("Config 'dashboard.host' must be a string if specified");
   }
 }
 
@@ -409,6 +464,8 @@ export function loadConfig(): ServerConfig {
     validateSkillsConfig(config);
     validateACPConfig(config);
     validateLoggingConfig(config);
+    validateDatabaseConfig(config);
+    validateDashboardConfig(config);
 
     return config;
   } catch (error) {

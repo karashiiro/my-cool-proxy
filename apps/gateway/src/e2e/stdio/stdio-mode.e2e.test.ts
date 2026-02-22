@@ -7,58 +7,11 @@ import {
   type EmbeddedResource,
 } from "@modelcontextprotocol/sdk/types.js";
 import { generateStdioTestConfig } from "../helpers/test-config-generator.js";
+import {
+  waitForServersReady,
+  inspectAllTools,
+} from "../helpers/client-helpers.js";
 import { resolve } from "node:path";
-
-/**
- * Waits for upstream servers to be available by polling list-servers.
- * This is necessary because upstream MCP clients are created asynchronously
- * after the downstream client connects and its capabilities are captured.
- *
- * @param client - The MCP client to poll
- * @param expectedServerCount - Number of servers to wait for
- * @param timeoutMs - Maximum time to wait
- */
-async function waitForServersReady(
-  client: Client,
-  expectedServerCount: number,
-  timeoutMs = 5000,
-): Promise<void> {
-  const startTime = Date.now();
-
-  while (Date.now() - startTime < timeoutMs) {
-    try {
-      const result = await client.callTool({
-        name: "list-servers",
-        arguments: {},
-      });
-
-      // Check if all expected servers are available
-      const content = result.content as Array<{ type: string; text?: string }>;
-      const firstContent = content[0];
-      if (firstContent && "text" in firstContent && firstContent.text) {
-        const text = firstContent.text;
-        // Wait until we have the expected number of servers
-        const match = text.match(/Available MCP Servers: (\d+)/);
-        if (
-          match &&
-          match[1] &&
-          parseInt(match[1], 10) >= expectedServerCount
-        ) {
-          return;
-        }
-      }
-    } catch {
-      // Ignore errors during polling
-    }
-
-    // Wait a bit before retrying
-    await new Promise((resolve) => setTimeout(resolve, 50));
-  }
-
-  throw new Error(
-    `Expected ${expectedServerCount} servers but they did not become ready within ${timeoutMs}ms`,
-  );
-}
 
 describe("Stdio Mode E2E", () => {
   let gatewayClient: Client;
@@ -115,6 +68,7 @@ describe("Stdio Mode E2E", () => {
     // This is necessary because upstream clients are created asynchronously
     // We expect 2 servers: calculator and data-server
     await waitForServersReady(gatewayClient, 2);
+    await inspectAllTools(gatewayClient);
   }, 60000);
 
   afterAll(async () => {
@@ -247,12 +201,8 @@ describe("Stdio Mode E2E", () => {
       expect(resources.resources).toBeDefined();
       expect(Array.isArray(resources.resources)).toBe(true);
 
-      // Should have resources from data-server
-      const dataServerResources = resources.resources.filter((r) =>
-        r.uri.startsWith("gw://data-server/"),
-      );
-
-      expect(dataServerResources.length).toBeGreaterThan(0);
+      // Should have resources with original URIs (no gw:// namespacing)
+      expect(resources.resources.length).toBeGreaterThan(0);
     });
   });
 

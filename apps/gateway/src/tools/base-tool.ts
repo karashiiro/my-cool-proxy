@@ -8,6 +8,11 @@ import type {
  */
 export interface ToolExecutionContext {
   sessionId?: string;
+  /**
+   * Send a progress notification to the downstream client.
+   * Only available when the downstream request included a progressToken.
+   */
+  sendProgress?: (progress: number, total?: number, message?: string) => void;
 }
 
 /**

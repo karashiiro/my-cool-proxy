@@ -91,7 +91,7 @@ Version: 1.0.0
 Provides data access tools
 ```
 
-**Implementation:** `src/tools/list-servers-tool.ts`
+**Implementation:** `apps/gateway/src/tools/list-servers-tool.ts`
 
 ### 2. `list-server-tools`
 
@@ -122,7 +122,7 @@ Tools for calculator:
 Tools: get_file_contents, list_issues, list_pull_requests, create_issue, ... (and 47 more)
 ```
 
-**Implementation:** `src/tools/list-server-tools-tool.ts` (discovery), `src/services/server-info-preloader.ts` (preloading, `MAX_TOOLS_IN_INSTRUCTIONS = 40`)
+**Implementation:** `apps/gateway/src/tools/list-server-tools-tool.ts` (discovery), `apps/gateway/src/services/server-info-preloader.ts` (preloading, `MAX_TOOLS_IN_INSTRUCTIONS = 40`)
 
 ### 3. `tool-details`
 
@@ -159,7 +159,7 @@ local result = calculator.add({
 }):await()
 ```
 
-**Implementation:** `src/tools/tool-details-tool.ts`
+**Implementation:** `apps/gateway/src/tools/tool-details-tool.ts`
 
 ### 4. `inspect-tool-response`
 
@@ -179,7 +179,7 @@ Makes a sample call to see the actual response structure.
 - Tools with minimal cost
 - When you need to understand response structure
 
-**Implementation:** `src/tools/inspect-tool-response-tool.ts`
+**Implementation:** `apps/gateway/src/tools/inspect-tool-response-tool.ts`
 
 ### 5. `execute`
 
@@ -202,7 +202,7 @@ local product = calculator.multiply({ a = sum.result, b = 2 }):await()
 result({ sum = sum, product = product })
 ```
 
-**Implementation:** `src/tools/execute-lua-tool.ts`
+**Implementation:** `apps/gateway/src/tools/execute-lua-tool.ts`
 
 See [Lua Runtime](./lua-runtime.md) for detailed script execution documentation.
 
@@ -217,37 +217,80 @@ local resources = _gateway.list_resources():await()
 result(resources)
 ```
 
-**Output:** Structured data with resources grouped by server:
-
-```lua
-{
-  totalResources = 3,
-  serverCount = 2,
-  resources = {
-    { name = "config", uri = "gw://data-server/file:///config.json", ... },
-    -- ...
-  }
-}
-```
+**Output:** Structured data with resources from all servers, including `gw-skill://` URIs when skills are enabled.
 
 ### 7. `_gateway.read_resource()` (Lua Builtin)
 
-Reads the contents of a specific MCP resource by its namespaced URI. This is a Lua builtin accessible within `execute` scripts.
+Reads the contents of a specific MCP resource by its URI. This is a Lua builtin accessible within `execute` scripts.
 
 **Usage:**
 
 ```lua
-local content = _gateway.read_resource({ uri = "gw://data-server/file:///config.json" }):await()
+local content = _gateway.read_resource({ uri = "file:///config.json" }):await()
 result(content)
 ```
 
 **Output:** Structured content with URI and contents array
 
-**Note:** URIs use the `gw://` namespace scheme to prevent collisions between servers. See [Resource Namespacing](./resource-namespacing.md) for details on how URIs are transformed.
+**Note:** Resource URIs are passed through unchanged from upstream servers. The gateway uses internal routing tables to resolve which server owns a given URI. See [Resource Namespacing](./resource-namespacing.md) for details.
+
+### 8. `_gateway.list_resource_templates()` (Lua Builtin)
+
+Lists all available resource templates across connected servers.
+
+**Usage:**
+
+```lua
+local templates = _gateway.list_resource_templates():await()
+result(templates)
+```
+
+### 9. `_gateway.list_prompts()` (Lua Builtin)
+
+Lists all available prompts across connected servers. Prompt names are namespaced as `server-name/prompt-name`.
+
+**Usage:**
+
+```lua
+local prompts = _gateway.list_prompts():await()
+result(prompts)
+```
+
+### 10. `_gateway.get_prompt()` (Lua Builtin)
+
+Gets a specific prompt by its namespaced name.
+
+**Usage:**
+
+```lua
+local prompt = _gateway.get_prompt({ name = "calculator/help" }):await()
+result(prompt)
+
+-- With arguments
+local prompt = _gateway.get_prompt({
+  name = "data-server/query-builder",
+  arguments = { table = "users" }
+}):await()
+result(prompt)
+```
+
+### 11. `_gateway.complete()` (Lua Builtin)
+
+Gets completions for a resource template variable or prompt argument.
+
+**Usage:**
+
+```lua
+local completions = _gateway.complete({
+  ref = { type = "ref/prompt", name = "calculator/help" },
+  argument = { name = "topic", value = "add" }
+}):await()
+result(completions)
+```
 
 ## Tool Discovery Service
 
-The `ToolDiscoveryService` (`src/mcp/tool-discovery-service.ts`) powers the discovery tools:
+The `ToolDiscoveryService` (`packages/mcp-aggregation/src/tool-discovery-service.ts`) powers the discovery tools:
 
 ```mermaid
 flowchart TB
@@ -315,7 +358,7 @@ Server and tool names are sanitized to valid Lua identifiers:
 | `123numbers`  | `_123numbers`  |
 | `while`       | `_while`       |
 
-The `sanitizeLuaIdentifier()` function in `src/utils/lua-identifier.ts` handles:
+The `sanitizeLuaIdentifier()` function in `packages/mcp-utilities/src/lua-identifier.ts` handles:
 
 - Replacing hyphens and dots with underscores
 - Prefixing names starting with digits

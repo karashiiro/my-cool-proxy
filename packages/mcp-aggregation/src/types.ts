@@ -1,9 +1,12 @@
 import type {
   Tool,
   Resource,
+  ResourceTemplate as ResourceTemplateType,
   Prompt,
   ReadResourceResult,
   GetPromptResult,
+  CompleteRequest,
+  CompleteResult,
 } from "@modelcontextprotocol/sdk/types.js";
 
 export type { ILogger } from "@my-cool-proxy/logger";
@@ -42,6 +45,12 @@ export interface IMCPClientSession {
     arguments?: Record<string, string>;
   }): Promise<GetPromptResult>;
 
+  /** List available resource templates from the MCP server */
+  listResourceTemplates(): Promise<ResourceTemplateType[]>;
+
+  /** Request completion suggestions for a prompt argument or resource template variable */
+  complete(params: CompleteRequest["params"]): Promise<CompleteResult>;
+
   /** Get server version info */
   getServerVersion():
     | { name?: string; version?: string; description?: string }
@@ -68,6 +77,7 @@ export interface IMCPClientManager {
  */
 export interface IGatewayBuiltins {
   listResources(): Promise<unknown>;
+  listResourceTemplates(): Promise<unknown>;
   readResource(uri: string): Promise<unknown>;
   summaryStats(): Promise<unknown>;
   invokeSkillScript?(
@@ -80,6 +90,7 @@ export interface IGatewayBuiltins {
     content?: string,
     files?: Array<{ path: string; content: string }>,
   ): Promise<unknown>;
+  registerResourceUri?(uri: string, serverName: string): void;
 }
 
 /**

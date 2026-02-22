@@ -2,10 +2,20 @@ import { injectable, unmanaged } from "inversify";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import {
   ListResourcesRequestSchema,
+  ListResourceTemplatesRequestSchema,
   ReadResourceRequestSchema,
   ListPromptsRequestSchema,
   GetPromptRequestSchema,
+  CompleteRequestSchema,
   RootsListChangedNotificationSchema,
+  CallToolRequestSchema,
+  ErrorCode,
+  McpError,
+} from "@modelcontextprotocol/sdk/types.js";
+import type {
+  CompleteRequest,
+  ProgressToken,
+  ServerNotification,
 } from "@modelcontextprotocol/sdk/types.js";
 import type {
   CreateMessageRequest,
@@ -26,39 +36,41 @@ import { TYPES } from "../types/index.js";
 import {
   ResourceAggregationService,
   PromptAggregationService,
+  CompletionAggregationService,
 } from "@my-cool-proxy/mcp-aggregation";
+import { getErrorMessage } from "@my-cool-proxy/mcp-utilities";
 import type { IToolRegistry } from "../tools/tool-registry.js";
 import { getEffectiveSessionId } from "../utils/session.js";
 
 /**
- * Gateway server that aggregates multiple MCP servers and provides namespaced access.
+ * Gateway server that aggregates multiple MCP servers and provides unified access.
  *
- * Resource/Prompt URI Namespacing Architecture:
- * ============================================
+ * Resource URI Routing Architecture:
+ * ==================================
  *
- * This gateway handles transformation between namespaced (client-facing) and
- * un-namespaced (server-facing) URIs in different places:
+ * Resource URIs pass through the gateway **unchanged** — no namespacing or
+ * mutation. Instead, a shared `ResourceRoutingService` maintains per-session
+ * routing tables that map original URIs to their source server.
  *
- * 1. Resources/Prompts → Client (Outbound):
- *    - listResources(): Namespaces URIs here (e.g., file:/// → gw://server-name/file:///)
- *    - listPrompts(): Namespaces names here (e.g., prompt → server-name/prompt)
+ * Routing tables are populated from three sources:
  *
- * 2. Client → Resources/Prompts (Inbound):
- *    - readResource(): Parses namespaced URI and routes to correct server
- *    - getPrompt(): Parses namespaced name and routes to correct server
+ * 1. Resource listings (listResources / listResourceTemplates):
+ *    - Each URI/template is registered with its source server name
+ *    - Invalidated when a server emits `resources/list_changed`
  *
- * 3. Tool Results → Client (Outbound, via Lua):
- *    - Resource URIs in CallToolResult content blocks are namespaced in the
- *      Lua runtime (NOT here!) because the runtime has the per-tool-call server
- *      context. See WasmoonRuntime.injectMCPServers() for details.
+ * 2. Tool results (via Lua runtime):
+ *    - resource_link and embedded resource content blocks register their URIs
+ *    - Persists across listing invalidation (encounter-based)
  *
- * 4. Prompt Messages → Client (Outbound):
- *    - getPrompt(): Namespaces resource URIs in prompt message content blocks
- *      before returning to the client. Prompts can include resource_link or
- *      embedded resource content blocks.
+ * 3. Prompt results (getPrompt):
+ *    - Resource URIs in prompt message content blocks are registered
+ *    - Persists across listing invalidation (encounter-based)
  *
- * This separation ensures we always have the necessary context to namespace
- * correctly, even when Lua scripts call tools from multiple servers.
+ * For inbound requests (readResource, completion/complete with ref/resource),
+ * the routing service resolves the original URI to the correct upstream server.
+ *
+ * Prompt names use a separate `server-name/prompt-name` namespacing scheme
+ * (not affected by URI routing — prompt names aren't URIs).
  */
 /**
  * Callback type for when a downstream client completes initialization.
@@ -90,6 +102,8 @@ export class MCPGatewayServer {
     private resourceAggregation: ResourceAggregationService,
     @$inject(TYPES.PromptAggregationService)
     private promptAggregation: PromptAggregationService,
+    @$inject(TYPES.CompletionAggregationService)
+    private completionAggregation: CompletionAggregationService,
     @unmanaged() private instructions?: string,
   ) {
     this.server = new McpServer(
@@ -110,27 +124,67 @@ export class MCPGatewayServer {
           },
           // Enable logging so we can forward log messages from upstream servers
           logging: {},
+          // Enable completions so we can forward prompt/resource template completions
+          completions: {},
         },
         ...(this.instructions && { instructions: this.instructions }),
       },
     );
 
-    // Register handler for resource list changes from clients
+    // Register handler for resource list changes from upstream servers.
+    // When an upstream server reports its resource list changed:
+    // 1. Invalidate caches + routing table
+    // 2. Proactively re-list to repopulate routing table
+    // 3. Forward the notification downstream (after re-listing, so data is ready)
     this.clientPool.setResourceListChangedHandler(
       (serverName: string, sessionId: string) => {
         this.resourceAggregation.handleResourceListChanged(
           serverName,
           sessionId,
         );
-        this.server.sendResourceListChanged();
+
+        // Re-list resources and templates to repopulate routing table,
+        // then notify downstream clients once fresh data is available.
+        Promise.all([
+          this.resourceAggregation.listResources(sessionId),
+          this.resourceAggregation.listResourceTemplates(sessionId),
+        ])
+          .then(() => {
+            this.sendResourceListChangedSafe(serverName, sessionId);
+          })
+          .catch((error) => {
+            this.logger.error(
+              `Failed to re-list resources after list change from '${serverName}' (session: ${sessionId}):`,
+              error instanceof Error ? error : new Error(String(error)),
+            );
+            // Still notify downstream even if re-listing fails —
+            // the client may be able to recover by listing itself
+            this.sendResourceListChangedSafe(serverName, sessionId);
+          });
       },
     );
 
-    // Register handler for prompt list changes from clients
+    // Register handler for prompt list changes from upstream servers.
+    // Same pattern as resources: invalidate, re-list, then forward notification.
     this.clientPool.setPromptListChangedHandler(
       (serverName: string, sessionId: string) => {
         this.promptAggregation.handlePromptListChanged(serverName, sessionId);
-        this.server.sendPromptListChanged();
+
+        // Re-list prompts to repopulate cache,
+        // then notify downstream clients once fresh data is available.
+        this.promptAggregation
+          .listPrompts(sessionId)
+          .then(() => {
+            this.sendPromptListChangedSafe(serverName, sessionId);
+          })
+          .catch((error) => {
+            this.logger.error(
+              `Failed to re-list prompts after list change from '${serverName}' (session: ${sessionId}):`,
+              error instanceof Error ? error : new Error(String(error)),
+            );
+            // Still notify downstream even if re-listing fails
+            this.sendPromptListChangedSafe(serverName, sessionId);
+          });
       },
     );
 
@@ -161,8 +215,44 @@ export class MCPGatewayServer {
     this.setupTools();
   }
 
+  /**
+   * Send resources/list_changed notification to downstream, catching errors
+   * (e.g. if the client disconnected) so the fire-and-forget promise chain
+   * never produces an unhandled rejection.
+   */
+  private sendResourceListChangedSafe(
+    serverName: string,
+    sessionId: string,
+  ): void {
+    try {
+      this.server.sendResourceListChanged();
+    } catch (error) {
+      this.logger.warn(
+        `Failed to send resources/list_changed downstream after change from '${serverName}' (session: ${sessionId}): ${getErrorMessage(error)}`,
+      );
+    }
+  }
+
+  /**
+   * Send prompts/list_changed notification to downstream, catching errors.
+   */
+  private sendPromptListChangedSafe(
+    serverName: string,
+    sessionId: string,
+  ): void {
+    try {
+      this.server.sendPromptListChanged();
+    } catch (error) {
+      this.logger.warn(
+        `Failed to send prompts/list_changed downstream after change from '${serverName}' (session: ${sessionId}): ${getErrorMessage(error)}`,
+      );
+    }
+  }
+
   private setupTools(): void {
-    // Register all tools from the tool registry
+    // Register all tools with McpServer for tools/list support.
+    // The actual tools/call dispatch is overridden below at the Protocol level
+    // to access the raw request (including _meta.progressToken).
     for (const tool of this.toolRegistry.getAll()) {
       this.server.registerTool(
         tool.name,
@@ -172,20 +262,8 @@ export class MCPGatewayServer {
           inputSchema: tool.schema as any,
           annotations: tool.annotations,
         },
-        async (
-          args: Record<string, unknown>,
-          // The SDK passes the full RequestHandlerExtra here, which includes
-          // requestId — we capture it so forwardListRootsRequest can route
-          // through the POST response stream rather than the standalone GET SSE.
-          context: { sessionId?: string; requestId?: string | number },
-        ) => {
-          this.activeDownstreamRequestId = context.requestId;
-          try {
-            return await tool.execute(args, context);
-          } finally {
-            this.activeDownstreamRequestId = undefined;
-          }
-        },
+        // Placeholder handler — overridden by setRequestHandler below
+        async () => ({ content: [] }),
       );
 
       this.logger.info(`Registered tool: ${tool.name}`);
@@ -193,6 +271,75 @@ export class MCPGatewayServer {
 
     this.logger.info(
       `MCP gateway tools registered (${this.toolRegistry.getAll().length} tools)`,
+    );
+
+    // Override tools/call at the Protocol level to access progressToken from
+    // the raw request _meta. McpServer's registerTool handler doesn't expose
+    // _meta, but we need it to forward progress notifications downstream.
+    this.server.server.setRequestHandler(
+      CallToolRequestSchema,
+      async (request, extra) => {
+        const toolName = request.params.name;
+        const tool = this.toolRegistry.get(toolName);
+        if (!tool) {
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            `Tool not found: ${toolName}`,
+          );
+        }
+
+        // Track downstream request ID for routing server-to-client requests
+        // (e.g., roots/list) through the POST response stream.
+        this.activeDownstreamRequestId = extra.requestId;
+
+        try {
+          // Extract progressToken from the downstream request's _meta
+          const progressToken = request.params._meta?.progressToken as
+            | ProgressToken
+            | undefined;
+
+          // Build sendProgress callback if the client requested progress
+          let sendProgress:
+            | ((progress: number, total?: number, message?: string) => void)
+            | undefined;
+
+          if (progressToken !== undefined) {
+            sendProgress = (
+              progress: number,
+              total?: number,
+              message?: string,
+            ) => {
+              const params: Record<string, unknown> = {
+                progressToken,
+                progress,
+              };
+              if (total !== undefined) params.total = total;
+              if (message !== undefined) params.message = message;
+
+              extra
+                .sendNotification({
+                  method: "notifications/progress" as const,
+                  params,
+                } as ServerNotification)
+                .catch((err: unknown) => {
+                  this.logger.warn(
+                    `Failed to send progress notification: ${err instanceof Error ? err.message : String(err)}`,
+                  );
+                });
+            };
+          }
+
+          return await tool.execute(
+            (request.params.arguments ?? {}) as Record<string, unknown>,
+            {
+              sessionId: extra.sessionId,
+              sendProgress,
+            },
+          );
+        } finally {
+          this.activeDownstreamRequestId = undefined;
+        }
+      },
     );
 
     // Register resource and prompt handlers that delegate to aggregation services
@@ -233,6 +380,26 @@ export class MCPGatewayServer {
         this.promptAggregation.getPrompt(
           request.params.name,
           request.params.arguments,
+          getEffectiveSessionId(sessionId),
+        ),
+    );
+
+    this.server.server.setRequestHandler(
+      ListResourceTemplatesRequestSchema,
+      async (_request: unknown, { sessionId }: { sessionId?: string }) =>
+        this.resourceAggregation.listResourceTemplates(
+          getEffectiveSessionId(sessionId),
+        ),
+    );
+
+    this.server.server.setRequestHandler(
+      CompleteRequestSchema,
+      async (
+        request: { params: CompleteRequest["params"] },
+        { sessionId }: { sessionId?: string },
+      ) =>
+        this.completionAggregation.complete(
+          request.params,
           getEffectiveSessionId(sessionId),
         ),
     );
@@ -393,7 +560,7 @@ export class MCPGatewayServer {
             );
           } catch (error) {
             this.logger.warn(
-              `Failed to send roots/list_changed to upstream server '${serverName}': ${error instanceof Error ? error.message : String(error)}`,
+              `Failed to send roots/list_changed to upstream server '${serverName}': ${getErrorMessage(error)}`,
             );
           }
         }

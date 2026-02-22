@@ -142,6 +142,28 @@ Gateway Skills are disabled by default as they may conflict with existing skill 
 
 For a deeper design discussion about why Gateway Skills are implemented this way, refer to [this section](https://github.com/karashiiro/my-cool-proxy/blob/main/docs/design/skills.md#context-injection) in the design docs.
 
+## Web Dashboard
+
+My Cool Proxy includes an optional web dashboard for monitoring gateway activity. When enabled, it runs on a separate port and provides:
+
+- **Execution history** — Browse all Lua script executions with syntax-highlighted scripts and results
+- **Tool call log** — See which MCP tools were called during each execution
+- **Session monitoring** — View active sessions, connected servers, and capabilities
+- **Real-time updates** — New executions stream to the dashboard via WebSocket
+
+Enable it by adding a `dashboard` section to your config:
+
+```json
+{
+  "dashboard": {
+    "port": 3100,
+    "host": "localhost"
+  }
+}
+```
+
+Then visit `http://localhost:3100` in your browser. See the [Configuration Guide](docs/configuration.md#dashboard) for details.
+
 ## Configuration
 
 See the [Configuration Guide](docs/configuration.md) for the full config reference.
@@ -155,11 +177,11 @@ See the [Configuration Guide](docs/configuration.md) for the full config referen
 | [Resources](https://modelcontextprotocol.io/specification/2025-11-25/server/resources)              | ✅         | My Cool Proxy both forwards resources from your MCP servers to the connected client and provides `_gateway.read_resource()` and `_gateway.list_resources()` Lua builtins for agents to load them within scripts.                                                                                                                                                        |
 | Server Instructions                                                                                 | ✅         | My Cool Proxy loads excerpts of the instructions of connected MCP servers into its own server instructions, and also sends full copies through the `list-servers` tool when invoked.                                                                                                                                                                                    |
 | Discovery Notifications                                                                             | ✅         | My Cool Proxy listens to the tool/prompt/resource change notifications of connected MCP servers to automatically update its own internal registries, which reflects in subsequent tool calls.                                                                                                                                                                           |
-| [Completions](https://modelcontextprotocol.io/specification/2025-11-25/server/utilities/completion) | ❌         | Completions are not yet supported (but [will be](https://github.com/karashiiro/my-cool-proxy/issues/26) soon).                                                                                                                                                                                                                                                          |
+| [Completions](https://modelcontextprotocol.io/specification/2025-11-25/server/utilities/completion) | ✅         | Prompt argument and resource template variable completions are forwarded from upstream servers to the connected client. Agents can also call `_gateway.complete()` within Lua scripts to discover valid values for resource template variables and prompt arguments.                                                                                                    |
 | [Logging](https://modelcontextprotocol.io/specification/2025-11-25/server/utilities/logging)        | ✅         | My Cool Proxy forwards logging notifications to the connected client, and logs them itself as well.                                                                                                                                                                                                                                                                     |
 | [Roots](https://modelcontextprotocol.io/specification/2025-11-25/client/roots)                      | ✅         | `roots/list` requests are forwarded from upstream servers to the downstream client. `notifications/roots/list_changed` notifications from the downstream client are fanned out to all upstream servers. When the [sampling shim](./docs/configuration.md#acp-agent-client-protocol) is active, the first valid local root is used as the ACP agent's working directory. |
 | [Sampling](https://modelcontextprotocol.io/specification/2025-11-25/client/sampling)                | ✅         | My Cool Proxy supports shimming sampling support over [ACP](https://agentclientprotocol.com/), though this is disabled by default. Refer to the [configuration docs](./docs/configuration.md#sampling-security) for more information.                                                                                                                                   |
-| [Elicitation](https://modelcontextprotocol.io/specification/2025-11-25/client/elicitation)          | ❌         | Elicitation is not yet supported (but [will be](https://github.com/karashiiro/my-cool-proxy/issues/20)).                                                                                                                                                                                                                                                                |
-| [Progress](https://modelcontextprotocol.io/specification/2025-11-25/basic/utilities/progress)       | ❌         | Progress is not yet supported (but [will be](https://github.com/karashiiro/my-cool-proxy/issues/25)).                                                                                                                                                                                                                                                                   |
+| [Elicitation](https://modelcontextprotocol.io/specification/2025-11-25/client/elicitation)          | ⚠️         | Elicitation requests (form and URL mode) are proxied from upstream servers to the connected client. No shim is available for clients that don't natively support elicitation (unlike [sampling](./docs/configuration.md#acp-agent-client-protocol) which can be shimmed via ACP).                                                                                       |
+| [Progress](https://modelcontextprotocol.io/specification/2025-11-25/basic/utilities/progress)       | ✅         | Progress notifications from upstream servers are forwarded to the connected client. When a Lua script calls multiple tools concurrently, their progress is aggregated (summed) into a single stream.                                                                                                                                                                    |
 | [Tasks](https://modelcontextprotocol.io/specification/2025-11-25/basic/utilities/tasks)             | ⚠️         | Calling tools that support tasks is supported, but without leveraging the status updates for anything interesting. Sampling/elicitation tasks are not currently supported.                                                                                                                                                                                              |
 | [MCP Apps](https://modelcontextprotocol.io/docs/extensions/apps)                                    | ❌         | MCP Apps are not yet supported (but [will be](https://github.com/karashiiro/my-cool-proxy/issues/29)).                                                                                                                                                                                                                                                                  |

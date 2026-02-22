@@ -64,6 +64,7 @@ flowchart TB
         Tools["Gateway Tools"]
         ResourceAgg["Resource Aggregation"]
         PromptAgg["Prompt Aggregation"]
+        Dashboard["Dashboard UI<br/>(Optional)"]
     end
 
     subgraph Discovery["Tool Discovery"]
@@ -137,14 +138,16 @@ sequenceDiagram
 
 ## Key Components
 
-| Component      | File                                  | Purpose                                   |
-| -------------- | ------------------------------------- | ----------------------------------------- |
-| Entry Point    | `src/index.ts`                        | Starts HTTP or stdio mode based on config |
-| DI Container   | `src/container/inversify.config.ts`   | Wires all dependencies together           |
-| Gateway Server | `src/mcp/gateway-server.ts`           | Main MCP server, registers tools          |
-| Client Manager | `src/mcp/client-manager.ts`           | Manages upstream MCP connections          |
-| Lua Runtime    | `packages/lua-runtime/src/runtime.ts` | Executes user scripts                     |
-| Tool Discovery | `src/mcp/tool-discovery-service.ts`   | Powers discovery tools                    |
+| Component      | File                                                     | Purpose                                  |
+| -------------- | -------------------------------------------------------- | ---------------------------------------- |
+| Entry Point    | `apps/gateway/src/index.ts`                              | Delegates to startup                     |
+| Startup        | `apps/gateway/src/startup.ts`                            | Initializes DI, clients, and servers     |
+| DI Container   | `apps/gateway/src/container/inversify.config.ts`         | Wires all dependencies together          |
+| Gateway Server | `apps/gateway/src/mcp/gateway-server.ts`                 | Main MCP server, registers tools         |
+| Client Manager | `packages/mcp-client/src/client-manager.ts`              | Manages upstream MCP connections         |
+| Lua Runtime    | `packages/lua-runtime/src/runtime.ts`                    | Executes user scripts                    |
+| Tool Discovery | `packages/mcp-aggregation/src/tool-discovery-service.ts` | Powers discovery tools                   |
+| Dashboard      | `apps/gateway/src/dashboard/dashboard-server.ts`         | Optional web UI for execution monitoring |
 
 ## Transport Modes
 

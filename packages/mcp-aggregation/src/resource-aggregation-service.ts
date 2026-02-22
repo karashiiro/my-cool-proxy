@@ -1,13 +1,10 @@
 import type {
   ListResourcesResult,
+  ListResourceTemplatesResult,
   ReadResourceResult,
   Resource,
+  ResourceTemplate as ResourceTemplateType,
 } from "@modelcontextprotocol/sdk/types.js";
-import {
-  namespaceResource,
-  namespaceResourceUri,
-  parseResourceUri,
-} from "@my-cool-proxy/mcp-utilities";
 import { createCache } from "@my-cool-proxy/mcp-client";
 import type {
   IMCPClientManager,
@@ -15,18 +12,22 @@ import type {
   ICacheService,
   IResourceProvider,
 } from "./types.js";
+import type { IResourceRoutingService } from "./resource-routing-service.js";
 import { lookupServerOrThrow } from "./utils/server-lookup.js";
 
 export class ResourceAggregationService {
   private cache: ICacheService<Resource[]>;
+  private templateCache: ICacheService<ResourceTemplateType[]>;
 
   constructor(
     private clientPool: IMCPClientManager,
     private logger: ILogger,
+    private routingService: IResourceRoutingService,
     private additionalProviders: IResourceProvider[] = [],
   ) {
-    // Create a cache instance for this service
+    // Create cache instances for this service
     this.cache = createCache<Resource[]>(logger);
+    this.templateCache = createCache<ResourceTemplateType[]>(logger);
   }
 
   async listResources(sessionId: string): Promise<ListResourcesResult> {
@@ -72,7 +73,8 @@ export class ResourceAggregationService {
 
       for (const { name, resources } of results) {
         for (const resource of resources) {
-          allResources.push(namespaceResource(name, resource));
+          this.routingService.registerUri(session, resource.uri, name);
+          allResources.push(resource);
         }
       }
     }
@@ -99,6 +101,68 @@ export class ResourceAggregationService {
     return { resources: allResources };
   }
 
+  async listResourceTemplates(
+    sessionId: string,
+  ): Promise<ListResourceTemplatesResult> {
+    const session = sessionId || "default";
+
+    const cached = this.templateCache.get(session);
+    if (cached) {
+      this.logger.debug(
+        `Returning cached resource template list for session '${session}'`,
+      );
+      return { resourceTemplates: cached };
+    }
+
+    const allTemplates: ResourceTemplateType[] = [];
+
+    const clients = this.clientPool.getClientsBySession(session);
+    if (clients.size > 0) {
+      const templatePromises = Array.from(clients.entries()).map(
+        async ([name, client]) => {
+          try {
+            const result = await client.listResourceTemplates();
+            return { name, templates: result };
+          } catch (error) {
+            if (
+              error instanceof Error &&
+              error.message.includes("Server does not support")
+            ) {
+              return { name, templates: [] };
+            }
+
+            this.logger.error(
+              `Failed to list resource templates from server '${name}':`,
+              error as Error,
+            );
+            return { name, templates: [] };
+          }
+        },
+      );
+
+      const results = await Promise.all(templatePromises);
+
+      for (const { name, templates } of results) {
+        for (const template of templates) {
+          this.routingService.registerTemplate(
+            session,
+            template.uriTemplate,
+            name,
+          );
+          allTemplates.push(template);
+        }
+      }
+    }
+
+    this.templateCache.set(session, allTemplates);
+
+    this.logger.info(
+      `Aggregated ${allTemplates.length} resource templates from ${clients.size} server(s) for session '${session}'`,
+    );
+
+    return { resourceTemplates: allTemplates };
+  }
+
   async readResource(
     uri: string,
     sessionId: string,
@@ -116,15 +180,26 @@ export class ResourceAggregationService {
       }
     }
 
-    // Fall back to MCP server routing for gw:// URIs
-    const parsed = parseResourceUri(uri);
-    if (!parsed) {
-      throw new Error(
-        `Invalid resource URI format: '${uri}'. Expected format: gw://{server-name}/{uri}`,
+    // Look up the server via routing table
+    let serverName = this.routingService.getServerForUri(session, uri);
+
+    // If no route found, auto-populate by listing resources and templates
+    if (!serverName) {
+      this.logger.debug(
+        `No route for '${uri}', auto-populating resource routes for session '${session}'`,
       );
+      await Promise.all([
+        this.listResources(session),
+        this.listResourceTemplates(session),
+      ]);
+      serverName = this.routingService.getServerForUri(session, uri);
     }
 
-    const { serverName, originalUri } = parsed;
+    if (!serverName) {
+      throw new Error(
+        `No route found for resource URI: '${uri}'. No server provides this resource or matches it via a template.`,
+      );
+    }
 
     const { client } = lookupServerOrThrow({
       serverName,
@@ -133,24 +208,22 @@ export class ResourceAggregationService {
     });
 
     try {
-      const result = await client.readResource({ uri: originalUri });
-      this.logger.debug(
-        `Read resource '${originalUri}' from server '${serverName}'`,
-      );
+      const result = await client.readResource({ uri });
+      this.logger.debug(`Read resource '${uri}' from server '${serverName}'`);
 
-      // Namespace the URIs in the response contents
-      const namespacedContents = result.contents.map((content) => ({
-        ...content,
-        uri: namespaceResourceUri(serverName, content.uri),
-      }));
+      // Register content URIs as encountered for future routing
+      for (const content of result.contents) {
+        this.routingService.registerEncounteredUri(
+          session,
+          content.uri,
+          serverName,
+        );
+      }
 
-      return {
-        ...result,
-        contents: namespacedContents,
-      };
+      return result;
     } catch (error) {
       this.logger.error(
-        `Failed to read resource '${originalUri}' from server '${serverName}':`,
+        `Failed to read resource '${uri}' from server '${serverName}':`,
         error as Error,
       );
       throw error;
@@ -162,6 +235,8 @@ export class ResourceAggregationService {
       `Resource list changed for server '${serverName}' in session '${sessionId}'`,
     );
     this.cache.delete(sessionId);
+    this.templateCache.delete(sessionId);
+    this.routingService.invalidateSession(sessionId);
   }
 }
 

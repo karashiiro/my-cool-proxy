@@ -7,6 +7,10 @@ import { generateHttpTestConfig } from "../helpers/test-config-generator.js";
 import { HttpServerManager } from "../helpers/http-server-manager.js";
 import { ToyServerManager } from "../helpers/toy-server-manager.js";
 import { assertTextContains } from "../helpers/test-assertions.js";
+import {
+  waitForServersReady,
+  inspectAllTools,
+} from "../helpers/client-helpers.js";
 
 describe("Logging Notification Proxy E2E (HTTP Mode)", () => {
   let gatewayPort: number;
@@ -91,6 +95,7 @@ describe("Logging Notification Proxy E2E (HTTP Mode)", () => {
 
     // Wait for upstream servers to be ready
     await waitForServersReady(gatewayClient, 1);
+    await inspectAllTools(gatewayClient);
   }, 30000);
 
   afterAll(async () => {
@@ -275,45 +280,3 @@ describe("Logging Notification Proxy E2E (HTTP Mode)", () => {
     });
   });
 });
-
-/**
- * Waits for upstream servers to be available by polling list-servers.
- */
-async function waitForServersReady(
-  client: Client,
-  expectedServerCount: number,
-  timeoutMs = 5000,
-): Promise<void> {
-  const startTime = Date.now();
-
-  while (Date.now() - startTime < timeoutMs) {
-    try {
-      const result = await client.callTool({
-        name: "list-servers",
-        arguments: {},
-      });
-
-      const content = result.content as Array<{ type: string; text?: string }>;
-      const firstContent = content[0];
-      if (firstContent && "text" in firstContent && firstContent.text) {
-        const text = firstContent.text;
-        const match = text.match(/Available MCP Servers: (\d+)/);
-        if (
-          match &&
-          match[1] &&
-          parseInt(match[1], 10) >= expectedServerCount
-        ) {
-          return;
-        }
-      }
-    } catch {
-      // Ignore errors during polling
-    }
-
-    await new Promise((resolve) => setTimeout(resolve, 50));
-  }
-
-  throw new Error(
-    `Expected ${expectedServerCount} servers but they did not become ready within ${timeoutMs}ms`,
-  );
-}

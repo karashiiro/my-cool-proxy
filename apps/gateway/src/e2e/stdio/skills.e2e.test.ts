@@ -252,3 +252,106 @@ A second test skill.
     });
   });
 });
+
+/**
+ * E2E tests for mutable skill operations (_gateway.update_skill).
+ */
+describe("Mutable Skills E2E", () => {
+  let gatewayClient: Client;
+  let configCleanup: () => void;
+
+  beforeAll(async () => {
+    const configResult = generateStdioTestConfig(
+      {
+        transport: "stdio",
+        mcpClients: {},
+        skills: {
+          enabled: true,
+          mutable: true,
+        },
+      },
+      [
+        {
+          name: "editable-skill",
+          content: `---
+name: editable-skill
+description: A skill that will be edited
+---
+
+# Editable Skill
+
+Original content here.
+`,
+        },
+      ],
+    );
+    configCleanup = configResult.cleanup;
+
+    gatewayClient = new Client(
+      { name: "e2e-mutable-skills-client", version: "1.0.0" },
+      { capabilities: {} },
+    );
+
+    const transport = new StdioClientTransport({
+      command: "node",
+      args: [resolve(process.cwd(), "apps/gateway/dist/index.js")],
+      env: {
+        ...process.env,
+        CONFIG_PATH: configResult.configPath,
+      },
+    });
+
+    await gatewayClient.connect(transport);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }, 60000);
+
+  afterAll(async () => {
+    await gatewayClient?.close();
+    configCleanup?.();
+  });
+
+  it("should update a skill file via _gateway.update_skill()", async () => {
+    // Update the skill content
+    const updateResult = await gatewayClient.callTool({
+      name: "execute",
+      arguments: {
+        script: `result(_gateway.update_skill({
+          skillName = "editable-skill",
+          old_string = "Original content here.",
+          new_string = "Updated content via update_skill!"
+        }):await())`,
+      },
+    });
+
+    const updateContent = updateResult.content as TextContent[];
+    expect(updateContent[0]?.text).toContain("success");
+
+    // Verify the change by reading the resource
+    const readResult = await gatewayClient.callTool({
+      name: "execute",
+      arguments: {
+        script: `result(_gateway.read_resource({ uri = "gw-skill://editable-skill" }):await())`,
+      },
+    });
+
+    const readContent = readResult.content as TextContent[];
+    expect(readContent[0]?.text).toContain("Updated content via update_skill!");
+    expect(readContent[0]?.text).not.toContain("Original content here.");
+  });
+
+  it("should return error when old_string is not found", async () => {
+    const result = await gatewayClient.callTool({
+      name: "execute",
+      arguments: {
+        script: `result(_gateway.update_skill({
+          skillName = "editable-skill",
+          old_string = "this text does not exist anywhere",
+          new_string = "replacement"
+        }):await())`,
+      },
+    });
+
+    const content = result.content as TextContent[];
+    expect(content[0]?.text).toContain("not found");
+  });
+});

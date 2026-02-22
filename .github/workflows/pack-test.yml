@@ -32,6 +32,19 @@ jobs:
         working-directory: apps/gateway
         run: pnpm pack
 
+      - name: Verify dashboard UI is in tarball
+        working-directory: apps/gateway
+        run: |
+          TARBALL=$(ls karashiiro-my-cool-proxy-*.tgz)
+          if ! tar -tzf "$TARBALL" | grep -q "package/dist/dashboard/index.html"; then
+            echo "Dashboard UI files missing from tarball!"
+            echo "Expected package/dist/dashboard/index.html but it was not found."
+            echo "Tarball contents:"
+            tar -tzf "$TARBALL" | grep dashboard || echo "(no dashboard files found)"
+            exit 1
+          fi
+          echo "Dashboard UI files present in tarball."
+
       - name: Create test directory
         run: mkdir pack-test-install
 
@@ -63,7 +76,11 @@ jobs:
             "transport": "http",
             "host": "localhost",
             "port": 3456,
-            "mcpClients": {}
+            "mcpClients": {},
+            "dashboard": {
+              "port": 3457,
+              "host": "localhost"
+            }
           }
           EOF
 
@@ -88,4 +105,24 @@ jobs:
           fi
 
           echo "Server started and responded with HTTP $HTTP_CODE!"
+
+          # Verify dashboard serves HTML
+          DASH_BODY=$(curl --silent http://localhost:3457)
+          if ! echo "$DASH_BODY" | grep -qi "<!doctype\|<html"; then
+            echo "Dashboard did not return HTML content!"
+            echo "Response body: $DASH_BODY"
+            kill $SERVER_PID 2>/dev/null || true
+            exit 1
+          fi
+          echo "Dashboard is serving HTML content!"
+
+          # Verify dashboard API responds with JSON
+          API_CODE=$(curl --silent --output /dev/null --write-out "%{http_code}" http://localhost:3457/api/executions)
+          if [ "$API_CODE" != "200" ]; then
+            echo "Dashboard API returned unexpected status: $API_CODE"
+            kill $SERVER_PID 2>/dev/null || true
+            exit 1
+          fi
+          echo "Dashboard API responded with HTTP 200!"
+
           kill $SERVER_PID 2>/dev/null || true

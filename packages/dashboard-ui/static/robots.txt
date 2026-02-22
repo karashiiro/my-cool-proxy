@@ -1,0 +1,3 @@
+# Dashboard contains sensitive execution data; disallow crawling by default
+User-agent: *
+Disallow: /

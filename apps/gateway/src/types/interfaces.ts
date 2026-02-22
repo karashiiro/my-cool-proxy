@@ -1,19 +1,29 @@
 import type { MCPClientSession } from "@my-cool-proxy/mcp-client";
 import type { ACPAgentConfig } from "@my-cool-proxy/acp-client";
-import type { IGatewayBuiltins } from "@my-cool-proxy/lua-runtime";
+import type {
+  IGatewayBuiltins,
+  IToolCallLog,
+} from "@my-cool-proxy/lua-runtime";
 import type { SkillMetadata } from "./skill.js";
 import type {
   ClientCapabilities,
   LoggingMessageNotification,
 } from "@modelcontextprotocol/sdk/types.js";
 
-export type { ACPAgentConfig, ClientCapabilities, IGatewayBuiltins };
+export type {
+  ACPAgentConfig,
+  ClientCapabilities,
+  IGatewayBuiltins,
+  IToolCallLog,
+};
 
 export interface ILuaRuntime {
   executeScript(
     script: string,
     mcpServers: Map<string, MCPClientSession>,
     gatewayBuiltins: IGatewayBuiltins,
+    onProgress?: (progress: number, total?: number, message?: string) => void,
+    toolCallLog?: IToolCallLog,
   ): Promise<unknown>;
 }
 
@@ -60,6 +70,7 @@ export interface IMCPClientManager {
    * @param sessionId - The session ID to clean up
    */
   closeSession(sessionId: string): Promise<void>;
+  getActiveSessions(): string[];
   setResourceListChangedHandler(
     handler: (serverName: string, sessionId: string) => void,
   ): void;
@@ -292,6 +303,30 @@ export interface LoggingConfig {
   };
 }
 
+/**
+ * Database configuration for session persistence and data retention.
+ */
+export interface DatabaseConfig {
+  /**
+   * Number of days to retain data before automatic cleanup.
+   * Data older than this threshold is purged on server startup.
+   * Must be a positive number.
+   * @default 7
+   */
+  retentionDays?: number;
+}
+
+/**
+ * Configuration for the dashboard web UI.
+ * The dashboard runs as a separate HTTP server alongside the MCP transport.
+ */
+export interface DashboardConfig {
+  /** Port for the dashboard HTTP server. Default: 3100 */
+  port?: number;
+  /** Host to bind the dashboard server. Default: "localhost" */
+  host?: string;
+}
+
 export interface ServerConfig {
   port?: number;
   host?: string;
@@ -317,6 +352,20 @@ export interface ServerConfig {
    * - File: "trace" level to platform log directory
    */
   logging?: LoggingConfig;
+  /**
+   * Database configuration for session persistence and data retention.
+   * Controls how long historical data is kept before automatic cleanup.
+   *
+   * Default behavior (no config):
+   * - Data older than 7 days is purged on startup
+   */
+  database?: DatabaseConfig;
+  /**
+   * Dashboard web UI configuration.
+   * When present, a separate HTTP server serves the dashboard UI and REST API.
+   * The dashboard starts in both HTTP and stdio modes.
+   */
+  dashboard?: DashboardConfig;
 }
 
 export type { ILogger } from "@my-cool-proxy/logger";
@@ -412,6 +461,8 @@ export interface PreloadedServerInfo {
   version?: string;
   instructions?: string;
   toolNames?: string[];
+  resourceNames?: string[];
+  resourceTemplateNames?: string[];
 }
 
 /**
@@ -436,6 +487,180 @@ export interface IServerInfoPreloader {
    * Returns empty string if no skills are available.
    */
   buildSkillInstructions(skills: SkillMetadata[]): string;
+}
+
+/**
+ * Service for executing and writing gateway skills.
+ * Encapsulates skill script execution and skill file writing logic.
+ */
+export interface ISkillOperationsService {
+  executeSkillScript(
+    skillName: string,
+    script: string,
+    scriptArgs: string[],
+  ): Promise<unknown>;
+  writeSkillFiles(
+    skillName: string,
+    content?: string,
+    files?: Array<{ path: string; content: string }>,
+  ): Promise<unknown>;
+  updateSkillFile(
+    skillName: string,
+    file: string,
+    oldString: string,
+    newString: string,
+    replaceAll?: boolean,
+  ): Promise<unknown>;
+}
+
+/**
+ * Store for tracking which tools have been inspected (via tool-details
+ * or inspect-tool-response) per session. Used to enforce that agents
+ * read tool documentation before invoking tools in execute scripts.
+ */
+export interface IToolInspectionStore {
+  /**
+   * Mark a tool as inspected for a session.
+   */
+  markInspected(
+    sessionId: string,
+    luaServerName: string,
+    luaToolName: string,
+  ): void;
+
+  /**
+   * Check if a tool has been inspected for a session.
+   */
+  isInspected(
+    sessionId: string,
+    luaServerName: string,
+    luaToolName: string,
+  ): boolean;
+
+  /**
+   * Remove all inspection records for a session (cleanup).
+   */
+  deleteSession(sessionId: string): void;
+}
+
+/**
+ * Service for logging Lua script executions and their tool calls.
+ * Backed by SQLite in HTTP mode; no-op in stdio mode.
+ */
+/**
+ * A logged Lua script execution.
+ */
+export interface LuaExecution {
+  executionId: string;
+  sessionId: string;
+  script: string;
+  status: "success" | "error";
+  error?: string;
+  result?: string;
+  createdAt: number;
+}
+
+/**
+ * A logged tool call made within a Lua script execution.
+ */
+export interface LuaToolCall {
+  callId: string;
+  executionId: string;
+  serverName: string;
+  toolName: string;
+  arguments?: string;
+  status: "success" | "error";
+  error?: string;
+  result?: string;
+  createdAt: number;
+}
+
+/** A tool name with its usage count across all executions. */
+export interface ToolUsage {
+  tool: string;
+  count: number;
+}
+
+export interface IExecutionLog {
+  /**
+   * Log the start of a Lua script execution.
+   * @returns The generated execution ID for linking tool calls
+   */
+  logExecution(sessionId: string, script: string): string;
+
+  /**
+   * Mark an execution as failed with an error message.
+   */
+  markExecutionError(executionId: string, error: string): void;
+
+  /**
+   * Store the final result of a Lua script execution.
+   * @param result JSON-serialized result value
+   */
+  markExecutionResult(executionId: string, result: string): void;
+
+  /**
+   * Log a tool call made within a Lua script execution.
+   * @returns The generated call ID
+   */
+  logToolCall(
+    executionId: string,
+    serverName: string,
+    toolName: string,
+    args?: string,
+  ): string;
+
+  /**
+   * Mark a tool call as failed with an error message.
+   */
+  markToolCallError(callId: string, error: string): void;
+
+  /**
+   * Store the result of a tool call.
+   * @param result JSON-serialized result value
+   */
+  markToolCallResult(callId: string, result: string): void;
+
+  /**
+   * Get recent executions for a session, ordered by created_at DESC.
+   * @param sessionId The session to query
+   * @param limit Maximum number of executions to return (default 50)
+   */
+  getExecutions(sessionId: string, limit?: number): LuaExecution[];
+
+  /**
+   * Get tool calls for an execution, ordered by created_at DESC.
+   * @param executionId The execution to query
+   */
+  getToolCalls(executionId: string): LuaToolCall[];
+
+  /**
+   * Get a single execution by ID.
+   */
+  getExecution(executionId: string): LuaExecution | undefined;
+
+  /**
+   * Get recent executions across ALL sessions, ordered by created_at DESC.
+   * @param limit Maximum number of executions to return (default 50)
+   * @param offset Number of executions to skip (default 0)
+   * @param toolFilter Optional "server.tool" string to filter by tool usage
+   */
+  getAllExecutions(
+    limit?: number,
+    offset?: number,
+    toolFilter?: string,
+  ): LuaExecution[];
+
+  /**
+   * Count total executions across ALL sessions.
+   * @param toolFilter Optional "server.tool" string to filter by tool usage
+   */
+  countExecutions(toolFilter?: string): number;
+
+  /**
+   * Get distinct tool names with usage counts, ordered by count descending.
+   */
+  getDistinctTools(): ToolUsage[];
 }
 
 // Re-export skill types for convenience

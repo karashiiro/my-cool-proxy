@@ -25,19 +25,19 @@ const createMinimalConfig = (overrides?: Partial<ServerConfig>): ServerConfig =>
   }) as ServerConfig;
 
 describe("inversify.config", () => {
-  let originalCI: string | undefined;
+  let originalQuietLogs: string | undefined;
 
   beforeEach(() => {
-    // Preserve original CI env
-    originalCI = process.env.CI;
+    // Preserve original QUIET_LOGS env
+    originalQuietLogs = process.env.QUIET_LOGS;
   });
 
   afterEach(() => {
-    // Restore CI env
-    if (originalCI === undefined) {
-      delete process.env.CI;
+    // Restore QUIET_LOGS env
+    if (originalQuietLogs === undefined) {
+      delete process.env.QUIET_LOGS;
     } else {
-      process.env.CI = originalCI;
+      process.env.QUIET_LOGS = originalQuietLogs;
     }
   });
 
@@ -270,8 +270,8 @@ describe("inversify.config", () => {
   });
 
   describe("logger configuration", () => {
-    it("should default to info level for console in non-CI environment", () => {
-      delete process.env.CI;
+    it("should default to info level for console when QUIET_LOGS is not set", () => {
+      delete process.env.QUIET_LOGS;
       const container = createContainer(createMinimalConfig());
 
       const logger = container.get<ILogger>(TYPES.Logger);
@@ -280,8 +280,8 @@ describe("inversify.config", () => {
       expect(() => logger.info("test")).not.toThrow();
     });
 
-    it("should default to warn level for console in CI environment", () => {
-      process.env.CI = "true";
+    it("should default to warn level for console when QUIET_LOGS is set", () => {
+      process.env.QUIET_LOGS = "true";
       const container = createContainer(createMinimalConfig());
 
       const logger = container.get<ILogger>(TYPES.Logger);

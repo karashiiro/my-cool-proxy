@@ -7,6 +7,7 @@ import { $inject } from "../container/decorators.js";
 import { TYPES } from "../types/index.js";
 import type { ITool, ToolExecutionContext } from "./base-tool.js";
 import { ToolDiscoveryService } from "@my-cool-proxy/mcp-aggregation";
+import type { IToolInspectionStore } from "../types/interfaces.js";
 import { getEffectiveSessionId } from "../utils/session.js";
 import { luaServerNameSchema, luaToolNameSchema } from "./schemas.js";
 
@@ -40,6 +41,8 @@ export class ToolDetailsTool implements ITool {
   constructor(
     @$inject(TYPES.ToolDiscoveryService)
     private toolDiscovery: ToolDiscoveryService,
+    @$inject(TYPES.ToolInspectionStore)
+    private inspectionStore: IToolInspectionStore,
   ) {}
 
   async execute(
@@ -47,10 +50,22 @@ export class ToolDetailsTool implements ITool {
     context: ToolExecutionContext,
   ): Promise<CallToolResult> {
     const { luaServerName, luaToolName } = args;
-    return this.toolDiscovery.getToolDetails(
+    const sessionId = getEffectiveSessionId(context.sessionId);
+    const result = await this.toolDiscovery.getToolDetails(
       luaServerName as string,
       luaToolName as string,
-      getEffectiveSessionId(context.sessionId),
+      sessionId,
     );
+
+    // Record successful inspection so the execute tool allows this tool call
+    if (!result.isError) {
+      this.inspectionStore.markInspected(
+        sessionId,
+        luaServerName as string,
+        luaToolName as string,
+      );
+    }
+
+    return result;
   }
 }

@@ -32,6 +32,8 @@ function createMockClientSession(options: {
     readResource: vi.fn().mockResolvedValue({ contents: [] }),
     listPrompts: vi.fn().mockResolvedValue([]),
     getPrompt: vi.fn().mockResolvedValue({ messages: [] }),
+    listResourceTemplates: vi.fn().mockResolvedValue([]),
+    complete: vi.fn().mockResolvedValue({ completion: { values: [] } }),
   };
 }
 

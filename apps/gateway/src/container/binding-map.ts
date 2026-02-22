@@ -8,14 +8,19 @@ import type {
   IServerInfoPreloader,
   ISkillDiscoveryService,
   ISamplingShim,
+  ISkillOperationsService,
+  IToolInspectionStore,
+  IExecutionLog,
 } from "../types/interfaces.js";
 import type { MCPGatewayServer } from "../mcp/gateway-server.js";
 import type {
   ToolDiscoveryService,
   ResourceAggregationService,
   PromptAggregationService,
+  CompletionAggregationService,
   MCPFormatterService,
   IResourceProvider,
+  IResourceRoutingService,
 } from "@my-cool-proxy/mcp-aggregation";
 import type { ITool } from "../tools/base-tool.js";
 import type { IToolRegistry } from "../tools/tool-registry.js";
@@ -33,6 +38,8 @@ export interface ContainerBindingMap {
   ToolDiscoveryService: ToolDiscoveryService;
   ResourceAggregationService: ResourceAggregationService;
   PromptAggregationService: PromptAggregationService;
+  CompletionAggregationService: CompletionAggregationService;
+  ResourceRoutingService: IResourceRoutingService;
   MCPGatewayServer: MCPGatewayServer;
   ShutdownHandler: IShutdownHandler;
   Tool: ITool; // Multi-bound - use getAll() to retrieve all registered tools
@@ -42,4 +49,7 @@ export interface ContainerBindingMap {
   SkillDiscoveryService: ISkillDiscoveryService;
   SkillResourceProvider: IResourceProvider;
   SamplingShim: ISamplingShim;
+  SkillOperationsService: ISkillOperationsService;
+  ToolInspectionStore: IToolInspectionStore;
+  ExecutionLog: IExecutionLog;
 }

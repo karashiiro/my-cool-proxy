@@ -4,10 +4,11 @@ import type {
   ILogger,
   IMCPClientSession,
   IGatewayBuiltins,
+  IToolCallLog,
 } from "./types.js";
 import {
   sanitizeLuaIdentifier,
-  namespaceCallToolResultResources,
+  getErrorMessage,
 } from "@my-cool-proxy/mcp-utilities";
 import {
   takeResult,
@@ -18,6 +19,9 @@ import {
   type CallToolResult,
 } from "@modelcontextprotocol/sdk/types.js";
 import { inspect } from "node:util";
+import { ProgressAggregator } from "./progress-aggregator.js";
+
+export { ProgressAggregator } from "./progress-aggregator.js";
 
 export class WasmoonRuntime implements ILuaRuntime {
   private factory: LuaFactory;
@@ -30,17 +34,30 @@ export class WasmoonRuntime implements ILuaRuntime {
     script: string,
     mcpServers: Map<string, IMCPClientSession>,
     gatewayBuiltins: IGatewayBuiltins,
+    onProgress?: (progress: number, total?: number, message?: string) => void,
+    toolCallLog?: IToolCallLog,
   ): Promise<unknown> {
-    this.logger.debug(`Executing Lua script:\n${script}`);
+    this.logger.info(`Executing Lua script:\n${script}`);
 
     let finalResult: unknown;
     const engine = await this.createEngine((result: unknown) => {
       finalResult = result;
     });
 
+    // Create aggregator if progress reporting is requested
+    const aggregator = onProgress
+      ? new ProgressAggregator(onProgress)
+      : undefined;
+
     try {
       // Inject MCP servers as Lua globals
-      await this.injectMCPServers(engine, mcpServers);
+      await this.injectMCPServers(
+        engine,
+        mcpServers,
+        gatewayBuiltins,
+        aggregator,
+        toolCallLog,
+      );
 
       // Inject gateway builtins as _gateway global
       this.injectGatewayBuiltins(engine, gatewayBuiltins);
@@ -140,6 +157,9 @@ Common issues:
   private async injectMCPServers(
     engine: LuaEngine,
     mcpServers: Map<string, IMCPClientSession>,
+    gatewayBuiltins: IGatewayBuiltins,
+    aggregator?: ProgressAggregator,
+    toolCallLog?: IToolCallLog,
   ): Promise<void> {
     for (const [originalServerName, client] of mcpServers.entries()) {
       try {
@@ -159,11 +179,46 @@ Common issues:
 
           // Capture original names in closure for MCP calls
           serverTable[sanitizedToolName] = async (args: unknown) => {
+            // Log tool call start if logger is provided
+            const logCallId = toolCallLog?.onToolCallStart(
+              originalServerName,
+              originalToolName,
+              args ? JSON.stringify(args) : undefined,
+            );
+
             try {
               this.logger.debug(
                 `Calling ${originalServerName}.${originalToolName} ` +
                   `(Lua: ${sanitizedServerName}.${sanitizedToolName}) with args: ${inspect(args)}`,
               );
+
+              // Enforce tool inspection guard if configured
+              if (gatewayBuiltins.toolCallGuard) {
+                gatewayBuiltins.toolCallGuard(
+                  sanitizedServerName,
+                  sanitizedToolName,
+                );
+              }
+
+              // Register with progress aggregator if available.
+              // Registration happens at call time (not injection time) so
+              // tools called multiple times each get their own progress slot.
+              let callToolOptions:
+                | {
+                    onprogress?: (progress: {
+                      progress: number;
+                      total?: number;
+                      message?: string;
+                    }) => void;
+                  }
+                | undefined;
+
+              if (aggregator) {
+                const callId = aggregator.register();
+                callToolOptions = {
+                  onprogress: (p) => aggregator.update(callId, p),
+                };
+              }
 
               const result = await takeResult<
                 CallToolResult,
@@ -175,27 +230,48 @@ Common issues:
                     arguments: (args as Record<string, unknown>) || {},
                   },
                   CallToolResultSchema,
+                  callToolOptions,
                 ) as AsyncGenerator<ResponseMessage<CallToolResult>>,
               );
 
-              // IMPORTANT: Namespace resource URIs in tool results here!
-              // This MUST happen at the tool call level because:
-              // 1. We have the server context (originalServerName) here
-              // 2. Lua scripts can call tools from multiple servers
-              // 3. By the time results reach the gateway server, we've lost which
-              //    server each resource came from
-              // This ensures clients can directly use resource URIs from tool results
-              // without manual namespacing (e.g., file:///data.json becomes
-              // gw://data-server/file:///data.json)
-              const namespacedResult = namespaceCallToolResultResources(
-                originalServerName,
-                result,
-              );
+              // Register resource URIs found in tool results for routing.
+              // We have the server context (originalServerName) here,
+              // which is needed because Lua scripts can call tools from
+              // multiple servers. The routing service maps URIs to their
+              // source server for subsequent resource reads.
+              if (gatewayBuiltins.registerResourceUri) {
+                for (const block of result.content) {
+                  if (
+                    typeof block === "object" &&
+                    block !== null &&
+                    "type" in block
+                  ) {
+                    if (block.type === "resource_link" && "uri" in block) {
+                      gatewayBuiltins.registerResourceUri(
+                        block.uri as string,
+                        originalServerName,
+                      );
+                    }
+                    if (
+                      block.type === "resource" &&
+                      "resource" in block &&
+                      typeof block.resource === "object" &&
+                      block.resource !== null &&
+                      "uri" in block.resource
+                    ) {
+                      gatewayBuiltins.registerResourceUri(
+                        block.resource.uri as string,
+                        originalServerName,
+                      );
+                    }
+                  }
+                }
+              }
 
               // Validate isError flag - throw so agents can't silently
               // extract error context as if it were successful data
-              if (namespacedResult.isError) {
-                const errorText = namespacedResult.content
+              if (result.isError) {
+                const errorText = result.content
                   .filter(
                     (c): c is { type: "text"; text: string } =>
                       c.type === "text",
@@ -207,25 +283,33 @@ Common issues:
                 );
               }
 
-              if (namespacedResult.structuredContent) {
+              // Log successful tool call result
+              if (logCallId) {
+                toolCallLog?.onToolCallEnd(logCallId, JSON.stringify(result));
+              }
+
+              if (result.structuredContent) {
                 // Directly return structured content as Lua table
-                return namespacedResult.structuredContent;
+                return result.structuredContent;
               }
 
               if (
-                namespacedResult.content.length === 1 &&
-                namespacedResult.content[0]?.type === "text"
+                result.content.length === 1 &&
+                result.content[0]?.type === "text"
               ) {
                 // If single text content, attempt to parse as JSON
                 try {
-                  return JSON.parse(namespacedResult.content[0].text);
+                  return JSON.parse(result.content[0].text);
                 } catch {
                   // ignored
                 }
               }
 
-              return namespacedResult;
+              return result;
             } catch (error) {
+              if (logCallId) {
+                toolCallLog?.onToolCallError(logCallId, getErrorMessage(error));
+              }
               this.logger.error(
                 `Error calling ${originalServerName}.${originalToolName}:`,
                 error as Error,
@@ -272,6 +356,11 @@ Common issues:
       return builtins.listResources();
     };
 
+    gatewayTable["list_resource_templates"] = async () => {
+      this.logger.debug("Calling _gateway.list_resource_templates()");
+      return builtins.listResourceTemplates();
+    };
+
     gatewayTable["read_resource"] = async (args: { uri: string }) => {
       const uri = args?.uri;
       this.logger.debug(`Calling _gateway.read_resource({ uri = "${uri}" })`);
@@ -295,6 +384,17 @@ Common issues:
       const name = args?.name;
       this.logger.debug(`Calling _gateway.get_prompt({ name = "${name}" })`);
       return builtins.getPrompt(name, args?.arguments);
+    };
+
+    gatewayTable["complete"] = async (args: {
+      ref: { type: string; uri?: string; name?: string };
+      argument: { name: string; value: string };
+      context?: { arguments?: Record<string, string> };
+    }) => {
+      this.logger.debug(
+        `Calling _gateway.complete({ ref.type = "${args?.ref?.type}" })`,
+      );
+      return builtins.complete(args);
     };
 
     // Conditional builtins (only when skills are enabled)
@@ -323,6 +423,28 @@ Common issues:
           `Calling _gateway.write_skill({ skillName = "${args?.skillName}" })`,
         );
         return writeSkill(args?.skillName, args?.content, args?.files);
+      };
+    }
+
+    if (builtins.updateSkill) {
+      const updateSkill = builtins.updateSkill;
+      gatewayTable["update_skill"] = async (args: {
+        skillName: string;
+        file?: string;
+        old_string: string;
+        new_string: string;
+        replace_all?: boolean;
+      }) => {
+        this.logger.debug(
+          `Calling _gateway.update_skill({ skillName = "${args?.skillName}", file = "${args?.file ?? "SKILL.md"}" })`,
+        );
+        return updateSkill(
+          args?.skillName,
+          args?.file ?? "SKILL.md",
+          args?.old_string,
+          args?.new_string,
+          args?.replace_all,
+        );
       };
     }
 

@@ -1,4 +1,13 @@
+import { cpSync, existsSync, rmSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "tsup";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const dashboardBuildDir = resolve(
+  __dirname,
+  "../../packages/dashboard-ui/build",
+);
 
 export default defineConfig({
   entry: ["src/index.ts"],
@@ -37,4 +46,13 @@ export default defineConfig({
   splitting: false,
   minify: false,
   target: "node22",
+  async onSuccess() {
+    const dest = resolve(__dirname, "dist/dashboard");
+    if (existsSync(dest)) {
+      rmSync(dest, { recursive: true, force: true });
+    }
+    if (existsSync(dashboardBuildDir)) {
+      cpSync(dashboardBuildDir, dest, { recursive: true });
+    }
+  },
 });

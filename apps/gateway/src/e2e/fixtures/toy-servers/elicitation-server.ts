@@ -142,6 +142,59 @@ function createElicitationServer(): McpServer {
     },
   );
 
+  // Tool that triggers a URL-mode elicitation request
+  server.registerTool(
+    "ask_user_url",
+    {
+      description:
+        "Ask the user to navigate to a URL. This will send a URL-mode elicitation request to the connected client.",
+      inputSchema: z.object({
+        prompt: z.string().describe("The prompt/message to show the user"),
+        url: z.string().describe("The URL for the user to navigate to"),
+      }),
+    },
+    async (args) => {
+      const { prompt, url } = args as { prompt: string; url: string };
+
+      // Send URL-mode elicitation request to the connected client
+      const result = await server.server.elicitInput({
+        mode: "url",
+        message: prompt,
+        elicitationId: `url-elicit-${Date.now()}`,
+        url,
+      });
+
+      if (result.action === "accept") {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `User accepted URL elicitation for: ${url}`,
+            },
+          ],
+        };
+      } else if (result.action === "decline") {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "User declined the URL elicitation request",
+            },
+          ],
+        };
+      } else {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `URL elicitation completed with action: ${result.action}`,
+            },
+          ],
+        };
+      }
+    },
+  );
+
   return server;
 }
 

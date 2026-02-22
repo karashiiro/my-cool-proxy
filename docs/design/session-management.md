@@ -162,7 +162,7 @@ flowchart LR
 - `pending-*` IDs are temporary and shouldn't create upstream sessions
 - `default` is reserved for stdio mode
 
-Implementation in `src/mcp/client-manager.ts`:
+Implementation in `packages/mcp-client/src/client-manager.ts`:
 
 ```typescript
 const headers: Record<string, string> = { ...config.headers };
@@ -173,7 +173,7 @@ if (sessionId !== "default" && !sessionId.startsWith("pending-")) {
 
 ## Session Management
 
-Session management is handled via the `@karashiiro/mcp` abstraction layer in `src/index.ts`:
+Session management is handled via the `@karashiiro/mcp` abstraction layer in `apps/gateway/src/index.ts`:
 
 ### Session Factory Pattern
 
@@ -282,7 +282,7 @@ Original logger: "database"
 Forwarded logger: "[postgres-server] database"
 ```
 
-Implementation in `packages/mcp-client/src/client-session.ts`:
+Implementation in `packages/mcp-client/src/client-session.ts` (log message forwarding):
 
 ```typescript
 const prefixedLogger = originalLogger
@@ -382,12 +382,12 @@ In stdio mode:
 
 ## Implementation Files
 
-| File                        | Purpose                                          |
-| --------------------------- | ------------------------------------------------ |
-| `src/index.ts`              | Session factory and lifecycle callbacks          |
-| `src/mcp/client-manager.ts` | Client lifecycle and session keying              |
-| `src/mcp/client-session.ts` | Per-client caching and filtering                 |
-| `src/mcp/gateway-server.ts` | Per-session Gateway server with tool integration |
+| File                                        | Purpose                                          |
+| ------------------------------------------- | ------------------------------------------------ |
+| `apps/gateway/src/index.ts`                 | Session factory and lifecycle callbacks          |
+| `packages/mcp-client/src/client-manager.ts` | Client lifecycle and session keying              |
+| `packages/mcp-client/src/client-session.ts` | Per-client caching and filtering                 |
+| `apps/gateway/src/mcp/gateway-server.ts`    | Per-session Gateway server with tool integration |
 
 ## Best Practices
 

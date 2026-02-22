@@ -7,6 +7,7 @@ import {
   type CapturedToolCall,
   type McpServerStdio,
 } from "@my-cool-proxy/acp-client";
+import { getErrorMessage } from "@my-cool-proxy/mcp-utilities";
 import type {
   CreateMessageRequest,
   CreateMessageResult,
@@ -142,7 +143,7 @@ export class SamplingShim implements ISamplingShim {
         );
       } catch (error) {
         this.logger.warn(
-          { error: error instanceof Error ? error.message : String(error) },
+          { error: getErrorMessage(error) },
           `Session ${sessionId}: Failed to fetch roots, falling back to tempdir`,
         );
       }

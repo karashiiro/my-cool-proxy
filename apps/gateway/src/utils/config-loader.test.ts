@@ -837,6 +837,134 @@ describe("mergeEnvConfig", () => {
   });
 });
 
+describe("validateDashboardConfig", () => {
+  const testConfigPath = resolve(process.cwd(), "test-dashboard-config.json");
+  let originalConfigPath: string | undefined;
+
+  beforeEach(() => {
+    originalConfigPath = process.env.CONFIG_PATH;
+    process.env.CONFIG_PATH = testConfigPath;
+  });
+
+  afterEach(() => {
+    if (originalConfigPath) {
+      process.env.CONFIG_PATH = originalConfigPath;
+    } else {
+      delete process.env.CONFIG_PATH;
+    }
+    if (existsSync(testConfigPath)) {
+      unlinkSync(testConfigPath);
+    }
+  });
+
+  it("should accept valid dashboard config", () => {
+    const config = {
+      port: 3000,
+      host: "localhost",
+      transport: "http",
+      mcpClients: {},
+      dashboard: { port: 3100, host: "localhost" },
+    };
+    writeFileSync(testConfigPath, JSON.stringify(config));
+    expect(() => loadConfig()).not.toThrow();
+  });
+
+  it("should accept empty dashboard config (uses defaults)", () => {
+    const config = {
+      port: 3000,
+      host: "localhost",
+      transport: "http",
+      mcpClients: {},
+      dashboard: {},
+    };
+    writeFileSync(testConfigPath, JSON.stringify(config));
+    expect(() => loadConfig()).not.toThrow();
+  });
+
+  it("should accept config without dashboard section", () => {
+    const config = {
+      port: 3000,
+      host: "localhost",
+      transport: "http",
+      mcpClients: {},
+    };
+    writeFileSync(testConfigPath, JSON.stringify(config));
+    expect(() => loadConfig()).not.toThrow();
+  });
+
+  it("should reject non-object dashboard config", () => {
+    const config = {
+      port: 3000,
+      host: "localhost",
+      transport: "http",
+      mcpClients: {},
+      dashboard: "yes",
+    };
+    writeFileSync(testConfigPath, JSON.stringify(config));
+    expect(() => loadConfig()).toThrow("must be an object");
+  });
+
+  it("should reject non-number port", () => {
+    const config = {
+      port: 3000,
+      host: "localhost",
+      transport: "http",
+      mcpClients: {},
+      dashboard: { port: "abc" },
+    };
+    writeFileSync(testConfigPath, JSON.stringify(config));
+    expect(() => loadConfig()).toThrow("must be a number");
+  });
+
+  it("should reject non-string host", () => {
+    const config = {
+      port: 3000,
+      host: "localhost",
+      transport: "http",
+      mcpClients: {},
+      dashboard: { host: 123 },
+    };
+    writeFileSync(testConfigPath, JSON.stringify(config));
+    expect(() => loadConfig()).toThrow("must be a string");
+  });
+
+  it("should reject out-of-range dashboard port", () => {
+    const config = {
+      port: 3000,
+      host: "localhost",
+      transport: "http",
+      mcpClients: {},
+      dashboard: { port: 70000 },
+    };
+    writeFileSync(testConfigPath, JSON.stringify(config));
+    expect(() => loadConfig()).toThrow("between 1 and 65535");
+  });
+
+  it("should reject negative dashboard port", () => {
+    const config = {
+      port: 3000,
+      host: "localhost",
+      transport: "http",
+      mcpClients: {},
+      dashboard: { port: -1 },
+    };
+    writeFileSync(testConfigPath, JSON.stringify(config));
+    expect(() => loadConfig()).toThrow("between 1 and 65535");
+  });
+
+  it("should reject non-integer dashboard port", () => {
+    const config = {
+      port: 3000,
+      host: "localhost",
+      transport: "http",
+      mcpClients: {},
+      dashboard: { port: 3.14 },
+    };
+    writeFileSync(testConfigPath, JSON.stringify(config));
+    expect(() => loadConfig()).toThrow("between 1 and 65535");
+  });
+});
+
 describe("DEFAULT_CONFIG", () => {
   it("should have expected default values", () => {
     expect(DEFAULT_CONFIG).toEqual({

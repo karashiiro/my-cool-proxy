@@ -7,7 +7,10 @@ import * as z from "zod";
 import { $inject } from "../container/decorators.js";
 import { TYPES } from "../types/index.js";
 import type { ITool, ToolExecutionContext } from "./base-tool.js";
-import type { ServerConfig } from "../types/interfaces.js";
+import type {
+  ServerConfig,
+  IToolInspectionStore,
+} from "../types/interfaces.js";
 import { ToolDiscoveryService } from "@my-cool-proxy/mcp-aggregation";
 import { SKILLS_REMINDER_CONTENT_BLOCK } from "../utils/skills.js";
 import { getEffectiveSessionId } from "../utils/session.js";
@@ -63,6 +66,8 @@ export class InspectToolResponseTool implements ITool {
     private toolDiscovery: ToolDiscoveryService,
     @$inject(TYPES.ServerConfig)
     private config: ServerConfig,
+    @$inject(TYPES.ToolInspectionStore)
+    private inspectionStore: IToolInspectionStore,
   ) {}
 
   async execute(
@@ -70,12 +75,22 @@ export class InspectToolResponseTool implements ITool {
     context: ToolExecutionContext,
   ): Promise<CallToolResult> {
     const { luaServerName, luaToolName, sampleArgs } = args;
+    const sessionId = getEffectiveSessionId(context.sessionId);
     const result = await this.toolDiscovery.inspectToolResponse(
       luaServerName as string,
       luaToolName as string,
       (sampleArgs as Record<string, unknown>) || {},
-      getEffectiveSessionId(context.sessionId),
+      sessionId,
     );
+
+    // Record successful inspection so the execute tool allows this tool call
+    if (!result.isError) {
+      this.inspectionStore.markInspected(
+        sessionId,
+        luaServerName as string,
+        luaToolName as string,
+      );
+    }
 
     // Add skill check note if skills are enabled
     if (this.config.skills?.enabled === true) {

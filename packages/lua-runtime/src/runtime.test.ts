@@ -5,7 +5,12 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import * as z from "zod";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import type { ILogger, IMCPClientSession, IGatewayBuiltins } from "./types.js";
+import type {
+  ILogger,
+  IMCPClientSession,
+  IGatewayBuiltins,
+  IToolCallLog,
+} from "./types.js";
 
 // Mock logger factory
 const createMockLogger = (): ILogger => ({
@@ -19,10 +24,14 @@ const createMockLogger = (): ILogger => ({
 // Mock gateway builtins factory - provides minimal implementation for tests
 const createMockGatewayBuiltins = (): IGatewayBuiltins => ({
   listResources: vi.fn().mockResolvedValue({ resources: [] }),
+  listResourceTemplates: vi.fn().mockResolvedValue({ resourceTemplates: [] }),
   readResource: vi.fn().mockResolvedValue({ contents: [] }),
   listPrompts: vi.fn().mockResolvedValue({ prompts: [] }),
   getPrompt: vi.fn().mockResolvedValue({ messages: [] }),
   summaryStats: vi.fn().mockResolvedValue({ servers: 0, tools: 0 }),
+  complete: vi
+    .fn()
+    .mockResolvedValue({ completion: { values: [], hasMore: false } }),
 });
 
 /**
@@ -1238,6 +1247,633 @@ describe("WasmoonRuntime", () => {
           },
         },
       });
+    });
+  });
+
+  describe("resource URI registration from tool results", () => {
+    it("should call registerResourceUri for resource_link content blocks", async () => {
+      const { server, client } = await createTestServer("data-server", [
+        {
+          name: "get-link",
+          description: "Returns a resource link",
+          handler: async () => ({
+            content: [
+              {
+                type: "resource_link" as const,
+                name: "Report",
+                uri: "file:///data/report.json",
+              },
+            ],
+          }),
+        },
+      ]);
+
+      cleanupFns.push(async () => {
+        await client.close();
+        await server.close();
+      });
+
+      const servers = new Map([["data-server", client]]);
+      const builtins = createMockGatewayBuiltins();
+      const registerResourceUri = vi.fn();
+      builtins.registerResourceUri = registerResourceUri;
+
+      const script = `result(data_server.get_link({}):await())`;
+      await runtime.executeScript(script, servers, builtins);
+
+      expect(registerResourceUri).toHaveBeenCalledWith(
+        "file:///data/report.json",
+        "data-server",
+      );
+    });
+
+    it("should call registerResourceUri for embedded resource content blocks", async () => {
+      const { server, client } = await createTestServer("docs-server", [
+        {
+          name: "get-doc",
+          description: "Returns an embedded resource",
+          handler: async () => ({
+            content: [
+              {
+                type: "resource" as const,
+                resource: {
+                  uri: "file:///docs/readme.md",
+                  mimeType: "text/markdown",
+                  text: "# Hello",
+                },
+              },
+            ],
+          }),
+        },
+      ]);
+
+      cleanupFns.push(async () => {
+        await client.close();
+        await server.close();
+      });
+
+      const servers = new Map([["docs-server", client]]);
+      const builtins = createMockGatewayBuiltins();
+      const registerResourceUri = vi.fn();
+      builtins.registerResourceUri = registerResourceUri;
+
+      const script = `result(docs_server.get_doc({}):await())`;
+      await runtime.executeScript(script, servers, builtins);
+
+      expect(registerResourceUri).toHaveBeenCalledWith(
+        "file:///docs/readme.md",
+        "docs-server",
+      );
+    });
+
+    it("should register URIs from multiple content blocks", async () => {
+      const { server, client } = await createTestServer("multi-server", [
+        {
+          name: "get-multi",
+          description: "Returns multiple resource references",
+          handler: async () => ({
+            content: [
+              {
+                type: "text" as const,
+                text: "Here are some resources:",
+              },
+              {
+                type: "resource_link" as const,
+                name: "Report A",
+                uri: "file:///a.json",
+              },
+              {
+                type: "resource" as const,
+                resource: {
+                  uri: "file:///b.md",
+                  mimeType: "text/markdown",
+                  text: "# B",
+                },
+              },
+            ],
+          }),
+        },
+      ]);
+
+      cleanupFns.push(async () => {
+        await client.close();
+        await server.close();
+      });
+
+      const servers = new Map([["multi-server", client]]);
+      const builtins = createMockGatewayBuiltins();
+      const registerResourceUri = vi.fn();
+      builtins.registerResourceUri = registerResourceUri;
+
+      const script = `result(multi_server.get_multi({}):await())`;
+      await runtime.executeScript(script, servers, builtins);
+
+      expect(registerResourceUri).toHaveBeenCalledTimes(2);
+      expect(registerResourceUri).toHaveBeenCalledWith(
+        "file:///a.json",
+        "multi-server",
+      );
+      expect(registerResourceUri).toHaveBeenCalledWith(
+        "file:///b.md",
+        "multi-server",
+      );
+    });
+
+    it("should not call registerResourceUri for text-only content", async () => {
+      const { server, client } = await createTestServer("text-server", [
+        {
+          name: "get-text",
+          description: "Returns only text",
+          handler: async () => ({
+            content: [{ type: "text" as const, text: "just text" }],
+          }),
+        },
+      ]);
+
+      cleanupFns.push(async () => {
+        await client.close();
+        await server.close();
+      });
+
+      const servers = new Map([["text-server", client]]);
+      const builtins = createMockGatewayBuiltins();
+      const registerResourceUri = vi.fn();
+      builtins.registerResourceUri = registerResourceUri;
+
+      const script = `result(text_server.get_text({}):await())`;
+      await runtime.executeScript(script, servers, builtins);
+
+      expect(registerResourceUri).not.toHaveBeenCalled();
+    });
+
+    it("should not fail when registerResourceUri is not provided", async () => {
+      const { server, client } = await createTestServer("link-server", [
+        {
+          name: "get-link",
+          description: "Returns a resource link",
+          handler: async () => ({
+            content: [
+              {
+                type: "resource_link" as const,
+                name: "Report",
+                uri: "file:///report.json",
+              },
+            ],
+          }),
+        },
+      ]);
+
+      cleanupFns.push(async () => {
+        await client.close();
+        await server.close();
+      });
+
+      const servers = new Map([["link-server", client]]);
+      // No registerResourceUri on builtins — should not throw
+      const builtins = createMockGatewayBuiltins();
+
+      const script = `result(link_server.get_link({}):await())`;
+      await expect(
+        runtime.executeScript(script, servers, builtins),
+      ).resolves.not.toThrow();
+    });
+  });
+
+  describe("gateway complete builtin", () => {
+    it("should call complete builtin with ref and argument params", async () => {
+      const builtins = createMockGatewayBuiltins();
+      const mockComplete = vi.fn().mockResolvedValue({
+        completion: { values: ["us-east-1", "us-west-2"], hasMore: false },
+      });
+      builtins.complete = mockComplete;
+
+      const script = `
+        local res = _gateway.complete({
+          ref = { type = "ref/resource", uri = "deployment://{region}/{service}" },
+          argument = { name = "region", value = "us" }
+        }):await()
+        result(res)
+      `;
+
+      const result = await runtime.executeScript(script, new Map(), builtins);
+
+      expect(mockComplete).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ref: expect.objectContaining({
+            type: "ref/resource",
+            uri: "deployment://{region}/{service}",
+          }),
+          argument: expect.objectContaining({
+            name: "region",
+            value: "us",
+          }),
+        }),
+      );
+
+      const typed = result as {
+        completion: { values: string[]; hasMore: boolean };
+      };
+      expect(typed.completion.values).toContain("us-east-1");
+      expect(typed.completion.values).toContain("us-west-2");
+    });
+
+    it("should call complete builtin with ref/prompt type", async () => {
+      const builtins = createMockGatewayBuiltins();
+      const mockComplete = vi.fn().mockResolvedValue({
+        completion: { values: ["typescript", "terraform"], hasMore: false },
+      });
+      builtins.complete = mockComplete;
+
+      const script = `
+        local res = _gateway.complete({
+          ref = { type = "ref/prompt", name = "my-server/code-review" },
+          argument = { name = "language", value = "type" }
+        }):await()
+        result(res)
+      `;
+
+      const result = await runtime.executeScript(script, new Map(), builtins);
+
+      expect(mockComplete).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ref: expect.objectContaining({
+            type: "ref/prompt",
+            name: "my-server/code-review",
+          }),
+          argument: expect.objectContaining({
+            name: "language",
+            value: "type",
+          }),
+        }),
+      );
+
+      const typed = result as {
+        completion: { values: string[]; hasMore: boolean };
+      };
+      expect(typed.completion.values).toEqual(["typescript", "terraform"]);
+    });
+
+    it("should pass context.arguments through to complete builtin", async () => {
+      const builtins = createMockGatewayBuiltins();
+      const mockComplete = vi.fn().mockResolvedValue({
+        completion: { values: ["express", "fastify"], hasMore: false },
+      });
+      builtins.complete = mockComplete;
+
+      const script = `
+        local res = _gateway.complete({
+          ref = { type = "ref/prompt", name = "my-server/code-review" },
+          argument = { name = "framework", value = "" },
+          context = { arguments = { language = "typescript" } }
+        }):await()
+        result(res)
+      `;
+
+      const result = await runtime.executeScript(script, new Map(), builtins);
+
+      expect(mockComplete).toHaveBeenCalledWith(
+        expect.objectContaining({
+          context: expect.objectContaining({
+            arguments: expect.objectContaining({
+              language: "typescript",
+            }),
+          }),
+        }),
+      );
+
+      const typed = result as {
+        completion: { values: string[]; hasMore: boolean };
+      };
+      expect(typed.completion.values).toEqual(["express", "fastify"]);
+    });
+
+    it("should return error object when complete builtin rejects", async () => {
+      const builtins = createMockGatewayBuiltins();
+      builtins.complete = vi
+        .fn()
+        .mockRejectedValue(new Error("No route found for resource URI"));
+
+      const script = `
+        local ok, err = pcall(function()
+          return _gateway.complete({
+            ref = { type = "ref/resource", uri = "unknown://{id}" },
+            argument = { name = "id", value = "test" }
+          }):await()
+        end)
+        result({ ok = ok, error_message = tostring(err) })
+      `;
+
+      const result = await runtime.executeScript(script, new Map(), builtins);
+
+      const typed = result as { ok: boolean; error_message: string };
+      expect(typed.ok).toBe(false);
+      expect(typed.error_message).toContain("No route found");
+    });
+
+    it("should handle empty completion results", async () => {
+      const builtins = createMockGatewayBuiltins();
+      builtins.complete = vi.fn().mockResolvedValue({
+        completion: { values: [], hasMore: false },
+      });
+
+      const script = `
+        local res = _gateway.complete({
+          ref = { type = "ref/resource", uri = "deployment://{region}/{service}" },
+          argument = { name = "region", value = "zzz" }
+        }):await()
+        result(res)
+      `;
+
+      const result = await runtime.executeScript(script, new Map(), builtins);
+
+      const typed = result as {
+        completion: { values: string[]; hasMore: boolean };
+      };
+      expect(typed.completion.values).toEqual([]);
+      expect(typed.completion.hasMore).toBe(false);
+    });
+  });
+
+  describe("toolCallLog integration", () => {
+    it("should call onToolCallStart for each tool invocation", async () => {
+      const { server, client } = await createTestServer("api", [
+        {
+          name: "get-data",
+          description: "Get data",
+          handler: async () => ({
+            content: [{ type: "text" as const, text: '{"ok":true}' }],
+          }),
+        },
+      ]);
+
+      cleanupFns.push(async () => {
+        await client.close();
+        await server.close();
+      });
+
+      const toolCallLog: IToolCallLog = {
+        onToolCallStart: vi.fn().mockReturnValue("call-1"),
+        onToolCallEnd: vi.fn(),
+        onToolCallError: vi.fn(),
+      };
+
+      const script = `result(api.get_data({}):await())`;
+      await runtime.executeScript(
+        script,
+        new Map([["api", client]]),
+        createMockGatewayBuiltins(),
+        undefined,
+        toolCallLog,
+      );
+
+      expect(toolCallLog.onToolCallStart).toHaveBeenCalledWith(
+        "api",
+        "get-data",
+        expect.any(String),
+      );
+    });
+
+    it("should call onToolCallStart for each tool call in a multi-call script", async () => {
+      const { server, client } = await createTestServer("svc", [
+        {
+          name: "tool-a",
+          description: "A",
+          handler: async () => ({
+            content: [{ type: "text" as const, text: "a" }],
+          }),
+        },
+        {
+          name: "tool-b",
+          description: "B",
+          handler: async () => ({
+            content: [{ type: "text" as const, text: "b" }],
+          }),
+        },
+      ]);
+
+      cleanupFns.push(async () => {
+        await client.close();
+        await server.close();
+      });
+
+      const toolCallLog: IToolCallLog = {
+        onToolCallStart: vi.fn().mockReturnValue("call-id"),
+        onToolCallEnd: vi.fn(),
+        onToolCallError: vi.fn(),
+      };
+
+      const script = `
+        svc.tool_a({}):await()
+        svc.tool_b({}):await()
+        result(true)
+      `;
+
+      await runtime.executeScript(
+        script,
+        new Map([["svc", client]]),
+        createMockGatewayBuiltins(),
+        undefined,
+        toolCallLog,
+      );
+
+      expect(toolCallLog.onToolCallStart).toHaveBeenCalledTimes(2);
+      expect(toolCallLog.onToolCallStart).toHaveBeenCalledWith(
+        "svc",
+        "tool-a",
+        expect.any(String),
+      );
+      expect(toolCallLog.onToolCallStart).toHaveBeenCalledWith(
+        "svc",
+        "tool-b",
+        expect.any(String),
+      );
+    });
+
+    it("should call onToolCallError when a tool call fails", async () => {
+      const { server, client } = await createTestServer("api", [
+        {
+          name: "failing",
+          description: "Fails",
+          handler: async () => ({
+            content: [{ type: "text" as const, text: "bad" }],
+            isError: true,
+          }),
+        },
+      ]);
+
+      cleanupFns.push(async () => {
+        await client.close();
+        await server.close();
+      });
+
+      const toolCallLog: IToolCallLog = {
+        onToolCallStart: vi.fn().mockReturnValue("call-42"),
+        onToolCallEnd: vi.fn(),
+        onToolCallError: vi.fn(),
+      };
+
+      const script = `result(api.failing({}):await())`;
+
+      await runtime
+        .executeScript(
+          script,
+          new Map([["api", client]]),
+          createMockGatewayBuiltins(),
+          undefined,
+          toolCallLog,
+        )
+        .catch(() => {});
+
+      expect(toolCallLog.onToolCallStart).toHaveBeenCalledTimes(1);
+      expect(toolCallLog.onToolCallError).toHaveBeenCalledWith(
+        "call-42",
+        expect.stringContaining("isError"),
+      );
+    });
+
+    it("should call onToolCallEnd with serialized result on success", async () => {
+      const { server, client } = await createTestServer("api", [
+        {
+          name: "get-data",
+          description: "Get data",
+          handler: async () => ({
+            content: [{ type: "text" as const, text: '{"ok":true}' }],
+          }),
+        },
+      ]);
+
+      cleanupFns.push(async () => {
+        await client.close();
+        await server.close();
+      });
+
+      const toolCallLog: IToolCallLog = {
+        onToolCallStart: vi.fn().mockReturnValue("call-1"),
+        onToolCallEnd: vi.fn(),
+        onToolCallError: vi.fn(),
+      };
+
+      const script = `result(api.get_data({}):await())`;
+      await runtime.executeScript(
+        script,
+        new Map([["api", client]]),
+        createMockGatewayBuiltins(),
+        undefined,
+        toolCallLog,
+      );
+
+      expect(toolCallLog.onToolCallEnd).toHaveBeenCalledWith(
+        "call-1",
+        expect.any(String),
+      );
+      // The result should be valid JSON
+      const resultArg = (toolCallLog.onToolCallEnd as ReturnType<typeof vi.fn>)
+        .mock.calls[0]![1];
+      const parsed = JSON.parse(resultArg as string);
+      expect(parsed).toHaveProperty("content");
+    });
+
+    it("should not call onToolCallEnd when a tool call fails", async () => {
+      const { server, client } = await createTestServer("api", [
+        {
+          name: "failing",
+          description: "Fails",
+          handler: async () => ({
+            content: [{ type: "text" as const, text: "bad" }],
+            isError: true,
+          }),
+        },
+      ]);
+
+      cleanupFns.push(async () => {
+        await client.close();
+        await server.close();
+      });
+
+      const toolCallLog: IToolCallLog = {
+        onToolCallStart: vi.fn().mockReturnValue("call-1"),
+        onToolCallEnd: vi.fn(),
+        onToolCallError: vi.fn(),
+      };
+
+      const script = `result(api.failing({}):await())`;
+      await runtime
+        .executeScript(
+          script,
+          new Map([["api", client]]),
+          createMockGatewayBuiltins(),
+          undefined,
+          toolCallLog,
+        )
+        .catch(() => {});
+
+      expect(toolCallLog.onToolCallEnd).not.toHaveBeenCalled();
+      expect(toolCallLog.onToolCallError).toHaveBeenCalled();
+    });
+
+    it("should not fail when toolCallLog is not provided", async () => {
+      const { server, client } = await createTestServer("api", [
+        {
+          name: "tool",
+          description: "A tool",
+          handler: async () => ({
+            content: [{ type: "text" as const, text: '{"ok":true}' }],
+          }),
+        },
+      ]);
+
+      cleanupFns.push(async () => {
+        await client.close();
+        await server.close();
+      });
+
+      const script = `result(api.tool({}):await())`;
+
+      // Should not throw even without toolCallLog
+      await expect(
+        runtime.executeScript(
+          script,
+          new Map([["api", client]]),
+          createMockGatewayBuiltins(),
+        ),
+      ).resolves.not.toThrow();
+    });
+
+    it("should pass JSON-serialized arguments to onToolCallStart", async () => {
+      const { server, client } = await createTestServer("api", [
+        {
+          name: "search",
+          description: "Search",
+          handler: async () => ({
+            content: [{ type: "text" as const, text: "[]" }],
+          }),
+        },
+      ]);
+
+      cleanupFns.push(async () => {
+        await client.close();
+        await server.close();
+      });
+
+      const toolCallLog: IToolCallLog = {
+        onToolCallStart: vi.fn().mockReturnValue("call-1"),
+        onToolCallEnd: vi.fn(),
+        onToolCallError: vi.fn(),
+      };
+
+      const script = `result(api.search({ query = "test", limit = 10 }):await())`;
+      await runtime.executeScript(
+        script,
+        new Map([["api", client]]),
+        createMockGatewayBuiltins(),
+        undefined,
+        toolCallLog,
+      );
+
+      const args = (toolCallLog.onToolCallStart as ReturnType<typeof vi.fn>)
+        .mock.calls[0]![2];
+      const parsed = JSON.parse(args as string);
+      expect(parsed).toEqual({ query: "test", limit: 10 });
     });
   });
 });
