@@ -2,25 +2,12 @@
 	import { onMount, getContext } from "svelte";
 	import { fetchSessions, type SessionInfo } from "$lib/api.js";
 	import type { DashboardWsClient } from "$lib/ws.js";
+	import { formatRelativeTime } from "$lib/utils.js";
 
 	let sessions = $state<SessionInfo[]>([]);
 	let loadError = $state<string | null>(null);
 
 	const wsState = getContext<{ client: DashboardWsClient | null; connected: boolean }>("ws");
-
-	function formatRelativeTime(timestamp: number): string {
-		if (!timestamp) return "Unknown";
-		const diff = Date.now() - timestamp;
-		if (diff < 0) return "just now";
-		const seconds = Math.floor(diff / 1000);
-		if (seconds < 60) return `${seconds}s ago`;
-		const minutes = Math.floor(seconds / 60);
-		if (minutes < 60) return `${minutes}m ago`;
-		const hours = Math.floor(minutes / 60);
-		if (hours < 24) return `${hours}h ago`;
-		const days = Math.floor(hours / 24);
-		return `${days}d ago`;
-	}
 
 	function truncateId(id: string): string {
 		return id.length > 12 ? id.slice(0, 12) + "..." : id;

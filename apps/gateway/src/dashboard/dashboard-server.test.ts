@@ -1,4 +1,7 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, afterAll } from "vitest";
+import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { createDashboardApp } from "./dashboard-server.js";
 import { SQLiteDatabase } from "../stores/sqlite-database.js";
 import { SQLiteExecutionLog } from "../stores/sqlite-execution-log.js";
@@ -329,5 +332,176 @@ describe("Dashboard API", () => {
         { name: "broken-server", error: "Connection refused" },
       ]);
     });
+  });
+});
+
+describe("Dashboard static file serving", () => {
+  let staticDir: string;
+  let db: SQLiteDatabase;
+  let log: SQLiteExecutionLog;
+
+  const mockClientManager = {
+    getActiveSessions: () => [] as string[],
+    getClientsBySession: () => new Map(),
+    getFailedServers: () => new Map(),
+  } as unknown as IMCPClientManager;
+
+  const mockCapabilityStore = {
+    getCapabilities: () => undefined,
+    getWorkingDirectory: () => undefined,
+  } as unknown as ICapabilityStore;
+
+  beforeEach(async () => {
+    staticDir = await mkdtemp(path.join(tmpdir(), "dashboard-test-"));
+    await writeFile(
+      path.join(staticDir, "index.html"),
+      "<!DOCTYPE html><html><body>Dashboard</body></html>",
+    );
+    await writeFile(path.join(staticDir, "script.js"), 'console.log("hello");');
+    await writeFile(path.join(staticDir, "style.css"), "body { margin: 0; }");
+    await writeFile(
+      path.join(staticDir, "image.png"),
+      Buffer.from([0x89, 0x50, 0x4e, 0x47]),
+    );
+    db = new SQLiteDatabase(":memory:");
+    log = new SQLiteExecutionLog(db);
+  });
+
+  afterEach(async () => {
+    db.close();
+    await rm(staticDir, { recursive: true, force: true });
+  });
+
+  afterAll(async () => {
+    // Nothing to do here; each test cleans up in afterEach
+  });
+
+  it("should serve index.html for the root path", async () => {
+    const app = createDashboardApp(
+      log,
+      mockClientManager,
+      mockCapabilityStore,
+      db,
+      staticDir,
+    );
+    const res = await app.request("/");
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    expect(text).toContain("Dashboard");
+    expect(res.headers.get("Content-Type")).toBe("text/html; charset=utf-8");
+  });
+
+  it("should serve .js files with correct MIME type", async () => {
+    const app = createDashboardApp(
+      log,
+      mockClientManager,
+      mockCapabilityStore,
+      db,
+      staticDir,
+    );
+    const res = await app.request("/script.js");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Type")).toBe(
+      "application/javascript; charset=utf-8",
+    );
+    const text = await res.text();
+    expect(text).toContain("hello");
+  });
+
+  it("should serve .css files with correct MIME type", async () => {
+    const app = createDashboardApp(
+      log,
+      mockClientManager,
+      mockCapabilityStore,
+      db,
+      staticDir,
+    );
+    const res = await app.request("/style.css");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Type")).toBe("text/css; charset=utf-8");
+    const text = await res.text();
+    expect(text).toContain("margin");
+  });
+
+  it("should serve .png files with correct MIME type", async () => {
+    const app = createDashboardApp(
+      log,
+      mockClientManager,
+      mockCapabilityStore,
+      db,
+      staticDir,
+    );
+    const res = await app.request("/image.png");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Type")).toBe("image/png");
+  });
+
+  it("should return index.html for an unmatched SPA route", async () => {
+    const app = createDashboardApp(
+      log,
+      mockClientManager,
+      mockCapabilityStore,
+      db,
+      staticDir,
+    );
+    const res = await app.request("/some/deep/route");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Type")).toBe("text/html; charset=utf-8");
+    const text = await res.text();
+    expect(text).toContain("Dashboard");
+  });
+
+  it("should return 404 when static dir has no index.html and path is unmatched", async () => {
+    const emptyDir = await mkdtemp(path.join(tmpdir(), "dashboard-empty-"));
+    try {
+      const app = createDashboardApp(
+        log,
+        mockClientManager,
+        mockCapabilityStore,
+        db,
+        emptyDir,
+      );
+      const res = await app.request("/some/route");
+      expect(res.status).toBe(404);
+    } finally {
+      await rm(emptyDir, { recursive: true, force: true });
+    }
+  });
+
+  it("should return 404 when requesting root and no index.html exists", async () => {
+    const emptyDir = await mkdtemp(path.join(tmpdir(), "dashboard-empty-"));
+    try {
+      const app = createDashboardApp(
+        log,
+        mockClientManager,
+        mockCapabilityStore,
+        db,
+        emptyDir,
+      );
+      const res = await app.request("/");
+      expect(res.status).toBe(404);
+    } finally {
+      await rm(emptyDir, { recursive: true, force: true });
+    }
+  });
+
+  it("should not serve files outside static dir via traversal", async () => {
+    // Hono normalizes /../.. paths before the handler runs, so the path
+    // traversal guard (defense-in-depth) is not directly triggered. Instead,
+    // the normalized path resolves safely within the static dir. Verify that
+    // traversal attempts never serve external file content.
+    const app = createDashboardApp(
+      log,
+      mockClientManager,
+      mockCapabilityStore,
+      db,
+      staticDir,
+    );
+    const res = await app.request("/../../../etc/passwd");
+    // Normalized to /etc/passwd → falls through to SPA fallback (index.html)
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    expect(body).toContain("<html>");
+    expect(body).not.toContain("root:");
   });
 });
