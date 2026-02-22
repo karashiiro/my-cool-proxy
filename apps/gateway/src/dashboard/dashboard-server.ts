@@ -276,7 +276,9 @@ export async function startDashboardServer(
           // server.close() only stops accepting new connections — existing
           // keep-alive connections will keep the process alive indefinitely.
           // Force-close them so the callback fires promptly.
-          server.closeAllConnections();
+          if ("closeAllConnections" in server) {
+            server.closeAllConnections();
+          }
           server.close((err) => {
             clearTimeout(timeout);
             if (err) reject(err);
