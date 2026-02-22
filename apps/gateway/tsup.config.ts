@@ -46,7 +46,7 @@ export default defineConfig({
   splitting: false,
   minify: false,
   target: "node22",
-  onSuccess() {
+  async onSuccess() {
     const dest = resolve(__dirname, "dist/dashboard");
     if (existsSync(dest)) {
       rmSync(dest, { recursive: true, force: true });
