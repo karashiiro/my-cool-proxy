@@ -20,7 +20,14 @@
     "dev": "tsx src/index.ts",
     "typecheck": "tsgo --noEmit"
   },
-  "keywords": [],
+  "keywords": [
+    "mcp",
+    "model context protocol",
+    "proxy",
+    "gateway",
+    "lua",
+    "typescript"
+  ],
   "author": "karashiiro",
   "license": "MIT",
   "repository": {
