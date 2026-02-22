@@ -124,6 +124,7 @@ CONFIG_PATH=/path/to/custom-config.json pnpm dev
 - **mcpClients** (object, required): Map of MCP server configurations, keyed by server name
 - **database** (object, optional): Database configuration for data retention
   - **retentionDays** (number, optional): Number of days to retain data before automatic cleanup on startup (default: `7`)
+- **dashboard** (object, optional): Dashboard web UI configuration (see [Dashboard](#dashboard))
 
 #### MCP Client Configuration
 
@@ -630,6 +631,50 @@ Registered sampling request handler for upstream server 'trusted-server'
 - **Opt-in**: Set `dangerouslyEnableSampling: true` per server (dangerous)
 - **Trust model**: Only enable for servers you fully trust
 - **Best practice**: Leave disabled unless you have a specific need
+
+## Dashboard
+
+The gateway includes an optional web dashboard for browsing Lua execution history and monitoring active sessions in real time. The dashboard runs as a separate HTTP server alongside the main MCP transport (in both HTTP and stdio modes).
+
+### Configuration
+
+```json
+{
+  "dashboard": {
+    "port": 3100,
+    "host": "localhost"
+  }
+}
+```
+
+#### Fields
+
+- **port** (number, optional): Port for the dashboard HTTP server. Default: `3100`
+- **host** (string, optional): Hostname to bind the dashboard server to. Default: `"localhost"`
+
+When the `dashboard` field is present in your config, the dashboard server starts automatically. Omit the field entirely to disable it.
+
+### Features
+
+- **Execution history** — Browse all Lua script executions with script content, results, and timing
+- **Tool call log** — See which tools were called during each execution, with server and tool names
+- **Session monitoring** — View active sessions, their connected servers, and capabilities
+- **Real-time updates** — WebSocket connection pushes new executions and tool calls to the UI as they happen
+- **Syntax highlighting** — Lua scripts and JSON results are syntax-highlighted in the browser
+
+### Endpoints
+
+The dashboard exposes:
+
+- `GET /` — Dashboard web UI (static SvelteKit app)
+- `GET /api/executions` — Paginated execution history (supports `?tool=server.tool` filter)
+- `GET /api/executions/:id` — Single execution with tool calls
+- `GET /api/sessions` — Active session info with capabilities
+- `WebSocket /` — Real-time event stream for new executions and tool calls
+
+### Build Dependency
+
+The dashboard UI is built from `packages/dashboard-ui/`. Running `pnpm build` from the workspace root builds all packages in the correct order, including the dashboard. The gateway's build step copies the SvelteKit output into `dist/dashboard/` for static serving.
 
 ## Skills
 

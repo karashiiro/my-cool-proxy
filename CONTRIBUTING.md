@@ -225,14 +225,16 @@ pnpm test:watch
 
 ### Key Components
 
+- **Startup** (`apps/gateway/src/startup.ts`) - Initializes DI container, client connections, and starts transport/dashboard servers
 - **Gateway Server** (`apps/gateway/src/mcp/gateway-server.ts`) - Main MCP server wrapper
 - **Client Manager** (`packages/mcp-client/src/client-manager.ts`) - Manages MCP client connections
 - **Lua Runtime** (`packages/lua-runtime/src/runtime.ts`) - Executes Lua scripts with Wasmoon
+- **Dashboard** (`apps/gateway/src/dashboard/dashboard-server.ts`) - Optional web UI for execution history and session monitoring
 - **DI Container** (`apps/gateway/src/container/inversify.config.ts`) - Wires everything together
 
 ### Transport Modes
 
-The proxy supports both the stdio and streamable HTTP transports (see `apps/gateway/src/index.ts`):
+The proxy supports both the stdio and streamable HTTP transports (see `apps/gateway/src/startup.ts`):
 
 **Streamable HTTP**:
 
