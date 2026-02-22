@@ -99,5 +99,5 @@ jobs:
           kill $SERVER_PID 2>/dev/null || true
 
       - name: Publish to npm
-        run: pnpm publish --access public --no-git-checks
+        run: pnpm publish --access public --no-git-checks --provenance
         working-directory: apps/gateway
