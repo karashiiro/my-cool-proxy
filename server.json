@@ -1,0 +1,20 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.karashiir/my-cool-proxy",
+  "description": "Use as many MCP servers as you want while minimizing context usage. A code mode MCP server gateway driven with Lua.",
+  "repository": {
+    "url": "https://github.com/karashiir/my-cool-proxy",
+    "source": "github"
+  },
+  "version": "1.5.3",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "@karashiir/my-cool-proxy",
+      "version": "1.5.3",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}
