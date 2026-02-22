@@ -65,6 +65,13 @@
 	});
 
 	let isRawText = $derived(!parsedJson && !!result);
+
+	const ALLOWED_IMAGE_MIME_TYPES = new Set([
+		"image/png",
+		"image/jpeg",
+		"image/gif",
+		"image/webp",
+	]);
 </script>
 
 <div class="flex h-full flex-col overflow-hidden">
@@ -116,11 +123,15 @@
 						>{block.text}</pre>
 					{:else if block.type === "image"}
 						<div class="rounded-lg border border-border bg-card/80 p-2">
-							<img
-								src="data:{block.mimeType};base64,{block.data}"
-								alt="Tool call result"
-								class="max-h-[400px] max-w-full rounded object-contain"
-							/>
+							{#if ALLOWED_IMAGE_MIME_TYPES.has(block.mimeType)}
+								<img
+									src="data:{block.mimeType};base64,{block.data}"
+									alt="Tool call result"
+									class="max-h-[400px] max-w-full rounded object-contain"
+								/>
+							{:else}
+								<p class="font-mono text-xs text-muted-foreground">Unsupported image type: {block.mimeType}</p>
+							{/if}
 						</div>
 					{:else if block.type === "resource"}
 						<pre

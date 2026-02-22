@@ -95,20 +95,7 @@ export function createDashboardApp(
     const sessionIds = clientManager.getActiveSessions();
 
     // Get timestamps from SQLite sessions table
-    const placeholders = sessionIds.map(() => "?").join(", ");
-    const rows =
-      sessionIds.length > 0
-        ? (db
-            .getDatabase()
-            .prepare(
-              `SELECT session_id, created_at, last_activity FROM sessions WHERE session_id IN (${placeholders})`,
-            )
-            .all(...sessionIds) as Array<{
-            session_id: string;
-            created_at: number;
-            last_activity: number;
-          }>)
-        : [];
+    const rows = db.getSessionTimestamps(sessionIds);
     const timestampMap = new Map(
       rows.map((r) => [
         r.session_id,
@@ -168,7 +155,10 @@ export function createDashboardApp(
           },
         });
       }
-    } catch {
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+        return c.json({ error: "Internal server error" }, 500);
+      }
       // File doesn't exist, fall through to SPA fallback
     }
 
@@ -277,9 +267,11 @@ export async function startDashboardServer(
         clearInterval(heartbeat);
         for (const ws of clients) ws.terminate();
         clients.clear();
-        wss.close((err) => {
-          if (err) reject(err);
-          else server.close(() => resolve());
+        wss.close(() => {
+          server.close((err) => {
+            if (err) reject(err);
+            else resolve();
+          });
         });
       }),
     broadcast,

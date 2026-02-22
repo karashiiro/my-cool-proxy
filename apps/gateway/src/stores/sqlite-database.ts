@@ -100,6 +100,33 @@ export class SQLiteDatabase {
   }
 
   /**
+   * Get session timestamps for the given session IDs.
+   * Returns only rows that exist in the sessions table.
+   *
+   * @param sessionIds Array of session IDs to look up
+   * @returns Array of objects with session_id, created_at, and last_activity
+   */
+  getSessionTimestamps(sessionIds: string[]): Array<{
+    session_id: string;
+    created_at: number;
+    last_activity: number;
+  }> {
+    if (sessionIds.length === 0) {
+      return [];
+    }
+    const placeholders = sessionIds.map(() => "?").join(", ");
+    return this.db
+      .prepare(
+        `SELECT session_id, created_at, last_activity FROM sessions WHERE session_id IN (${placeholders})`,
+      )
+      .all(...sessionIds) as Array<{
+      session_id: string;
+      created_at: number;
+      last_activity: number;
+    }>;
+  }
+
+  /**
    * Run a function within a transaction.
    * @param fn Function to run within the transaction
    * @returns The return value of the function

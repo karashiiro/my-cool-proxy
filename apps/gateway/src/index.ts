@@ -127,11 +127,13 @@ async function startHttpMode(
 
   // Install NotifyingExecutionLog for dashboard WebSocket broadcasts
   let broadcastFn: ((event: DashboardEvent) => void) | undefined;
+  let pendingEvents: DashboardEvent[] = [];
   if (config.dashboard) {
     const innerLog = container.get<IExecutionLog>(TYPES.ExecutionLog);
-    const notifyingLog = new NotifyingExecutionLog(innerLog, (event) =>
-      broadcastFn?.(event),
-    );
+    const notifyingLog = new NotifyingExecutionLog(innerLog, (event) => {
+      if (broadcastFn) broadcastFn(event);
+      else pendingEvents.push(event);
+    });
     container.unbind(TYPES.ExecutionLog);
     container
       .bind<IExecutionLog>(TYPES.ExecutionLog)
@@ -306,6 +308,8 @@ async function startHttpMode(
   );
   if (dashboardHandle) {
     broadcastFn = dashboardHandle.broadcast;
+    for (const event of pendingEvents) broadcastFn(event);
+    pendingEvents = [];
   }
 
   // Graceful shutdown with double-shutdown guard
@@ -371,11 +375,13 @@ async function startStdioMode(
 
   // Install NotifyingExecutionLog for dashboard WebSocket broadcasts
   let broadcastFn: ((event: DashboardEvent) => void) | undefined;
+  let pendingEvents: DashboardEvent[] = [];
   if (config.dashboard) {
     const innerLog = container.get<IExecutionLog>(TYPES.ExecutionLog);
-    const notifyingLog = new NotifyingExecutionLog(innerLog, (event) =>
-      broadcastFn?.(event),
-    );
+    const notifyingLog = new NotifyingExecutionLog(innerLog, (event) => {
+      if (broadcastFn) broadcastFn(event);
+      else pendingEvents.push(event);
+    });
     container.unbind(TYPES.ExecutionLog);
     container
       .bind<IExecutionLog>(TYPES.ExecutionLog)
@@ -435,6 +441,8 @@ async function startStdioMode(
   );
   if (dashboardHandle) {
     broadcastFn = dashboardHandle.broadcast;
+    for (const event of pendingEvents) broadcastFn(event);
+    pendingEvents = [];
   }
 
   // Graceful shutdown with double-shutdown guard

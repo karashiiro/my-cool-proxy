@@ -3,6 +3,7 @@ import {
   type BundledLanguage,
   type BundledTheme,
 } from "shiki";
+import { sanitizeLuaIdentifier } from "@my-cool-proxy/mcp-utilities";
 import type { LuaToolCall } from "./types.js";
 
 let highlighterPromise: ReturnType<typeof createHighlighter> | null = null;
@@ -26,49 +27,6 @@ function getHighlighter() {
  */
 export function preloadHighlighter(): void {
   getHighlighter();
-}
-
-/**
- * Lua reserved keywords — identifiers matching these get prefixed with `_`.
- * Mirrors the gateway's `sanitizeLuaIdentifier` from mcp-utilities.
- */
-const LUA_KEYWORDS = new Set([
-  "and",
-  "break",
-  "do",
-  "else",
-  "elseif",
-  "end",
-  "false",
-  "for",
-  "function",
-  "if",
-  "in",
-  "local",
-  "nil",
-  "not",
-  "or",
-  "repeat",
-  "return",
-  "then",
-  "true",
-  "until",
-  "while",
-]);
-
-/**
- * Convert a name to its Lua identifier form.
- * Mirrors the gateway's `sanitizeLuaIdentifier` from mcp-utilities.
- *
- * Tool call records store the original MCP server/tool names (e.g. "stderr-server"),
- * but the Lua source uses sanitized identifiers (e.g. "stderr_server").
- */
-function toLuaIdentifier(name: string): string {
-  let id = name.replace(/[^a-zA-Z0-9_]/g, "_");
-  if (/^[0-9]/.test(id)) id = `_${id}`;
-  if (LUA_KEYWORDS.has(id)) id = `_${id}`;
-  if (id === "" || id === "_") id = "_unnamed";
-  return id;
 }
 
 /** A source range marking where a tool call pattern appears. */
@@ -95,8 +53,8 @@ function findToolCallRanges(
   // chronological order: the first call record binds to the first source occurrence, etc.
   const chronological = [...toolCalls].reverse();
   for (const tc of chronological) {
-    const luaServer = toLuaIdentifier(tc.serverName);
-    const luaTool = toLuaIdentifier(tc.toolName);
+    const luaServer = sanitizeLuaIdentifier(tc.serverName);
+    const luaTool = sanitizeLuaIdentifier(tc.toolName);
     const pattern = `${luaServer}.${luaTool}`;
     let searchFrom = 0;
     while (searchFrom < code.length) {
@@ -147,7 +105,7 @@ function renderSpan(text: string, color: string): string {
  * callId and label are escaped to prevent XSS via injected attribute values.
  */
 function openButton(tc: LuaToolCall): string {
-  const label = `${toLuaIdentifier(tc.serverName)}.${toLuaIdentifier(tc.toolName)}`;
+  const label = `${sanitizeLuaIdentifier(tc.serverName)}.${sanitizeLuaIdentifier(tc.toolName)}`;
   return `<button class="tool-call-btn" data-call-id="${escapeHtml(tc.callId)}" role="button" aria-label="${escapeHtml(label)}">`;
 }
 

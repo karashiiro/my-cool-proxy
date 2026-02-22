@@ -212,6 +212,12 @@ export class SQLiteExecutionLog implements IExecutionLog {
     toolFilter?: string,
   ): LuaExecution[] {
     if (toolFilter) {
+      const dotIndex = toolFilter.indexOf(".");
+      if (dotIndex === -1) {
+        return [];
+      }
+      const serverName = toolFilter.substring(0, dotIndex);
+      const toolName = toolFilter.substring(dotIndex + 1);
       return this.db
         .getDatabase()
         .prepare(
@@ -225,11 +231,11 @@ export class SQLiteExecutionLog implements IExecutionLog {
              e.created_at AS createdAt
            FROM lua_executions e
            INNER JOIN lua_tool_calls tc ON tc.execution_id = e.execution_id
-           WHERE tc.server_name || '.' || tc.tool_name = ?
+           WHERE tc.server_name = ? AND tc.tool_name = ?
            ORDER BY e.created_at DESC, e.rowid DESC
            LIMIT ? OFFSET ?`,
         )
-        .all(toolFilter, limit, offset) as LuaExecution[];
+        .all(serverName, toolName, limit, offset) as LuaExecution[];
     }
 
     return this.db
@@ -256,15 +262,21 @@ export class SQLiteExecutionLog implements IExecutionLog {
    */
   countExecutions(toolFilter?: string): number {
     if (toolFilter) {
+      const dotIndex = toolFilter.indexOf(".");
+      if (dotIndex === -1) {
+        return 0;
+      }
+      const serverName = toolFilter.substring(0, dotIndex);
+      const toolName = toolFilter.substring(dotIndex + 1);
       const row = this.db
         .getDatabase()
         .prepare(
           `SELECT COUNT(DISTINCT e.execution_id) AS count
            FROM lua_executions e
            INNER JOIN lua_tool_calls tc ON tc.execution_id = e.execution_id
-           WHERE tc.server_name || '.' || tc.tool_name = ?`,
+           WHERE tc.server_name = ? AND tc.tool_name = ?`,
         )
-        .get(toolFilter) as { count: number } | undefined;
+        .get(serverName, toolName) as { count: number } | undefined;
       return row?.count ?? 0;
     }
 

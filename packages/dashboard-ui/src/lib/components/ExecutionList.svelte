@@ -2,6 +2,7 @@
 	import { Badge } from "$lib/components/ui/badge/index.js";
 	import type { LuaExecution } from "$lib/types.js";
 	import type { ToolUsage } from "$lib/api.js";
+	import { formatRelativeTime } from "$lib/utils.js";
 
 	let {
 		executions,
@@ -36,19 +37,6 @@
 		const rect = filterButtonEl.getBoundingClientRect();
 		return { top: rect.bottom + 4, left: rect.left };
 	});
-
-	function formatTime(timestamp: number): string {
-		const diff = Date.now() - timestamp;
-		if (diff < 0) return "just now";
-		const seconds = Math.floor(diff / 1000);
-		if (seconds < 60) return `${seconds}s ago`;
-		const minutes = Math.floor(seconds / 60);
-		if (minutes < 60) return `${minutes}m ago`;
-		const hours = Math.floor(minutes / 60);
-		if (hours < 24) return `${hours}h ago`;
-		const days = Math.floor(hours / 24);
-		return `${days}d ago`;
-	}
 
 	function truncateScript(script: string): string {
 		const firstLine =
@@ -212,7 +200,7 @@
 							<svg class="size-2.5 opacity-50" viewBox="0 0 16 16" fill="currentColor">
 								<path d="M8 0a8 8 0 100 16A8 8 0 008 0zm.5 4.5v4l3 1.5-.5 1-3.5-1.75V4.5h1z" />
 							</svg>
-							{formatTime(execution.createdAt)}
+							{formatRelativeTime(execution.createdAt)}
 						</div>
 					</button>
 				{/each}
