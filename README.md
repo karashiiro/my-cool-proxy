@@ -144,6 +144,8 @@ For a deeper design discussion about why Gateway Skills are implemented this way
 
 ## Web Dashboard
 
+<img width="1879" height="925" alt="my-cool-proxy execution dashboard preview, showing a list of Lua executions on the left side and the script and script results on the right side. The selected example shows a Playwright tool execution which returned the JS code for that tool and a browser screenshot as its result. The Lua script had browser_click and browser_take_screenshot calls. Each of those is individually clickable to show the result of the specific tool call." src="https://github.com/user-attachments/assets/6b4b16b2-87c2-443a-90be-459ed3773e81" />
+
 My Cool Proxy includes an optional web dashboard for monitoring gateway activity. When enabled, it runs on a separate port and provides:
 
 - **Execution history** — Browse all Lua script executions with syntax-highlighted scripts and results
