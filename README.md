@@ -142,6 +142,28 @@ Gateway Skills are disabled by default as they may conflict with existing skill 
 
 For a deeper design discussion about why Gateway Skills are implemented this way, refer to [this section](https://github.com/karashiiro/my-cool-proxy/blob/main/docs/design/skills.md#context-injection) in the design docs.
 
+## Web Dashboard
+
+My Cool Proxy includes an optional web dashboard for monitoring gateway activity. When enabled, it runs on a separate port and provides:
+
+- **Execution history** — Browse all Lua script executions with syntax-highlighted scripts and results
+- **Tool call log** — See which MCP tools were called during each execution
+- **Session monitoring** — View active sessions, connected servers, and capabilities
+- **Real-time updates** — New executions stream to the dashboard via WebSocket
+
+Enable it by adding a `dashboard` section to your config:
+
+```json
+{
+  "dashboard": {
+    "port": 3100,
+    "host": "localhost"
+  }
+}
+```
+
+Then visit `http://localhost:3100` in your browser. See the [Configuration Guide](docs/configuration.md#dashboard) for details.
+
 ## Configuration
 
 See the [Configuration Guide](docs/configuration.md) for the full config reference.
