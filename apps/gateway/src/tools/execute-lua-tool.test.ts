@@ -238,6 +238,31 @@ describe("ExecuteLuaTool", () => {
       }
     });
 
+    it("should not include stack traces in error responses", async () => {
+      const error = new Error("Something went wrong");
+      error.stack =
+        "Error: Something went wrong\n    at Object.<anonymous> (/wasm/lua.js:1:2)\n    at Module._compile (internal/modules/cjs/loader.js:999:30)";
+      luaRuntime.executeScript.mockRejectedValue(error);
+
+      const result = await tool.execute(
+        { script: "bad_script()" },
+        { sessionId: "test" },
+      );
+
+      expect(result.isError).toBe(true);
+      if (result.content[0]?.type === "text") {
+        expect(result.content[0].text).toContain("Something went wrong");
+        expect(result.content[0].text).not.toContain("at Object.<anonymous>");
+        expect(result.content[0].text).not.toContain("Module._compile");
+        expect(result.content[0].text).not.toContain("/wasm/lua.js");
+      }
+      // Full error should still be logged server-side
+      expect(logger.error).toHaveBeenCalledWith(
+        "Lua script execution failed:",
+        error,
+      );
+    });
+
     it("should handle runtime errors during tool calls", async () => {
       const error = new Error("Tool 'nonexistent' not found");
       luaRuntime.executeScript.mockRejectedValue(error);

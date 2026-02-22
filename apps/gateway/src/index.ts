@@ -1,7 +1,6 @@
 import "reflect-metadata";
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import type { TypedContainer } from "@inversifyjs/strongly-typed";
 import { createContainer } from "./container/inversify.config.js";
 import type { ContainerBindingMap } from "./container/binding-map.js";
@@ -34,6 +33,7 @@ import { startDashboardServer } from "./dashboard/dashboard-server.js";
 import { NotifyingExecutionLog } from "./dashboard/notifying-execution-log.js";
 import type { DashboardHandle, DashboardEvent } from "./dashboard/types.js";
 import type { SQLiteDatabase } from "./stores/sqlite-database.js";
+import { resolvePackageRoot } from "./utils/package-root.js";
 
 /**
  * Session inactivity timeout in milliseconds.
@@ -44,25 +44,21 @@ const SESSION_TTL_MS = 5 * 60 * 1000; // 5 minutes
 /**
  * Resolve the dashboard static files directory.
  *
- * In production (built with tsup), __dirname is dist/ and dashboard files are in dist/dashboard/.
- * In dev mode (tsx), __dirname is src/ so we fall back to dist/dashboard/ relative to the
- * gateway package root, or directly to the dashboard-ui build output.
+ * In production (built with tsup), the bundle is at dist/index.js so the
+ * package root resolves to the gateway package directory, and dashboard files
+ * are co-located at dist/dashboard/. In dev mode (tsx), we fall back to the
+ * dashboard-ui package build output.
  */
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const PACKAGE_ROOT = resolvePackageRoot(import.meta.url);
 const DASHBOARD_STATIC_DIR = (() => {
-  // Production: co-located in dist/dashboard/
-  const prodPath = path.join(__dirname, "dashboard");
-  if (fs.existsSync(path.join(prodPath, "index.html"))) {
-    return prodPath;
-  }
-  // Dev mode (tsx): try dist/dashboard/ relative to gateway package root
-  const devDistPath = path.resolve(__dirname, "..", "dist", "dashboard");
-  if (fs.existsSync(path.join(devDistPath, "index.html"))) {
-    return devDistPath;
+  // Production / after build: co-located in dist/dashboard/
+  const distPath = path.join(PACKAGE_ROOT, "dist", "dashboard");
+  if (fs.existsSync(path.join(distPath, "index.html"))) {
+    return distPath;
   }
   // Dev mode fallback: try the dashboard-ui build output directly
   const directPath = path.resolve(
-    __dirname,
+    PACKAGE_ROOT,
     "..",
     "..",
     "packages",

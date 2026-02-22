@@ -226,7 +226,12 @@ export class ExecuteLuaTool implements ITool {
       this.executionLog.markExecutionError(executionId, getErrorMessage(error));
       this.logger.error("Lua script execution failed:", error as Error);
       return {
-        content: [{ type: "text", text: `Script execution failed:\n${error}` }],
+        content: [
+          {
+            type: "text",
+            text: `Script execution failed:\n${getErrorMessage(error)}`,
+          },
+        ],
         isError: true,
       };
     }

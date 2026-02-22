@@ -41,6 +41,20 @@ import {
 import { getErrorMessage } from "@my-cool-proxy/mcp-utilities";
 import type { IToolRegistry } from "../tools/tool-registry.js";
 import { getEffectiveSessionId } from "../utils/session.js";
+import { resolvePackageRoot } from "../utils/package-root.js";
+import fs from "node:fs";
+import path from "node:path";
+
+const { name, version, description } = JSON.parse(
+  fs.readFileSync(
+    path.join(resolvePackageRoot(import.meta.url), "package.json"),
+    "utf-8",
+  ),
+) as {
+  name: string;
+  version: string;
+  description: string;
+};
 
 /**
  * Gateway server that aggregates multiple MCP servers and provides unified access.
@@ -83,7 +97,6 @@ export type OnDownstreamInitializedCallback = (
 @injectable()
 export class MCPGatewayServer {
   private server: McpServer;
-  private serverId = "my-cool-proxy";
   private onDownstreamInitialized?: OnDownstreamInitializedCallback;
 
   /**
@@ -108,8 +121,18 @@ export class MCPGatewayServer {
   ) {
     this.server = new McpServer(
       {
-        name: this.serverId,
-        version: "1.0.0",
+        name: name,
+        title: "My Cool Proxy",
+        version: version,
+        description: description,
+        websiteUrl: "https://github.com/karashiiro/my-cool-proxy",
+        icons: [
+          {
+            src: "https://raw.githubusercontent.com/karashiiro/my-cool-proxy/main/assets/icon.png",
+            mimeType: "image/png",
+            sizes: ["350x350"],
+          },
+        ],
       },
       {
         capabilities: {
