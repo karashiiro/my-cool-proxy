@@ -6,12 +6,12 @@
     "url": "https://github.com/karashiir/my-cool-proxy",
     "source": "github"
   },
-  "version": "1.5.3",
+  "version": "1.5.4",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "@karashiir/my-cool-proxy",
-      "version": "1.5.3",
+      "version": "1.5.4",
       "transport": {
         "type": "stdio"
       }
