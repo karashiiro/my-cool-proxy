@@ -206,7 +206,11 @@ export class SQLiteExecutionLog implements IExecutionLog {
    * @param offset Number of executions to skip (default 0)
    * @param toolFilter Optional "server.tool" string to filter by tool usage
    */
-  getAllExecutions(limit = 50, offset = 0, toolFilter?: string): LuaExecution[] {
+  getAllExecutions(
+    limit = 50,
+    offset = 0,
+    toolFilter?: string,
+  ): LuaExecution[] {
     if (toolFilter) {
       return this.db
         .getDatabase()

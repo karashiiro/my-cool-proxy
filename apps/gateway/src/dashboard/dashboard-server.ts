@@ -60,7 +60,11 @@ export function createDashboardApp(
       clamp(Number.isFinite(rawLimit) ? rawLimit : 50, 1, 1000),
     );
     const offset = Math.trunc(
-      clamp(Number.isFinite(rawOffset) ? rawOffset : 0, 0, Number.MAX_SAFE_INTEGER),
+      clamp(
+        Number.isFinite(rawOffset) ? rawOffset : 0,
+        0,
+        Number.MAX_SAFE_INTEGER,
+      ),
     );
     const tool = c.req.query("tool") || undefined;
     const executions = executionLog.getAllExecutions(limit, offset, tool);
@@ -265,10 +269,7 @@ export async function startDashboardServer(
     }
   };
 
-  logger.info(
-    { port, host },
-    `Dashboard available at http://${host}:${port}`,
-  );
+  logger.info({ port, host }, `Dashboard available at http://${host}:${port}`);
 
   return {
     close: () =>

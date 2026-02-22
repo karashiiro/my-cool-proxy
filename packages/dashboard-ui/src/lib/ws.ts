@@ -8,7 +8,11 @@ export interface ExecutionNewEvent {
 /** Union of all event shapes broadcast over the dashboard WebSocket. */
 type DashboardEvent =
   | ({ type: "execution:new" } & ExecutionNewEvent)
-  | { type: "execution:completed"; executionId: string; status: "success" | "error" }
+  | {
+      type: "execution:completed";
+      executionId: string;
+      status: "success" | "error";
+    }
   | { type: "session:changed" };
 
 /** An execution completed event broadcast by the gateway. */
@@ -22,7 +26,9 @@ export interface DashboardWsClient {
   readonly connected: boolean;
   readonly pendingExecutions: number;
   onExecutionNew(cb: (event: ExecutionNewEvent) => void): () => void;
-  onExecutionCompleted(cb: (event: ExecutionCompletedEvent) => void): () => void;
+  onExecutionCompleted(
+    cb: (event: ExecutionCompletedEvent) => void,
+  ): () => void;
   onSessionChanged(cb: () => void): () => void;
   clearPending(): void;
   close(): void;
@@ -46,7 +52,9 @@ export function createDashboardWs(): DashboardWsClient {
   let _reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
   const _executionNewListeners = new Set<(event: ExecutionNewEvent) => void>();
-  const _executionCompletedListeners = new Set<(event: ExecutionCompletedEvent) => void>();
+  const _executionCompletedListeners = new Set<
+    (event: ExecutionCompletedEvent) => void
+  >();
   const _sessionChangedListeners = new Set<() => void>();
 
   function buildWsUrl(): string {
@@ -136,7 +144,9 @@ export function createDashboardWs(): DashboardWsClient {
       };
     },
 
-    onExecutionCompleted(cb: (event: ExecutionCompletedEvent) => void): () => void {
+    onExecutionCompleted(
+      cb: (event: ExecutionCompletedEvent) => void,
+    ): () => void {
       _executionCompletedListeners.add(cb);
       return () => {
         _executionCompletedListeners.delete(cb);

@@ -1,4 +1,9 @@
-import type { IExecutionLog, LuaExecution, LuaToolCall, ToolUsage } from "../types/interfaces.js";
+import type {
+  IExecutionLog,
+  LuaExecution,
+  LuaToolCall,
+  ToolUsage,
+} from "../types/interfaces.js";
 import type { DashboardEvent } from "./types.js";
 
 /**
@@ -81,7 +86,11 @@ export class NotifyingExecutionLog implements IExecutionLog {
     return this.inner.getToolCalls(executionId);
   }
 
-  getAllExecutions(limit?: number, offset?: number, toolFilter?: string): LuaExecution[] {
+  getAllExecutions(
+    limit?: number,
+    offset?: number,
+    toolFilter?: string,
+  ): LuaExecution[] {
     return this.inner.getAllExecutions(limit, offset, toolFilter);
   }
 

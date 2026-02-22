@@ -92,8 +92,12 @@ async function maybeStartDashboard(
   if (!config.dashboard) return undefined;
 
   const executionLog = container.get<IExecutionLog>(TYPES.ExecutionLog);
-  const clientManager = container.get<IMCPClientManager>(TYPES.MCPClientManager);
-  const capabilityStore = container.get<ICapabilityStore>(TYPES.CapabilityStore);
+  const clientManager = container.get<IMCPClientManager>(
+    TYPES.MCPClientManager,
+  );
+  const capabilityStore = container.get<ICapabilityStore>(
+    TYPES.CapabilityStore,
+  );
   return startDashboardServer(
     executionLog,
     clientManager,
@@ -125,12 +129,13 @@ async function startHttpMode(
   let broadcastFn: ((event: DashboardEvent) => void) | undefined;
   if (config.dashboard) {
     const innerLog = container.get<IExecutionLog>(TYPES.ExecutionLog);
-    const notifyingLog = new NotifyingExecutionLog(
-      innerLog,
-      (event) => broadcastFn?.(event),
+    const notifyingLog = new NotifyingExecutionLog(innerLog, (event) =>
+      broadcastFn?.(event),
     );
     container.unbind(TYPES.ExecutionLog);
-    container.bind<IExecutionLog>(TYPES.ExecutionLog).toConstantValue(notifyingLog);
+    container
+      .bind<IExecutionLog>(TYPES.ExecutionLog)
+      .toConstantValue(notifyingLog);
   }
 
   // Resolve shared services (after SQLite rebindings so we get the SQLite-backed stores)
@@ -293,7 +298,12 @@ async function startHttpMode(
   );
 
   // Start dashboard server if configured
-  const dashboardHandle = await maybeStartDashboard(container, config, sqliteDb, logger);
+  const dashboardHandle = await maybeStartDashboard(
+    container,
+    config,
+    sqliteDb,
+    logger,
+  );
   if (dashboardHandle) {
     broadcastFn = dashboardHandle.broadcast;
   }
@@ -363,12 +373,13 @@ async function startStdioMode(
   let broadcastFn: ((event: DashboardEvent) => void) | undefined;
   if (config.dashboard) {
     const innerLog = container.get<IExecutionLog>(TYPES.ExecutionLog);
-    const notifyingLog = new NotifyingExecutionLog(
-      innerLog,
-      (event) => broadcastFn?.(event),
+    const notifyingLog = new NotifyingExecutionLog(innerLog, (event) =>
+      broadcastFn?.(event),
     );
     container.unbind(TYPES.ExecutionLog);
-    container.bind<IExecutionLog>(TYPES.ExecutionLog).toConstantValue(notifyingLog);
+    container
+      .bind<IExecutionLog>(TYPES.ExecutionLog)
+      .toConstantValue(notifyingLog);
   }
 
   // Resolve shared services (after SQLite rebindings)
@@ -416,7 +427,12 @@ async function startStdioMode(
   logger.info("MCP Lua Gateway running in stdio mode");
 
   // Start dashboard server if configured
-  const dashboardHandle = await maybeStartDashboard(container, config, sqliteDb, logger);
+  const dashboardHandle = await maybeStartDashboard(
+    container,
+    config,
+    sqliteDb,
+    logger,
+  );
   if (dashboardHandle) {
     broadcastFn = dashboardHandle.broadcast;
   }

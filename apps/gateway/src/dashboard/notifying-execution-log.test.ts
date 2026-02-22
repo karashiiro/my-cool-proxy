@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Mock } from "vitest";
-import type { IExecutionLog, LuaExecution, LuaToolCall, ToolUsage } from "../types/interfaces.js";
+import type {
+  IExecutionLog,
+  LuaExecution,
+  LuaToolCall,
+  ToolUsage,
+} from "../types/interfaces.js";
 import type { DashboardEvent } from "./types.js";
 import { NotifyingExecutionLog } from "./notifying-execution-log.js";
 
@@ -45,7 +50,10 @@ describe("NotifyingExecutionLog", () => {
       const after = Date.now();
 
       expect(onEvent).toHaveBeenCalledOnce();
-      const event = onEvent.mock.calls[0]![0] as Extract<DashboardEvent, { type: "execution:new" }>;
+      const event = onEvent.mock.calls[0]![0] as Extract<
+        DashboardEvent,
+        { type: "execution:new" }
+      >;
       expect(event.type).toBe("execution:new");
       expect(event.executionId).toBe("exec-123");
       expect(event.sessionId).toBe("session-1");
@@ -57,7 +65,10 @@ describe("NotifyingExecutionLog", () => {
   describe("markExecutionResult", () => {
     it("delegates to inner", () => {
       log.markExecutionResult("exec-123", '{"ok":true}');
-      expect(inner.markExecutionResult).toHaveBeenCalledWith("exec-123", '{"ok":true}');
+      expect(inner.markExecutionResult).toHaveBeenCalledWith(
+        "exec-123",
+        '{"ok":true}',
+      );
     });
 
     it("fires execution:completed with status success", () => {
@@ -77,7 +88,10 @@ describe("NotifyingExecutionLog", () => {
   describe("markExecutionError", () => {
     it("delegates to inner", () => {
       log.markExecutionError("exec-123", "something broke");
-      expect(inner.markExecutionError).toHaveBeenCalledWith("exec-123", "something broke");
+      expect(inner.markExecutionError).toHaveBeenCalledWith(
+        "exec-123",
+        "something broke",
+      );
     });
 
     it("fires execution:completed with status error", () => {
@@ -197,13 +211,19 @@ describe("NotifyingExecutionLog", () => {
 
     it("markToolCallResult delegates without firing events", () => {
       log.markToolCallResult("call-456", '"done"');
-      expect(inner.markToolCallResult).toHaveBeenCalledWith("call-456", '"done"');
+      expect(inner.markToolCallResult).toHaveBeenCalledWith(
+        "call-456",
+        '"done"',
+      );
       expect(onEvent).not.toHaveBeenCalled();
     });
 
     it("markToolCallError delegates without firing events", () => {
       log.markToolCallError("call-456", "tool failed");
-      expect(inner.markToolCallError).toHaveBeenCalledWith("call-456", "tool failed");
+      expect(inner.markToolCallError).toHaveBeenCalledWith(
+        "call-456",
+        "tool failed",
+      );
       expect(onEvent).not.toHaveBeenCalled();
     });
   });
