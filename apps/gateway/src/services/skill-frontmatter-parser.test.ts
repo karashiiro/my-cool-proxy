@@ -88,7 +88,9 @@ custom: true
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.frontmatter.name).toBe("test");
-      expect((result.frontmatter as Record<string, unknown>)["version"]).toBe(2);
+      expect((result.frontmatter as Record<string, unknown>)["version"]).toBe(
+        2,
+      );
     }
   });
 

@@ -41,7 +41,10 @@ const TOOL_CALL_COLUMNS = `
  *
  * NOT injectable - instantiated directly in index.ts alongside SQLiteDatabase.
  */
-export class SQLiteExecutionLog extends BaseSQLiteStore implements IExecutionLog {
+export class SQLiteExecutionLog
+  extends BaseSQLiteStore
+  implements IExecutionLog
+{
   constructor(db: SQLiteDatabase) {
     super(db);
   }
@@ -243,7 +246,12 @@ export class SQLiteExecutionLog extends BaseSQLiteStore implements IExecutionLog
              ORDER BY e.created_at DESC, e.rowid DESC
              LIMIT ? OFFSET ?`,
           )
-          .all(parsed.serverName, parsed.toolName, limit, offset) as LuaExecution[];
+          .all(
+            parsed.serverName,
+            parsed.toolName,
+            limit,
+            offset,
+          ) as LuaExecution[];
       }
 
       return this.database
@@ -274,7 +282,9 @@ export class SQLiteExecutionLog extends BaseSQLiteStore implements IExecutionLog
              INNER JOIN lua_tool_calls tc ON tc.execution_id = e.execution_id
              WHERE tc.server_name = ? AND tc.tool_name = ?`,
           )
-          .get(parsed.serverName, parsed.toolName) as { count: number } | undefined;
+          .get(parsed.serverName, parsed.toolName) as
+          | { count: number }
+          | undefined;
         return row?.count ?? 0;
       }
 

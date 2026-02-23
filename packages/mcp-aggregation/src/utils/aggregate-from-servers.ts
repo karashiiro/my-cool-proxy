@@ -39,7 +39,5 @@ export async function aggregateFromServers<T>(
   });
 
   const results = await Promise.all(promises);
-  return results.filter(
-    (r): r is AggregationResult<T> => r !== null,
-  );
+  return results.filter((r): r is AggregationResult<T> => r !== null);
 }

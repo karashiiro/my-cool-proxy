@@ -14,10 +14,7 @@ import { $inject } from "../container/decorators.js";
 import { TYPES } from "../types/index.js";
 import { getSkillsDir, SKILL_FILENAME } from "../utils/skills.js";
 import { parseFrontmatter } from "./skill-frontmatter-parser.js";
-import {
-  isSafePathComponent,
-  resolveAndValidate,
-} from "./path-validator.js";
+import { isSafePathComponent, resolveAndValidate } from "./path-validator.js";
 
 /**
  * Service for executing and writing gateway skills.

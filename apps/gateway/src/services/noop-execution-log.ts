@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
+/* This is a no-op implementation of the execution log for tests, so the unused arguments are acceptable. */
 import { injectable } from "inversify";
 import type {
   IExecutionLog,
@@ -7,7 +9,7 @@ import type {
 } from "../types/interfaces.js";
 
 /**
- * No-op execution log used when SQLite persistence is not available (stdio mode).
+ * No-op execution log used when SQLite persistence is not available.
  * All methods are stubs that return placeholder values.
  */
 @injectable()

@@ -83,9 +83,7 @@ describe("validateToolArgs", () => {
       expect.fail("should have thrown");
     } catch (err) {
       expect(err).toBeInstanceOf(Error);
-      expect((err as Error).message).toMatch(
-        /^Invalid tool arguments:\n/,
-      );
+      expect((err as Error).message).toMatch(/^Invalid tool arguments:\n/);
     }
   });
 });
