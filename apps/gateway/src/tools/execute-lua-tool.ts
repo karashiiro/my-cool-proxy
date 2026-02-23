@@ -44,16 +44,16 @@ import { validateToolArgs } from "./tool-validation.js";
 const BASE_DESCRIPTION = `Execute a Lua script that orchestrates tool calls across MCP servers.
 
 WORKFLOW:
-1. Call list-servers to discover available MCP servers
-2. Call list-server-tools to see what each server provides
-3. Call tool-details for each tool you plan to use (REQUIRED - brief descriptions are insufficient)
+1. Call list-servers to discover the Lua global identifiers for available MCP servers
+2. Call list-server-tools to see the Lua identifiers for the tools each server provides
+3. (MANDATORY) Call tool-details for each tool you plan to use
 4. Call execute with a Lua script that uses those tools
 
-SCRIPT SYNTAX:
-- MCP servers are available as global variables using their Lua identifiers (from list-servers)
+NOTES:
 - Tool calls return promises - use :await() to unwrap them
 - Call result() to return a value from your script
-- Example: result(server_name.tool_name({ arg = "value" }):await())
+- Filter tool result objects down to only what you need
+- Calling many tools in one script is more efficient than calling execute many times
 
 Most list/search tools paginate results. ALWAYS loop to fetch all pages — a single call typically returns only partial data:
 \`\`\`lua

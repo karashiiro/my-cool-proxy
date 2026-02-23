@@ -22,5 +22,5 @@ export function getSkillsDir(): string {
 
 export const SKILLS_REMINDER_CONTENT_BLOCK: TextContent = Object.freeze({
   type: "text",
-  text: "\n\nNote: Gateway skills are enabled. Check for applicable skills before continuing with your task.",
+  text: "Note: Gateway skills are enabled. Check for applicable skills before continuing with your task.",
 });

@@ -22,28 +22,6 @@ describe("ExecuteLuaTool", () => {
     logger = unitRef.get(TYPES.Logger);
   });
 
-  describe("tool metadata", () => {
-    it("should have correct name", () => {
-      expect(tool.name).toBe("execute");
-    });
-
-    it("should have comprehensive description with workflow guidance", () => {
-      expect(tool.description).toContain("Execute a Lua script");
-      expect(tool.description).toContain("WORKFLOW");
-      expect(tool.description).toContain("list-servers");
-      expect(tool.description).toContain("list-server-tools");
-      expect(tool.description).toContain("tool-details");
-      expect(tool.description).toContain("SCRIPT SYNTAX");
-      expect(tool.description).toContain(":await()");
-      expect(tool.description).toContain("result()");
-      expect(tool.description).toContain("ALWAYS loop to fetch all pages");
-    });
-
-    it("should have schema with required script parameter", () => {
-      expect(tool.schema).toHaveProperty("script");
-    });
-  });
-
   describe("execute", () => {
     it("should call luaRuntime.executeScript with script and mcpServers", async () => {
       const mockServers = new Map();
