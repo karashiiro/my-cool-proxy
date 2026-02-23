@@ -41,17 +41,16 @@ import { validateToolArgs } from "./tool-validation.js";
  * `GatewayBuiltinsBuilder` which constructs the `_gateway` global table
  * available inside Lua scripts. The DI container wiring is managed elsewhere.
  */
-const BASE_DESCRIPTION = `Execute a Lua script that orchestrates tool calls across MCP servers. This is the primary way to use specialized tools discovered through this gateway.
+const BASE_DESCRIPTION = `Execute a Lua script that orchestrates tool calls across MCP servers.
 
 WORKFLOW:
 1. Call list-servers to discover available MCP servers
 2. Call list-server-tools to see what each server provides
 3. Call tool-details for each tool you plan to use (REQUIRED - brief descriptions are insufficient)
-4. OPTIONAL: Call inspect-tool-response to see sample output structure for better data extraction
-5. Call execute with a Lua script that uses those tools
+4. Call execute with a Lua script that uses those tools
 
 SCRIPT SYNTAX:
-- MCP servers are available as global variables using their Lua identifiers
+- MCP servers are available as global variables using their Lua identifiers (from list-servers)
 - Tool calls return promises - use :await() to unwrap them
 - Call result() to return a value from your script
 - Example: result(server_name.tool_name({ arg = "value" }):await())
@@ -84,8 +83,7 @@ The \`_gateway\` global table provides built-in functions:
 const SKILLS_NOTE = `
 
 SKILLS:
-Gateway skills are enabled. Before executing scripts, strongly consider checking for applicable skills
-that may provide optimized workflows or best practices for your task.
+Gateway skills are enabled. Before executing scripts, check for applicable skills that may provide optimized workflows or best practices for your task.
 
 Additional skill-related builtins in \`_gateway\`:
 - _gateway.invoke_skill_script({ skillName = "...", script = "...", args = {...} }):await() - Execute a skill script
