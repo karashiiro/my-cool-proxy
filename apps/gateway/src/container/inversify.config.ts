@@ -240,7 +240,8 @@ export function createContainer(
   container
     .bind<IToolRegistry>(TYPES.ToolRegistry)
     .toDynamicValue(() => {
-      const registry = new ToolRegistry();
+      const logger = container.get<ILogger>(TYPES.Logger);
+      const registry = new ToolRegistry(logger);
       const tools = container.getAll<ITool>(TYPES.Tool);
 
       for (const tool of tools) {

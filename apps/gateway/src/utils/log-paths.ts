@@ -1,8 +1,6 @@
-import envPaths from "env-paths";
 import { existsSync, mkdirSync } from "fs";
 import { resolve } from "path";
-
-const APP_NAME = "my-cool-proxy";
+import { appPaths } from "./app-paths.js";
 
 /**
  * Characters that are invalid in filenames on Windows.
@@ -118,9 +116,8 @@ export function createLogPaths(deps: LogPathsDeps): LogPathsService {
 }
 
 // Create default instance with real dependencies for production use
-const defaultPaths = envPaths(APP_NAME, { suffix: "" });
 const defaultLogPaths = createLogPaths({
-  basePath: defaultPaths.log,
+  basePath: appPaths.log,
   fs: { existsSync, mkdirSync },
 });
 

@@ -306,7 +306,7 @@ Just some markdown without YAML frontmatter.
 
       expect(skills).toHaveLength(0);
       expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.stringContaining("No frontmatter found"),
+        expect.stringContaining("Invalid or missing frontmatter"),
       );
     });
 

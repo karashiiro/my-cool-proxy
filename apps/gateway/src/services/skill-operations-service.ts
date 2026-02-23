@@ -1,6 +1,6 @@
 import { injectable } from "inversify";
 import { spawn } from "child_process";
-import { resolve, sep, dirname } from "path";
+import { resolve, dirname } from "path";
 import {
   existsSync,
   statSync,
@@ -8,26 +8,16 @@ import {
   writeFileSync,
   readFileSync,
 } from "fs";
-import { parse as parseYaml } from "yaml";
 import { getErrorMessage } from "@my-cool-proxy/mcp-utilities";
 import type { ILogger, ISkillDiscoveryService } from "../types/interfaces.js";
 import { $inject } from "../container/decorators.js";
 import { TYPES } from "../types/index.js";
 import { getSkillsDir, SKILL_FILENAME } from "../utils/skills.js";
-
-/**
- * Regular expression to extract YAML frontmatter from a markdown file.
- * Matches content between opening and closing `---` delimiters at the start of the file.
- */
-const FRONTMATTER_REGEX = /^---\s*\n([\s\S]*?)\n---/;
-
-/**
- * Expected shape of skill frontmatter after YAML parsing.
- */
-interface SkillFrontmatter {
-  name?: string;
-  description?: string;
-}
+import { parseFrontmatter } from "./skill-frontmatter-parser.js";
+import {
+  isSafePathComponent,
+  resolveAndValidate,
+} from "./path-validator.js";
 
 /**
  * Service for executing and writing gateway skills.
@@ -62,8 +52,8 @@ export class SkillOperationsService {
       };
     }
 
-    // Security: Validate script path
-    if (script.includes("/") || script.includes("\\")) {
+    // Security: Validate script path component
+    if (!isSafePathComponent(script)) {
       this.logger.warn(
         `Invalid script name (contains path separator): ${script}`,
       );
@@ -74,10 +64,10 @@ export class SkillOperationsService {
 
     // Resolve the full path and verify it's in scripts/
     const scriptsDir = resolve(skill.path, "scripts");
-    const scriptPath = resolve(scriptsDir, script);
-
-    // Verify the resolved path is still within scripts/
-    if (!scriptPath.startsWith(scriptsDir + sep)) {
+    let scriptPath: string;
+    try {
+      scriptPath = resolveAndValidate(scriptsDir, script);
+    } catch {
       this.logger.warn(`Path traversal attempt in script name: ${script}`);
       return { error: `Invalid script name: '${script}'` };
     }
@@ -139,7 +129,7 @@ export class SkillOperationsService {
     }
 
     // Validate skill name (no path separators allowed)
-    if (skillName.includes("/") || skillName.includes("\\")) {
+    if (!isSafePathComponent(skillName)) {
       return {
         error: `Skill name '${skillName}' cannot contain path separators.`,
       };
@@ -243,7 +233,7 @@ export class SkillOperationsService {
     replaceAll?: boolean,
   ): Promise<unknown> {
     // Validate skill name (no path separators allowed)
-    if (skillName.includes("/") || skillName.includes("\\")) {
+    if (!isSafePathComponent(skillName)) {
       return {
         error: `Skill name '${skillName}' cannot contain path separators.`,
       };
@@ -258,9 +248,10 @@ export class SkillOperationsService {
     // Resolve full path and verify it stays within skill directory
     const skillsDir = getSkillsDir();
     const skillDir = resolve(skillsDir, skillName);
-    const filePath = resolve(skillDir, file);
-
-    if (!filePath.startsWith(skillDir + sep)) {
+    let filePath: string;
+    try {
+      filePath = resolveAndValidate(skillDir, file);
+    } catch {
       return { error: `Invalid file path: '${file}'` };
     }
 
@@ -338,27 +329,24 @@ export class SkillOperationsService {
    * Validate that content has valid YAML frontmatter.
    */
   validateFrontmatter(content: string): string | undefined {
-    const match = content.match(FRONTMATTER_REGEX);
-    if (!match) {
-      return (
-        "SKILL.md content must include YAML frontmatter. " +
-        "Expected format:\n---\nname: My Skill\ndescription: What it does\n---\n\n# Content here"
-      );
-    }
-
-    const frontmatterYaml = match[1]!;
-    try {
-      const parsed = parseYaml(frontmatterYaml) as SkillFrontmatter;
-      if (!parsed || typeof parsed !== "object") {
+    const result = parseFrontmatter(content);
+    if (!result.ok) {
+      if (result.error === "no_frontmatter") {
+        return (
+          "SKILL.md content must include YAML frontmatter. " +
+          "Expected format:\n---\nname: My Skill\ndescription: What it does\n---\n\n# Content here"
+        );
+      }
+      if (result.error === "empty_or_non_object") {
         return "YAML frontmatter is empty or not an object.";
       }
-      // At least one of name or description should be present
-      if (!parsed.name && !parsed.description) {
-        return "YAML frontmatter should include at least a 'name' or 'description' field.";
-      }
-    } catch (error) {
-      const errorMessage = getErrorMessage(error);
-      return `Invalid YAML in frontmatter: ${errorMessage}`;
+      // Invalid YAML or other parse errors
+      return result.error;
+    }
+
+    // At least one of name or description should be present
+    if (!result.frontmatter.name && !result.frontmatter.description) {
+      return "YAML frontmatter should include at least a 'name' or 'description' field.";
     }
 
     return undefined;
@@ -400,18 +388,13 @@ export class SkillOperationsService {
   ): Promise<{ name: string; description: string; path: string }> {
     // If content was provided, extract metadata from it
     if (content) {
-      const match = content.match(FRONTMATTER_REGEX);
-      if (match) {
-        try {
-          const parsed = parseYaml(match[1]!) as SkillFrontmatter;
-          return {
-            name: parsed?.name || skillName,
-            description: parsed?.description || "",
-            path: skillDir,
-          };
-        } catch {
-          // Fall through to default
-        }
+      const result = parseFrontmatter(content);
+      if (result.ok) {
+        return {
+          name: result.frontmatter.name || skillName,
+          description: result.frontmatter.description || "",
+          path: skillDir,
+        };
       }
     }
 

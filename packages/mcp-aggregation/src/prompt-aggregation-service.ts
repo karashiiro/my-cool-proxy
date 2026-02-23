@@ -8,6 +8,8 @@ import { createCache } from "@my-cool-proxy/mcp-client";
 import type { IMCPClientManager, ILogger, ICacheService } from "./types.js";
 import type { IResourceRoutingService } from "./resource-routing-service.js";
 import { lookupServerOrThrow } from "./utils/server-lookup.js";
+import { normalizeSessionId } from "./utils/session.js";
+import { aggregateFromServers } from "./utils/aggregate-from-servers.js";
 
 export class PromptAggregationService {
   private cache: ICacheService<Prompt[]>;
@@ -22,7 +24,7 @@ export class PromptAggregationService {
   }
 
   async listPrompts(sessionId: string): Promise<ListPromptsResult> {
-    const session = sessionId || "default";
+    const session = normalizeSessionId(sessionId);
 
     const cached = this.cache.get(session);
     if (cached) {
@@ -39,33 +41,15 @@ export class PromptAggregationService {
       return { prompts: [] };
     }
 
-    const promptPromises = Array.from(clients.entries()).map(
-      async ([name, client]) => {
-        try {
-          const result = await client.listPrompts();
-          return { name, prompts: result };
-        } catch (error) {
-          if (
-            error instanceof Error &&
-            error.message.includes("Server does not support prompts")
-          ) {
-            // Ignore noisy error - we already avoid sending the underlying request via enforceStrictCapabilities
-            return { name, prompts: [] };
-          }
-
-          this.logger.error(
-            `Failed to list prompts from server '${name}':`,
-            error as Error,
-          );
-          return { name, prompts: [] };
-        }
-      },
+    const results = await aggregateFromServers(
+      clients,
+      async (_name, client) => client.listPrompts(),
+      this.logger,
+      { suppressErrorContaining: "Server does not support prompts" },
     );
 
-    const results = await Promise.all(promptPromises);
-
     const allPrompts: Prompt[] = [];
-    for (const { name, prompts } of results) {
+    for (const { name, result: prompts } of results) {
       for (const prompt of prompts) {
         allPrompts.push(namespacePrompt(name, prompt));
       }
@@ -85,7 +69,7 @@ export class PromptAggregationService {
     args: Record<string, string> | undefined,
     sessionId: string,
   ): Promise<GetPromptResult> {
-    const session = sessionId || "default";
+    const session = normalizeSessionId(sessionId);
     const parsed = parsePromptName(name);
     if (!parsed) {
       throw new Error(

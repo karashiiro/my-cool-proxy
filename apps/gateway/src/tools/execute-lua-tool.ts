@@ -28,13 +28,18 @@ import { TYPES } from "../types/index.js";
 import type { ITool, ToolExecutionContext } from "./base-tool.js";
 import { getEffectiveSessionId } from "../utils/session.js";
 import { GatewayBuiltinsBuilder } from "./gateway-builtins-builder.js";
+import { validateToolArgs } from "./tool-validation.js";
 
 /**
  * Tool that executes Lua scripts with access to MCP servers.
  *
- * This tool allows executing arbitrary Lua code that can call tools on
- * available MCP servers. It's the primary way to orchestrate multi-server
- * tool calls.
+ * This is the primary execution tool in the gateway — it runs arbitrary Lua
+ * code that can orchestrate tool calls across all connected MCP servers.
+ *
+ * ## Dependency note
+ * This tool has a large constructor because it relays most dependencies to
+ * `GatewayBuiltinsBuilder` which constructs the `_gateway` global table
+ * available inside Lua scripts. The DI container wiring is managed elsewhere.
  */
 const BASE_DESCRIPTION = `Execute a Lua script that orchestrates tool calls across MCP servers. This is the primary way to use specialized tools discovered through this gateway.
 
@@ -135,29 +140,42 @@ export class ExecuteLuaTool implements ITool {
         : BASE_DESCRIPTION;
   }
 
+  /**
+   * Execute a Lua script within the context of the current session.
+   *
+   * The script has access to all MCP servers (as global Lua variables) and
+   * gateway builtins (via the `_gateway` global). Individual tool calls
+   * within the script are logged for observability.
+   *
+   * @param args    - Must contain a `script` string (validated via Zod)
+   * @param context - Execution context with session ID and progress callback
+   * @returns MCP `CallToolResult` with the script's output or error details
+   */
   async execute(
     args: Record<string, unknown>,
     context: ToolExecutionContext,
   ): Promise<CallToolResult> {
-    const { script } = args;
+    const { script } = validateToolArgs(this.schema, args);
     const sessionId = getEffectiveSessionId(context.sessionId);
     const mcpServers = this.clientPool.getClientsBySession(sessionId);
     const gatewayBuiltins = this.buildGatewayBuiltins(sessionId);
 
     // Log execution start
-    const executionId = this.executionLog.logExecution(
-      sessionId,
-      script as string,
-    );
+    const executionId = this.executionLog.logExecution(sessionId, script);
 
     // Build tool call log that records individual tool calls within this execution
     const toolCallLog = {
       onToolCallStart: (
         serverName: string,
         toolName: string,
-        args?: string,
+        callArgs?: string,
       ): string =>
-        this.executionLog.logToolCall(executionId, serverName, toolName, args),
+        this.executionLog.logToolCall(
+          executionId,
+          serverName,
+          toolName,
+          callArgs,
+        ),
       onToolCallEnd: (callId: string, result: string): void =>
         this.executionLog.markToolCallResult(callId, result),
       onToolCallError: (callId: string, error: string): void =>
@@ -166,7 +184,7 @@ export class ExecuteLuaTool implements ITool {
 
     try {
       const result = await this.luaRuntime.executeScript(
-        script as string,
+        script,
         mcpServers,
         gatewayBuiltins,
         context.sendProgress,
@@ -239,7 +257,9 @@ export class ExecuteLuaTool implements ITool {
 
   /**
    * Build gateway builtins object for the current session.
-   * Delegates to GatewayBuiltinsBuilder with all injected dependencies.
+   *
+   * Delegates to {@link GatewayBuiltinsBuilder} with all injected dependencies.
+   * The resulting object is exposed as the `_gateway` global in Lua scripts.
    */
   private buildGatewayBuiltins(sessionId: string): IGatewayBuiltins {
     return new GatewayBuiltinsBuilder(

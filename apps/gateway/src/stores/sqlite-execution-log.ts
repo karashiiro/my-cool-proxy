@@ -5,16 +5,33 @@ import type {
   ToolUsage,
 } from "../types/interfaces.js";
 import type { SQLiteDatabase } from "./sqlite-database.js";
+import { BaseSQLiteStore } from "./base-sqlite-store.js";
+import { generateTimeId, safeExecute } from "./store-utils.js";
 
 // Re-export types for backward compatibility
 export type { LuaExecution, LuaToolCall };
 
-/**
- * Generate a unique ID with a timestamp prefix for chronological ordering.
- */
-function generateId(): string {
-  return `${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
-}
+/** Column list for lua_executions SELECT queries. */
+const EXECUTION_COLUMNS = `
+  execution_id AS executionId,
+  session_id AS sessionId,
+  script,
+  status,
+  error,
+  result,
+  created_at AS createdAt`;
+
+/** Column list for lua_tool_calls SELECT queries. */
+const TOOL_CALL_COLUMNS = `
+  call_id AS callId,
+  execution_id AS executionId,
+  server_name AS serverName,
+  tool_name AS toolName,
+  arguments,
+  status,
+  error,
+  result,
+  created_at AS createdAt`;
 
 /**
  * SQLite-backed execution log for Lua script executions and their tool calls.
@@ -24,8 +41,10 @@ function generateId(): string {
  *
  * NOT injectable - instantiated directly in index.ts alongside SQLiteDatabase.
  */
-export class SQLiteExecutionLog implements IExecutionLog {
-  constructor(private readonly db: SQLiteDatabase) {}
+export class SQLiteExecutionLog extends BaseSQLiteStore implements IExecutionLog {
+  constructor(db: SQLiteDatabase) {
+    super(db);
+  }
 
   /**
    * Log the start of a Lua script execution.
@@ -34,18 +53,19 @@ export class SQLiteExecutionLog implements IExecutionLog {
    * @returns The generated execution ID for linking tool calls
    */
   logExecution(sessionId: string, script: string): string {
-    const executionId = generateId();
-    const now = Date.now();
+    return safeExecute(() => {
+      const executionId = generateTimeId();
+      const now = Date.now();
 
-    this.db
-      .getDatabase()
-      .prepare(
-        `INSERT INTO lua_executions (execution_id, session_id, script, status, created_at)
-         VALUES (?, ?, ?, 'success', ?)`,
-      )
-      .run(executionId, sessionId, script, now);
+      this.database
+        .prepare(
+          `INSERT INTO lua_executions (execution_id, session_id, script, status, created_at)
+           VALUES (?, ?, ?, 'success', ?)`,
+        )
+        .run(executionId, sessionId, script, now);
 
-    return executionId;
+      return executionId;
+    }, "logExecution");
   }
 
   /**
@@ -54,12 +74,13 @@ export class SQLiteExecutionLog implements IExecutionLog {
    * @param error The error message
    */
   markExecutionError(executionId: string, error: string): void {
-    this.db
-      .getDatabase()
-      .prepare(
-        `UPDATE lua_executions SET status = 'error', error = ? WHERE execution_id = ?`,
-      )
-      .run(error, executionId);
+    safeExecute(() => {
+      this.database
+        .prepare(
+          `UPDATE lua_executions SET status = 'error', error = ? WHERE execution_id = ?`,
+        )
+        .run(error, executionId);
+    }, "markExecutionError");
   }
 
   /**
@@ -68,10 +89,11 @@ export class SQLiteExecutionLog implements IExecutionLog {
    * @param result The JSON-serialized result value
    */
   markExecutionResult(executionId: string, result: string): void {
-    this.db
-      .getDatabase()
-      .prepare(`UPDATE lua_executions SET result = ? WHERE execution_id = ?`)
-      .run(result, executionId);
+    safeExecute(() => {
+      this.database
+        .prepare(`UPDATE lua_executions SET result = ? WHERE execution_id = ?`)
+        .run(result, executionId);
+    }, "markExecutionResult");
   }
 
   /**
@@ -88,18 +110,19 @@ export class SQLiteExecutionLog implements IExecutionLog {
     toolName: string,
     args?: string,
   ): string {
-    const callId = generateId();
-    const now = Date.now();
+    return safeExecute(() => {
+      const callId = generateTimeId();
+      const now = Date.now();
 
-    this.db
-      .getDatabase()
-      .prepare(
-        `INSERT INTO lua_tool_calls (call_id, execution_id, server_name, tool_name, arguments, status, created_at)
-         VALUES (?, ?, ?, ?, ?, 'success', ?)`,
-      )
-      .run(callId, executionId, serverName, toolName, args ?? null, now);
+      this.database
+        .prepare(
+          `INSERT INTO lua_tool_calls (call_id, execution_id, server_name, tool_name, arguments, status, created_at)
+           VALUES (?, ?, ?, ?, ?, 'success', ?)`,
+        )
+        .run(callId, executionId, serverName, toolName, args ?? null, now);
 
-    return callId;
+      return callId;
+    }, "logToolCall");
   }
 
   /**
@@ -108,12 +131,13 @@ export class SQLiteExecutionLog implements IExecutionLog {
    * @param error The error message
    */
   markToolCallError(callId: string, error: string): void {
-    this.db
-      .getDatabase()
-      .prepare(
-        `UPDATE lua_tool_calls SET status = 'error', error = ? WHERE call_id = ?`,
-      )
-      .run(error, callId);
+    safeExecute(() => {
+      this.database
+        .prepare(
+          `UPDATE lua_tool_calls SET status = 'error', error = ? WHERE call_id = ?`,
+        )
+        .run(error, callId);
+    }, "markToolCallError");
   }
 
   /**
@@ -122,10 +146,11 @@ export class SQLiteExecutionLog implements IExecutionLog {
    * @param result The JSON-serialized result value
    */
   markToolCallResult(callId: string, result: string): void {
-    this.db
-      .getDatabase()
-      .prepare(`UPDATE lua_tool_calls SET result = ? WHERE call_id = ?`)
-      .run(result, callId);
+    safeExecute(() => {
+      this.database
+        .prepare(`UPDATE lua_tool_calls SET result = ? WHERE call_id = ?`)
+        .run(result, callId);
+    }, "markToolCallResult");
   }
 
   /**
@@ -134,23 +159,19 @@ export class SQLiteExecutionLog implements IExecutionLog {
    * @param limit Maximum number of executions to return (default 50)
    */
   getExecutions(sessionId: string, limit = 50): LuaExecution[] {
-    return this.db
-      .getDatabase()
-      .prepare(
-        `SELECT
-           execution_id AS executionId,
-           session_id AS sessionId,
-           script,
-           status,
-           error,
-           result,
-           created_at AS createdAt
-         FROM lua_executions
-         WHERE session_id = ?
-         ORDER BY created_at DESC, rowid DESC
-         LIMIT ?`,
-      )
-      .all(sessionId, limit) as LuaExecution[];
+    return safeExecute(
+      () =>
+        this.database
+          .prepare(
+            `SELECT ${EXECUTION_COLUMNS}
+             FROM lua_executions
+             WHERE session_id = ?
+             ORDER BY created_at DESC, rowid DESC
+             LIMIT ?`,
+          )
+          .all(sessionId, limit) as LuaExecution[],
+      "getExecutions",
+    );
   }
 
   /**
@@ -158,24 +179,18 @@ export class SQLiteExecutionLog implements IExecutionLog {
    * @param executionId The execution to query
    */
   getToolCalls(executionId: string): LuaToolCall[] {
-    return this.db
-      .getDatabase()
-      .prepare(
-        `SELECT
-           call_id AS callId,
-           execution_id AS executionId,
-           server_name AS serverName,
-           tool_name AS toolName,
-           arguments,
-           status,
-           error,
-           result,
-           created_at AS createdAt
-         FROM lua_tool_calls
-         WHERE execution_id = ?
-         ORDER BY created_at DESC, rowid DESC`,
-      )
-      .all(executionId) as LuaToolCall[];
+    return safeExecute(
+      () =>
+        this.database
+          .prepare(
+            `SELECT ${TOOL_CALL_COLUMNS}
+             FROM lua_tool_calls
+             WHERE execution_id = ?
+             ORDER BY created_at DESC, rowid DESC`,
+          )
+          .all(executionId) as LuaToolCall[],
+      "getToolCalls",
+    );
   }
 
   /**
@@ -183,21 +198,17 @@ export class SQLiteExecutionLog implements IExecutionLog {
    * @param executionId The execution to retrieve
    */
   getExecution(executionId: string): LuaExecution | undefined {
-    return this.db
-      .getDatabase()
-      .prepare(
-        `SELECT
-           execution_id AS executionId,
-           session_id AS sessionId,
-           script,
-           status,
-           error,
-           result,
-           created_at AS createdAt
-         FROM lua_executions
-         WHERE execution_id = ?`,
-      )
-      .get(executionId) as LuaExecution | undefined;
+    return safeExecute(
+      () =>
+        this.database
+          .prepare(
+            `SELECT ${EXECUTION_COLUMNS}
+             FROM lua_executions
+             WHERE execution_id = ?`,
+          )
+          .get(executionId) as LuaExecution | undefined,
+      "getExecution",
+    );
   }
 
   /**
@@ -211,49 +222,39 @@ export class SQLiteExecutionLog implements IExecutionLog {
     offset = 0,
     toolFilter?: string,
   ): LuaExecution[] {
-    if (toolFilter) {
-      const dotIndex = toolFilter.indexOf(".");
-      if (dotIndex === -1) {
-        return [];
+    return safeExecute(() => {
+      if (toolFilter) {
+        const parsed = this.parseToolFilter(toolFilter);
+        if (!parsed) return [];
+
+        return this.database
+          .prepare(
+            `SELECT DISTINCT
+               e.execution_id AS executionId,
+               e.session_id AS sessionId,
+               e.script,
+               e.status,
+               e.error,
+               e.result,
+               e.created_at AS createdAt
+             FROM lua_executions e
+             INNER JOIN lua_tool_calls tc ON tc.execution_id = e.execution_id
+             WHERE tc.server_name = ? AND tc.tool_name = ?
+             ORDER BY e.created_at DESC, e.rowid DESC
+             LIMIT ? OFFSET ?`,
+          )
+          .all(parsed.serverName, parsed.toolName, limit, offset) as LuaExecution[];
       }
-      const serverName = toolFilter.substring(0, dotIndex);
-      const toolName = toolFilter.substring(dotIndex + 1);
-      return this.db
-        .getDatabase()
+
+      return this.database
         .prepare(
-          `SELECT DISTINCT
-             e.execution_id AS executionId,
-             e.session_id AS sessionId,
-             e.script,
-             e.status,
-             e.error,
-             e.result,
-             e.created_at AS createdAt
-           FROM lua_executions e
-           INNER JOIN lua_tool_calls tc ON tc.execution_id = e.execution_id
-           WHERE tc.server_name = ? AND tc.tool_name = ?
-           ORDER BY e.created_at DESC, e.rowid DESC
+          `SELECT ${EXECUTION_COLUMNS}
+           FROM lua_executions
+           ORDER BY created_at DESC, rowid DESC
            LIMIT ? OFFSET ?`,
         )
-        .all(serverName, toolName, limit, offset) as LuaExecution[];
-    }
-
-    return this.db
-      .getDatabase()
-      .prepare(
-        `SELECT
-           execution_id AS executionId,
-           session_id AS sessionId,
-           script,
-           status,
-           error,
-           result,
-           created_at AS createdAt
-         FROM lua_executions
-         ORDER BY created_at DESC, rowid DESC
-         LIMIT ? OFFSET ?`,
-      )
-      .all(limit, offset) as LuaExecution[];
+        .all(limit, offset) as LuaExecution[];
+    }, "getAllExecutions");
   }
 
   /**
@@ -261,44 +262,62 @@ export class SQLiteExecutionLog implements IExecutionLog {
    * @param toolFilter Optional "server.tool" string to filter by tool usage
    */
   countExecutions(toolFilter?: string): number {
-    if (toolFilter) {
-      const dotIndex = toolFilter.indexOf(".");
-      if (dotIndex === -1) {
-        return 0;
-      }
-      const serverName = toolFilter.substring(0, dotIndex);
-      const toolName = toolFilter.substring(dotIndex + 1);
-      const row = this.db
-        .getDatabase()
-        .prepare(
-          `SELECT COUNT(DISTINCT e.execution_id) AS count
-           FROM lua_executions e
-           INNER JOIN lua_tool_calls tc ON tc.execution_id = e.execution_id
-           WHERE tc.server_name = ? AND tc.tool_name = ?`,
-        )
-        .get(serverName, toolName) as { count: number } | undefined;
-      return row?.count ?? 0;
-    }
+    return safeExecute(() => {
+      if (toolFilter) {
+        const parsed = this.parseToolFilter(toolFilter);
+        if (!parsed) return 0;
 
-    const row = this.db
-      .getDatabase()
-      .prepare(`SELECT COUNT(*) AS count FROM lua_executions`)
-      .get() as { count: number } | undefined;
-    return row?.count ?? 0;
+        const row = this.database
+          .prepare(
+            `SELECT COUNT(DISTINCT e.execution_id) AS count
+             FROM lua_executions e
+             INNER JOIN lua_tool_calls tc ON tc.execution_id = e.execution_id
+             WHERE tc.server_name = ? AND tc.tool_name = ?`,
+          )
+          .get(parsed.serverName, parsed.toolName) as { count: number } | undefined;
+        return row?.count ?? 0;
+      }
+
+      const row = this.database
+        .prepare(`SELECT COUNT(*) AS count FROM lua_executions`)
+        .get() as { count: number } | undefined;
+      return row?.count ?? 0;
+    }, "countExecutions");
   }
 
   /**
    * Get distinct tool names with usage counts, ordered by count descending.
    */
   getDistinctTools(): ToolUsage[] {
-    return this.db
-      .getDatabase()
-      .prepare(
-        `SELECT server_name || '.' || tool_name AS tool, COUNT(*) AS count
-         FROM lua_tool_calls
-         GROUP BY server_name, tool_name
-         ORDER BY count DESC, tool ASC`,
-      )
-      .all() as ToolUsage[];
+    return safeExecute(
+      () =>
+        this.database
+          .prepare(
+            `SELECT server_name || '.' || tool_name AS tool, COUNT(*) AS count
+             FROM lua_tool_calls
+             GROUP BY server_name, tool_name
+             ORDER BY count DESC, tool ASC`,
+          )
+          .all() as ToolUsage[],
+      "getDistinctTools",
+    );
+  }
+
+  /**
+   * Parse a "server.tool" filter string into its component parts.
+   * @param toolFilter The filter string in "serverName.toolName" format
+   * @returns Parsed server/tool names, or null if the format is invalid
+   */
+  private parseToolFilter(
+    toolFilter: string,
+  ): { serverName: string; toolName: string } | null {
+    const dotIndex = toolFilter.indexOf(".");
+    if (dotIndex === -1) {
+      return null;
+    }
+    return {
+      serverName: toolFilter.substring(0, dotIndex),
+      toolName: toolFilter.substring(dotIndex + 1),
+    };
   }
 }

@@ -11,6 +11,7 @@ import { ToolDiscoveryService } from "@my-cool-proxy/mcp-aggregation";
 import { SKILLS_REMINDER_CONTENT_BLOCK } from "../utils/skills.js";
 import { getEffectiveSessionId } from "../utils/session.js";
 import { luaServerNameSchema } from "./schemas.js";
+import { validateToolArgs } from "./tool-validation.js";
 
 /**
  * Tool that lists all tools available on a specific MCP server.
@@ -49,9 +50,9 @@ export class ListServerToolsTool implements ITool {
     args: Record<string, unknown>,
     context: ToolExecutionContext,
   ): Promise<CallToolResult> {
-    const { luaServerName } = args;
+    const { luaServerName } = validateToolArgs(this.schema, args);
     const result = await this.toolDiscovery.listServerTools(
-      luaServerName as string,
+      luaServerName,
       getEffectiveSessionId(context.sessionId),
     );
 

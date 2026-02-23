@@ -1,5 +1,8 @@
 import { injectable } from "inversify";
 import type { ITool } from "./base-tool.js";
+import type { ILogger } from "../types/interfaces.js";
+import { $inject } from "../container/decorators.js";
+import { TYPES } from "../types/index.js";
 
 /**
  * Interface for the tool registry that manages all available tools.
@@ -35,7 +38,14 @@ export interface IToolRegistry {
 export class ToolRegistry implements IToolRegistry {
   private tools = new Map<string, ITool>();
 
+  constructor(@$inject(TYPES.Logger) private readonly logger: ILogger) {}
+
   register(tool: ITool): void {
+    if (this.tools.has(tool.name)) {
+      this.logger.warn(
+        `Tool "${tool.name}" is already registered and will be overwritten`,
+      );
+    }
     this.tools.set(tool.name, tool);
   }
 

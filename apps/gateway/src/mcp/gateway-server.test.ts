@@ -148,7 +148,7 @@ const createToolRegistry = (
 
   const executionLog = createMockExecutionLog();
 
-  const registry = new ToolRegistry();
+  const registry = new ToolRegistry(logger);
   registry.register(
     new ExecuteLuaTool(
       luaRuntime,

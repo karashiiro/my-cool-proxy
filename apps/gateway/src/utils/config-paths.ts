@@ -1,12 +1,10 @@
-import envPaths from "env-paths";
 import { existsSync } from "fs";
 import { resolve } from "path";
+import { appPaths } from "./app-paths.js";
 
-const APP_NAME = "my-cool-proxy";
 const CONFIG_FILENAME = "config.json";
 
-// Get platform-specific paths (disable nodejs suffix for cleaner paths)
-const paths = envPaths(APP_NAME, { suffix: "" });
+const paths = appPaths;
 
 export interface ConfigPathInfo {
   path: string;

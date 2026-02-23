@@ -15,6 +15,7 @@ import { ToolDiscoveryService } from "@my-cool-proxy/mcp-aggregation";
 import { SKILLS_REMINDER_CONTENT_BLOCK } from "../utils/skills.js";
 import { getEffectiveSessionId } from "../utils/session.js";
 import { luaServerNameSchema, luaToolNameSchema } from "./schemas.js";
+import { validateToolArgs } from "./tool-validation.js";
 
 /**
  * Tool that inspects a tool's response structure by making a sample call.
@@ -74,22 +75,21 @@ export class InspectToolResponseTool implements ITool {
     args: Record<string, unknown>,
     context: ToolExecutionContext,
   ): Promise<CallToolResult> {
-    const { luaServerName, luaToolName, sampleArgs } = args;
+    const { luaServerName, luaToolName, sampleArgs } = validateToolArgs(
+      this.schema,
+      args,
+    );
     const sessionId = getEffectiveSessionId(context.sessionId);
     const result = await this.toolDiscovery.inspectToolResponse(
-      luaServerName as string,
-      luaToolName as string,
-      (sampleArgs as Record<string, unknown>) || {},
+      luaServerName,
+      luaToolName,
+      sampleArgs || {},
       sessionId,
     );
 
     // Record successful inspection so the execute tool allows this tool call
     if (!result.isError) {
-      this.inspectionStore.markInspected(
-        sessionId,
-        luaServerName as string,
-        luaToolName as string,
-      );
+      this.inspectionStore.markInspected(sessionId, luaServerName, luaToolName);
     }
 
     // Add skill check note if skills are enabled

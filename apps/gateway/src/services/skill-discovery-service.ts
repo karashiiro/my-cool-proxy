@@ -1,19 +1,15 @@
 import { injectable } from "inversify";
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync } from "fs";
-import { resolve, sep } from "path";
-import { parse as parseYaml } from "yaml";
+import { existsSync, mkdirSync } from "fs";
+import { readFile, readdir, stat, access } from "node:fs/promises";
+import { resolve } from "path";
 import { getErrorMessage } from "@my-cool-proxy/mcp-utilities";
 import type { ILogger, ServerConfig } from "../types/interfaces.js";
 import type { ISkillDiscoveryService, SkillMetadata } from "../types/skill.js";
 import { getSkillsDir, SKILL_FILENAME } from "../utils/skills.js";
 import { $inject } from "../container/decorators.js";
 import { TYPES } from "../types/index.js";
-
-/**
- * Regular expression to extract YAML frontmatter from a markdown file.
- * Matches content between opening and closing `---` delimiters at the start of the file.
- */
-const FRONTMATTER_REGEX = /^---\s*\n([\s\S]*?)\n---/;
+import { parseFrontmatter } from "./skill-frontmatter-parser.js";
+import { resolveAndValidate } from "./path-validator.js";
 
 /**
  * Built-in skill name for the skill creation guide.
@@ -169,14 +165,6 @@ Before deploying, verify the skill works in a subagent or test session:
 3. **Edge cases**: Test uncommon scenarios
 `;
 
-/**
- * Expected shape of skill frontmatter after YAML parsing.
- */
-interface SkillFrontmatter {
-  name?: string;
-  description?: string;
-}
-
 @injectable()
 export class SkillDiscoveryService implements ISkillDiscoveryService {
   constructor(
@@ -204,7 +192,7 @@ export class SkillDiscoveryService implements ISkillDiscoveryService {
 
     // Check if it's actually a directory
     try {
-      const stats = statSync(skillsDir);
+      const stats = await stat(skillsDir);
       if (!stats.isDirectory()) {
         this.logger.warn(
           `Skills path exists but is not a directory: ${skillsDir}`,
@@ -219,7 +207,7 @@ export class SkillDiscoveryService implements ISkillDiscoveryService {
     // Read directory entries
     let entries: string[];
     try {
-      entries = readdirSync(skillsDir);
+      entries = await readdir(skillsDir);
     } catch {
       this.logger.warn(`Failed to read skills directory: ${skillsDir}`);
       return skills;
@@ -231,7 +219,7 @@ export class SkillDiscoveryService implements ISkillDiscoveryService {
 
       // Skip non-directories
       try {
-        const stats = statSync(entryPath);
+        const stats = await stat(entryPath);
         if (!stats.isDirectory()) {
           continue;
         }
@@ -241,13 +229,15 @@ export class SkillDiscoveryService implements ISkillDiscoveryService {
 
       // Check for SKILL.md
       const skillFilePath = resolve(entryPath, SKILL_FILENAME);
-      if (!existsSync(skillFilePath)) {
+      try {
+        await access(skillFilePath);
+      } catch {
         this.logger.debug(`Skipping directory without SKILL.md: ${entry}`);
         continue;
       }
 
       // Parse frontmatter
-      const metadata = this.parseSkillMetadata(skillFilePath, entry);
+      const metadata = await this.parseSkillMetadata(skillFilePath, entry);
       if (metadata) {
         skills.push(metadata);
         this.logger.debug(`Discovered skill: ${metadata.name}`);
@@ -282,7 +272,7 @@ export class SkillDiscoveryService implements ISkillDiscoveryService {
     // Read full content
     const skillFilePath = resolve(skill.path, SKILL_FILENAME);
     try {
-      return readFileSync(skillFilePath, "utf-8");
+      return await readFile(skillFilePath, "utf-8");
     } catch (error) {
       this.logger.error(
         `Failed to read skill content: ${skillFilePath}`,
@@ -311,12 +301,10 @@ export class SkillDiscoveryService implements ISkillDiscoveryService {
     }
 
     // Resolve the full path and validate it stays within the skill directory
-    const fullPath = resolve(skill.path, relativePath);
-
-    // Security: Ensure the resolved path is within the skill directory
-    // This prevents path traversal attacks like "../../../etc/passwd"
-    // The path must start with skill.path + separator to be inside the directory
-    if (!fullPath.startsWith(skill.path + sep)) {
+    let fullPath: string;
+    try {
+      fullPath = resolveAndValidate(skill.path, relativePath);
+    } catch {
       this.logger.warn(
         `Path traversal detected for skill '${skillName}': ${relativePath}`,
       );
@@ -327,7 +315,7 @@ export class SkillDiscoveryService implements ISkillDiscoveryService {
 
     // Read the resource file
     try {
-      return readFileSync(fullPath, "utf-8");
+      return await readFile(fullPath, "utf-8");
     } catch {
       this.logger.debug(
         `Resource not found: ${fullPath} (skill: ${skillName}, path: ${relativePath})`,
@@ -360,44 +348,28 @@ export class SkillDiscoveryService implements ISkillDiscoveryService {
    * @param dirName - Directory name (used as fallback for skill name)
    * @returns SkillMetadata or null if parsing fails
    */
-  private parseSkillMetadata(
+  private async parseSkillMetadata(
     filePath: string,
     dirName: string,
-  ): SkillMetadata | null {
+  ): Promise<SkillMetadata | null> {
     let content: string;
     try {
-      content = readFileSync(filePath, "utf-8");
+      content = await readFile(filePath, "utf-8");
     } catch {
       this.logger.warn(`Failed to read skill file: ${filePath}`);
       return null;
     }
 
-    // Extract frontmatter
-    const frontmatterMatch = content.match(FRONTMATTER_REGEX);
-    if (!frontmatterMatch) {
-      this.logger.warn(`No frontmatter found in skill: ${filePath}`);
-      return null;
-    }
-
-    const frontmatterYaml = frontmatterMatch[1]!;
-
-    // Parse YAML frontmatter
-    let frontmatter: SkillFrontmatter;
-    try {
-      frontmatter = parseYaml(frontmatterYaml) as SkillFrontmatter;
-    } catch (error) {
-      const errorMessage = getErrorMessage(error);
+    // Extract and parse frontmatter
+    const result = parseFrontmatter(content);
+    if (!result.ok) {
       this.logger.warn(
-        `Invalid YAML in skill frontmatter: ${filePath} - ${errorMessage}`,
+        `Invalid or missing frontmatter in skill: ${filePath} - ${result.error}`,
       );
       return null;
     }
 
-    // Handle case where YAML is empty or not an object
-    if (!frontmatter || typeof frontmatter !== "object") {
-      this.logger.warn(`Empty or invalid frontmatter in skill: ${filePath}`);
-      return null;
-    }
+    const { frontmatter } = result;
 
     // Extract name and description, with fallbacks
     const name =

@@ -12,39 +12,48 @@ import type {
  */
 @injectable()
 export class NoopExecutionLog implements IExecutionLog {
-  logExecution(): string {
+  logExecution(_sessionId: string, _script: string): string {
     return "";
   }
 
-  markExecutionError(): void {}
+  markExecutionError(_executionId: string, _error: string): void {}
 
-  markExecutionResult(): void {}
+  markExecutionResult(_executionId: string, _result: string): void {}
 
-  logToolCall(): string {
+  logToolCall(
+    _executionId: string,
+    _serverName: string,
+    _toolName: string,
+    _args?: string,
+  ): string {
     return "";
   }
 
-  markToolCallError(): void {}
+  markToolCallError(_callId: string, _error: string): void {}
 
-  markToolCallResult(): void {}
+  markToolCallResult(_callId: string, _result: string): void {}
 
-  getExecutions(): LuaExecution[] {
+  getExecutions(_sessionId: string, _limit?: number): LuaExecution[] {
     return [];
   }
 
-  getToolCalls(): LuaToolCall[] {
+  getToolCalls(_executionId: string): LuaToolCall[] {
     return [];
   }
 
-  getExecution(): LuaExecution | undefined {
+  getExecution(_executionId: string): LuaExecution | undefined {
     return undefined;
   }
 
-  getAllExecutions(): LuaExecution[] {
+  getAllExecutions(
+    _limit?: number,
+    _offset?: number,
+    _toolFilter?: string,
+  ): LuaExecution[] {
     return [];
   }
 
-  countExecutions(): number {
+  countExecutions(_toolFilter?: string): number {
     return 0;
   }
 

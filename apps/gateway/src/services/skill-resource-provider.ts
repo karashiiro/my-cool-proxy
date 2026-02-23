@@ -77,7 +77,7 @@ export class SkillResourceProvider implements IResourceProvider {
     }
 
     // Determine MIME type based on file extension
-    const mimeType = this.getMimeType(path);
+    const mimeType = getMimeType(path);
 
     return {
       contents: [
@@ -89,37 +89,37 @@ export class SkillResourceProvider implements IResourceProvider {
       ],
     };
   }
+}
 
-  /**
-   * Get MIME type based on file path extension.
-   * Defaults to text/markdown for SKILL.md files.
-   */
-  private getMimeType(path?: string): string {
-    if (!path) {
+/**
+ * Get MIME type based on file path extension.
+ * Defaults to text/markdown for SKILL.md files (no path).
+ */
+function getMimeType(path?: string): string {
+  if (!path) {
+    return "text/markdown";
+  }
+
+  const ext = path.split(".").pop()?.toLowerCase();
+  switch (ext) {
+    case "md":
       return "text/markdown";
-    }
-
-    const ext = path.split(".").pop()?.toLowerCase();
-    switch (ext) {
-      case "md":
-        return "text/markdown";
-      case "py":
-        return "text/x-python";
-      case "js":
-        return "application/javascript";
-      case "ts":
-        return "text/typescript";
-      case "json":
-        return "application/json";
-      case "yaml":
-      case "yml":
-        return "text/yaml";
-      case "sh":
-        return "application/x-sh";
-      case "txt":
-        return "text/plain";
-      default:
-        return "text/plain";
-    }
+    case "py":
+      return "text/x-python";
+    case "js":
+      return "application/javascript";
+    case "ts":
+      return "text/typescript";
+    case "json":
+      return "application/json";
+    case "yaml":
+    case "yml":
+      return "text/yaml";
+    case "sh":
+      return "application/x-sh";
+    case "txt":
+      return "text/plain";
+    default:
+      return "text/plain";
   }
 }
