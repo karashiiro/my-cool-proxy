@@ -180,9 +180,16 @@ async function startHttpMode(
     return entry;
   };
 
+  // Graceful shutdown: reject new sessions once shutdown begins
+  let shuttingDown = false;
+
   // Start HTTP server with per-session factory
   const handle = await serveHttp(
     async (sessionId) => {
+      if (shuttingDown) {
+        throw new Error("Server is shutting down, rejecting new session");
+      }
+
       logger.info(`Creating gateway server for session ${sessionId}`);
 
       // Discover skills fresh per session so runtime changes are reflected
@@ -309,7 +316,6 @@ async function startHttpMode(
   }
 
   // Graceful shutdown with double-shutdown guard
-  let shuttingDown = false;
   const shutdown = async () => {
     if (shuttingDown) return;
     shuttingDown = true;
@@ -328,7 +334,16 @@ async function startHttpMode(
     }
 
     try {
-      await handle.close();
+      const SHUTDOWN_TIMEOUT_MS = 5_000;
+      await Promise.race([
+        handle.close(),
+        new Promise<void>((resolve) =>
+          setTimeout(() => {
+            logger.warn("HTTP server shutdown timed out, forcing close");
+            resolve();
+          }, SHUTDOWN_TIMEOUT_MS),
+        ),
+      ]);
     } catch (err) {
       logger.error(
         "Error closing HTTP server",
