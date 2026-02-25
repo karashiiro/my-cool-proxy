@@ -9,6 +9,10 @@ export interface SkillMetadata {
   description: string;
   /** Full path to the skill directory */
   path: string;
+  /** Size of the SKILL.md content in bytes */
+  size?: number;
+  /** ISO 8601 timestamp of when the SKILL.md was last modified */
+  lastModified?: string;
 }
 
 /**

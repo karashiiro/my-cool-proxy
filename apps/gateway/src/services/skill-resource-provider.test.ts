@@ -69,13 +69,82 @@ describe("SkillResourceProvider", () => {
         name: "pdf-rotation",
         description: "Rotate PDFs",
         mimeType: "text/markdown",
+        annotations: { audience: ["assistant"], priority: 0.5 },
       });
       expect(result[1]).toEqual({
         uri: "gw-skill://code-review",
         name: "code-review",
         description: "Review code",
         mimeType: "text/markdown",
+        annotations: { audience: ["assistant"], priority: 0.5 },
       });
+    });
+
+    it("should include size and lastModified when present in metadata", async () => {
+      const skills: SkillMetadata[] = [
+        {
+          name: "pdf-rotation",
+          description: "Rotate PDFs",
+          path: "/skills/pdf-rotation",
+          size: 1234,
+          lastModified: "2026-01-15T10:00:00.000Z",
+        },
+      ];
+      mockSkillService = createMockSkillService({ skills });
+      provider = new SkillResourceProvider(mockSkillService, mockLogger);
+
+      const result = await provider.listResources();
+
+      expect(result[0]).toEqual({
+        uri: "gw-skill://pdf-rotation",
+        name: "pdf-rotation",
+        description: "Rotate PDFs",
+        mimeType: "text/markdown",
+        size: 1234,
+        annotations: {
+          audience: ["assistant"],
+          priority: 0.5,
+          lastModified: "2026-01-15T10:00:00.000Z",
+        },
+      });
+    });
+
+    it("should include size: 0 without omitting it", async () => {
+      const skills: SkillMetadata[] = [
+        {
+          name: "empty-skill",
+          description: "Empty",
+          path: "/skills/empty-skill",
+          size: 0,
+        },
+      ];
+      mockSkillService = createMockSkillService({ skills });
+      provider = new SkillResourceProvider(mockSkillService, mockLogger);
+
+      const result = await provider.listResources();
+
+      expect((result[0] as Record<string, unknown>).size).toBe(0);
+    });
+
+    it("should omit lastModified from annotations when not present", async () => {
+      const skills: SkillMetadata[] = [
+        {
+          name: "no-mtime",
+          description: "No mtime",
+          path: "/skills/no-mtime",
+          size: 100,
+        },
+      ];
+      mockSkillService = createMockSkillService({ skills });
+      provider = new SkillResourceProvider(mockSkillService, mockLogger);
+
+      const result = await provider.listResources();
+
+      expect(result[0]!.annotations).toEqual({
+        audience: ["assistant"],
+        priority: 0.5,
+      });
+      expect(result[0]!.annotations!.lastModified).toBeUndefined();
     });
 
     it("should return empty array when no skills exist", async () => {

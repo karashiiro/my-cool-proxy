@@ -108,11 +108,25 @@ Some content here...
       const skills = await service.discoverSkills();
 
       expect(skills).toHaveLength(1);
-      expect(skills[0]).toEqual({
+      expect(skills[0]).toMatchObject({
         name: "My Awesome Skill",
         description: "Does really cool things",
         path: skillDir,
       });
+      expect(skills[0]!.size).toBeGreaterThan(0);
+      expect(skills[0]!.lastModified).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    });
+
+    it("should include built-in skill with size but no lastModified when mutable", async () => {
+      mockConfig.skills = { enabled: true, mutable: true };
+      service = new SkillDiscoveryService(mockLogger, mockConfig);
+
+      const skills = await service.discoverSkills();
+
+      const builtin = skills.find((s) => s.name === "writing-gateway-skills");
+      expect(builtin).toBeDefined();
+      expect(builtin!.size).toBeGreaterThan(0);
+      expect(builtin!.lastModified).toBeUndefined();
     });
 
     it("should skip directories without SKILL.md", async () => {

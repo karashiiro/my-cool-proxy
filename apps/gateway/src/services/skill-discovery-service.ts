@@ -1,5 +1,6 @@
 import { injectable } from "inversify";
 import { existsSync, mkdirSync } from "fs";
+import type { Stats } from "node:fs";
 import { readFile, readdir, stat, access } from "node:fs/promises";
 import { resolve } from "path";
 import { getErrorMessage } from "@my-cool-proxy/mcp-utilities";
@@ -15,17 +16,6 @@ import { resolveAndValidate } from "./path-validator.js";
  * Built-in skill name for the skill creation guide.
  */
 const BUILTIN_CREATING_SKILLS_NAME = "writing-gateway-skills";
-
-/**
- * Built-in skill metadata for the skill creation guide.
- * This skill is virtual (not on disk) and only shown when skills.mutable is true.
- */
-const BUILTIN_CREATING_SKILLS_METADATA: SkillMetadata = {
-  name: BUILTIN_CREATING_SKILLS_NAME,
-  description:
-    "Use when asked to create, write, or save a gateway skill. Covers structure, patterns, and best practices.",
-  path: "", // Virtual skill - no path on disk
-};
 
 /**
  * Built-in skill content that explains how to create skills.
@@ -164,6 +154,18 @@ Before deploying, verify the skill works in a subagent or test session:
 2. **With skill**: Load it and retry - verify it helps
 3. **Edge cases**: Test uncommon scenarios
 `;
+
+/**
+ * Built-in skill metadata for the skill creation guide.
+ * This skill is virtual (not on disk) and only shown when skills.mutable is true.
+ */
+const BUILTIN_CREATING_SKILLS_METADATA: SkillMetadata = {
+  name: BUILTIN_CREATING_SKILLS_NAME,
+  description:
+    "Use when asked to create, write, or save a gateway skill. Covers structure, patterns, and best practices.",
+  path: "", // Virtual skill - no path on disk
+  size: Buffer.byteLength(BUILTIN_CREATING_SKILLS_CONTENT, "utf-8"),
+};
 
 @injectable()
 export class SkillDiscoveryService implements ISkillDiscoveryService {
@@ -353,8 +355,12 @@ export class SkillDiscoveryService implements ISkillDiscoveryService {
     dirName: string,
   ): Promise<SkillMetadata | null> {
     let content: string;
+    let fileStats: Stats;
     try {
-      content = await readFile(filePath, "utf-8");
+      [content, fileStats] = await Promise.all([
+        readFile(filePath, "utf-8"),
+        stat(filePath),
+      ]);
     } catch {
       this.logger.warn(`Failed to read skill file: ${filePath}`);
       return null;
@@ -387,6 +393,8 @@ export class SkillDiscoveryService implements ISkillDiscoveryService {
       name,
       description,
       path: resolve(filePath, ".."), // Parent directory
+      size: fileStats.size,
+      lastModified: fileStats.mtime.toISOString(),
     };
   }
 }

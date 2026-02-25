@@ -1,5 +1,6 @@
 import { injectable } from "inversify";
 import type {
+  Annotations,
   Resource,
   ReadResourceResult,
 } from "@modelcontextprotocol/sdk/types.js";
@@ -34,12 +35,22 @@ export class SkillResourceProvider implements IResourceProvider {
   async listResources(): Promise<Resource[]> {
     const skills = await this.skillService.discoverSkills();
 
-    return skills.map((skill) => ({
-      uri: createSkillResourceUri(skill.name),
-      name: skill.name,
-      description: skill.description,
-      mimeType: "text/markdown",
-    }));
+    return skills.map((skill) => {
+      const annotations: Annotations = {
+        audience: ["assistant"],
+        priority: 0.5,
+        ...(skill.lastModified && { lastModified: skill.lastModified }),
+      };
+
+      return {
+        uri: createSkillResourceUri(skill.name),
+        name: skill.name,
+        description: skill.description,
+        mimeType: "text/markdown",
+        annotations,
+        ...(skill.size != null && { size: skill.size }),
+      };
+    });
   }
 
   /**
