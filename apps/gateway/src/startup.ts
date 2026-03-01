@@ -11,6 +11,7 @@ import type {
   ISamplingShim,
   IServerInfoPreloader,
   ISkillDiscoveryService,
+  IToolInspectionStore,
   ServerConfig,
 } from "./types/interfaces.js";
 import type { IToolRegistry } from "./tools/tool-registry.js";
@@ -27,6 +28,7 @@ import { getDbPath, ensureDbDirectory } from "./utils/db-paths.js";
 import { SQLiteDatabase } from "./stores/sqlite-database.js";
 import { SQLiteCapabilityStore } from "./stores/sqlite-capability-store.js";
 import { SQLiteExecutionLog } from "./stores/sqlite-execution-log.js";
+import { SQLiteToolInspectionStore } from "./stores/sqlite-tool-inspection-store.js";
 
 /**
  * Common services resolved from the DI container.
@@ -79,6 +81,7 @@ export function initializeSqlite(
     purged.luaToolCalls +
     purged.luaExecutions +
     purged.mcpEvents +
+    purged.toolInspections +
     purged.sessionInitRequests +
     purged.sessions;
   if (totalPurged > 0) {
@@ -102,6 +105,13 @@ export function initializeSqlite(
       .bind<ICapabilityStore>(TYPES.CapabilityStore)
       .toConstantValue(capabilityStore);
   }
+
+  // Rebind tool inspection store to SQLite-backed implementation
+  // so tool-details state survives restarts (both HTTP and stdio modes)
+  container.unbind(TYPES.ToolInspectionStore);
+  container
+    .bind<IToolInspectionStore>(TYPES.ToolInspectionStore)
+    .toConstantValue(new SQLiteToolInspectionStore(sqliteDb));
 
   return { sqliteDb };
 }

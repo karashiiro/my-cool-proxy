@@ -11,7 +11,6 @@ import type {
   ILogger,
   IMCPClientManager,
   IShutdownHandler,
-  IToolInspectionStore,
   ServerConfig,
 } from "./types/interfaces.js";
 import { serveHttp } from "@karashiiro/mcp/http";
@@ -146,10 +145,6 @@ async function startHttpMode(
   const routingService = container.get<IResourceRoutingService>(
     TYPES.ResourceRoutingService,
   );
-  const toolInspectionStore = container.get<IToolInspectionStore>(
-    TYPES.ToolInspectionStore,
-  );
-
   // Preload upstream server info (skills discovered per-session in HTTP mode)
   const baseInstructions = await preloadInstructions(
     config,
@@ -264,8 +259,10 @@ async function startHttpMode(
             // Clean up resource routing data
             routingService.deleteSession(sessionId);
 
-            // Clean up tool inspection tracking
-            toolInspectionStore.deleteSession(sessionId);
+            // NOTE: Tool inspection state is intentionally NOT cleaned up here.
+            // It is persisted in SQLite so that agents don't need to re-call
+            // tool-details after a gateway restart (issue #79). Stale records
+            // are cleaned up by purgeOldData based on retention policy.
 
             // Clean up sampling shim if active
             if (services.samplingShim) {

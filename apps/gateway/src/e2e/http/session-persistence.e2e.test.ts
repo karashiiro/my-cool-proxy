@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { SQLiteDatabase } from "../../stores/sqlite-database.js";
 import { SQLiteEventStore } from "../../stores/sqlite-event-store.js";
 import { SQLiteCapabilityStore } from "../../stores/sqlite-capability-store.js";
+import { SQLiteToolInspectionStore } from "../../stores/sqlite-tool-inspection-store.js";
 import type { ILogger, ClientCapabilities } from "../../types/interfaces.js";
 import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
 
@@ -137,6 +138,85 @@ describe("Session Persistence E2E", () => {
 
         db.close();
       }
+    });
+  });
+
+  describe("Tool Inspection Persistence", () => {
+    it("should persist tool inspection state across database close/reopen", () => {
+      const sessionId = "inspection-persist-session";
+
+      // Phase 1: Create database, mark tools as inspected, close
+      {
+        const db = new SQLiteDatabase(testDbPath);
+        const inspectionStore = new SQLiteToolInspectionStore(db);
+
+        inspectionStore.markInspected(sessionId, "github", "search_issues");
+        inspectionStore.markInspected(sessionId, "slack", "send_message");
+
+        // Verify data is stored
+        expect(
+          inspectionStore.isInspected(sessionId, "github", "search_issues"),
+        ).toBe(true);
+        expect(
+          inspectionStore.isInspected(sessionId, "slack", "send_message"),
+        ).toBe(true);
+        expect(
+          inspectionStore.isInspected(sessionId, "github", "create_pr"),
+        ).toBe(false);
+
+        db.close();
+      }
+
+      // Phase 2: Reopen database, verify inspection state persisted
+      {
+        const db = new SQLiteDatabase(testDbPath);
+        const inspectionStore = new SQLiteToolInspectionStore(db);
+
+        // Data should still be there!
+        expect(
+          inspectionStore.isInspected(sessionId, "github", "search_issues"),
+        ).toBe(true);
+        expect(
+          inspectionStore.isInspected(sessionId, "slack", "send_message"),
+        ).toBe(true);
+        expect(
+          inspectionStore.isInspected(sessionId, "github", "create_pr"),
+        ).toBe(false);
+
+        db.close();
+      }
+    });
+
+    it("should isolate tool inspections between sessions across restarts", () => {
+      const db = new SQLiteDatabase(testDbPath);
+      const inspectionStore = new SQLiteToolInspectionStore(db);
+
+      inspectionStore.markInspected("session-1", "github", "search_issues");
+      inspectionStore.markInspected("session-2", "slack", "send_message");
+
+      expect(
+        inspectionStore.isInspected("session-1", "github", "search_issues"),
+      ).toBe(true);
+      expect(
+        inspectionStore.isInspected("session-1", "slack", "send_message"),
+      ).toBe(false);
+      expect(
+        inspectionStore.isInspected("session-2", "slack", "send_message"),
+      ).toBe(true);
+      expect(
+        inspectionStore.isInspected("session-2", "github", "search_issues"),
+      ).toBe(false);
+
+      // Delete session-1, session-2 should be unaffected
+      inspectionStore.deleteSession("session-1");
+      expect(
+        inspectionStore.isInspected("session-1", "github", "search_issues"),
+      ).toBe(false);
+      expect(
+        inspectionStore.isInspected("session-2", "slack", "send_message"),
+      ).toBe(true);
+
+      db.close();
     });
   });
 

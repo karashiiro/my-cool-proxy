@@ -216,6 +216,12 @@ describe("SQLiteDatabase", () => {
           "success",
           createdAt,
         );
+
+      database
+        .prepare(
+          `INSERT INTO tool_inspections (session_id, tool_key, created_at) VALUES (?, ?, ?)`,
+        )
+        .run(`session-${suffix}`, `server.tool-${suffix}`, createdAt);
     }
 
     function countAll(db: SQLiteDatabase) {
@@ -232,6 +238,7 @@ describe("SQLiteDatabase", () => {
         mcpEvents: count("mcp_events"),
         luaExecutions: count("lua_executions"),
         luaToolCalls: count("lua_tool_calls"),
+        toolInspections: count("tool_inspections"),
       };
     }
 
@@ -247,6 +254,7 @@ describe("SQLiteDatabase", () => {
       expect(result.mcpEvents).toBe(1);
       expect(result.luaExecutions).toBe(1);
       expect(result.luaToolCalls).toBe(1);
+      expect(result.toolInspections).toBe(1);
 
       const counts = countAll(db);
       expect(counts.sessions).toBe(1);
@@ -254,6 +262,7 @@ describe("SQLiteDatabase", () => {
       expect(counts.mcpEvents).toBe(1);
       expect(counts.luaExecutions).toBe(1);
       expect(counts.luaToolCalls).toBe(1);
+      expect(counts.toolInspections).toBe(1);
     });
 
     it("should preserve all data when nothing is expired", () => {
@@ -281,10 +290,12 @@ describe("SQLiteDatabase", () => {
       // Both are at least 1 day old, so both will be purged
       expect(result.sessions).toBe(2);
       expect(result.luaToolCalls).toBe(2);
+      expect(result.toolInspections).toBe(2);
 
       const counts = countAll(db);
       expect(counts.sessions).toBe(0);
       expect(counts.luaToolCalls).toBe(0);
+      expect(counts.toolInspections).toBe(0);
     });
   });
 

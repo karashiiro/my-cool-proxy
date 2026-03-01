@@ -25,6 +25,11 @@ export class SQLiteDatabase {
    * Creates tables if they don't exist.
    */
   private initializeSchema(): void {
+    // TODO: Enable PRAGMA foreign_keys = ON and add ON DELETE CASCADE to
+    // session-dependent tables (tool_inspections, session_init_requests,
+    // lua_tool_calls) so cleanup is handled automatically by SQLite instead
+    // of manual deletion ordering in purgeOldData/deleteSession.
+
     // Events table for SSE resumability
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS mcp_events (
@@ -54,6 +59,16 @@ export class SQLiteDatabase {
       CREATE TABLE IF NOT EXISTS session_init_requests (
         session_id TEXT PRIMARY KEY,
         request TEXT NOT NULL
+      );
+    `);
+
+    // Tool inspection tracking (survives restarts so agents don't need to re-call tool-details)
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS tool_inspections (
+        session_id TEXT NOT NULL,
+        tool_key TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        PRIMARY KEY (session_id, tool_key)
       );
     `);
 
@@ -146,6 +161,7 @@ export class SQLiteDatabase {
     luaToolCalls: number;
     luaExecutions: number;
     mcpEvents: number;
+    toolInspections: number;
     sessionInitRequests: number;
     sessions: number;
   } {
@@ -169,6 +185,15 @@ export class SQLiteDatabase {
         .prepare(`DELETE FROM mcp_events WHERE created_at < ?`)
         .run(cutoffMs).changes;
 
+      // tool_inspections has no independent timestamp — delete for old sessions
+      const toolInspections = this.db
+        .prepare(
+          `DELETE FROM tool_inspections WHERE session_id IN (
+            SELECT session_id FROM sessions WHERE created_at < ?
+          )`,
+        )
+        .run(cutoffMs).changes;
+
       // session_init_requests has no timestamp — delete orphans whose session is old
       const sessionInitRequests = this.db
         .prepare(
@@ -186,6 +211,7 @@ export class SQLiteDatabase {
         luaToolCalls,
         luaExecutions,
         mcpEvents,
+        toolInspections,
         sessionInitRequests,
         sessions,
       };
