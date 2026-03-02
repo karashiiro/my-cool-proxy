@@ -18,6 +18,15 @@ const createMockLogger = (): ILogger => ({
   fatal: () => {},
 });
 
+/** Insert a parent session row so FK constraints are satisfied. */
+function ensureSession(db: SQLiteDatabase, id: string): void {
+  db.getDatabase()
+    .prepare(
+      `INSERT OR IGNORE INTO sessions (session_id, created_at, last_activity) VALUES (?, ?, ?)`,
+    )
+    .run(id, Date.now(), Date.now());
+}
+
 describe("Session Persistence E2E", () => {
   let testDbPath: string;
   let testDir: string;
@@ -103,6 +112,7 @@ describe("Session Persistence E2E", () => {
       // Phase 1: Store events
       {
         const db = new SQLiteDatabase(testDbPath);
+        ensureSession(db, sessionId);
         const eventStore = new SQLiteEventStore(db, sessionId);
 
         eventIds = [];
@@ -148,6 +158,7 @@ describe("Session Persistence E2E", () => {
       // Phase 1: Create database, mark tools as inspected, close
       {
         const db = new SQLiteDatabase(testDbPath);
+        ensureSession(db, sessionId);
         const inspectionStore = new SQLiteToolInspectionStore(db);
 
         inspectionStore.markInspected(sessionId, "github", "search_issues");
@@ -189,6 +200,8 @@ describe("Session Persistence E2E", () => {
 
     it("should isolate tool inspections between sessions across restarts", () => {
       const db = new SQLiteDatabase(testDbPath);
+      ensureSession(db, "session-1");
+      ensureSession(db, "session-2");
       const inspectionStore = new SQLiteToolInspectionStore(db);
 
       inspectionStore.markInspected("session-1", "github", "search_issues");
@@ -244,6 +257,8 @@ describe("Session Persistence E2E", () => {
 
     it("should isolate events between sessions", async () => {
       const db = new SQLiteDatabase(testDbPath);
+      ensureSession(db, "session-1");
+      ensureSession(db, "session-2");
 
       const session1Store = new SQLiteEventStore(db, "session-1");
       const session2Store = new SQLiteEventStore(db, "session-2");
@@ -291,6 +306,9 @@ describe("Session Persistence E2E", () => {
   describe("Concurrent Access", () => {
     it("should handle concurrent writes from multiple event stores", async () => {
       const db = new SQLiteDatabase(testDbPath);
+      ensureSession(db, "concurrent-1");
+      ensureSession(db, "concurrent-2");
+      ensureSession(db, "concurrent-3");
 
       // Create multiple stores writing concurrently
       const stores = [
@@ -348,6 +366,8 @@ describe("Session Persistence E2E", () => {
       const eventStoreFactory = (sessionId: string) =>
         new SQLiteEventStore(db, sessionId);
 
+      ensureSession(db, "factory-session-1");
+      ensureSession(db, "factory-session-2");
       const store1 = eventStoreFactory("factory-session-1");
       const store2 = eventStoreFactory("factory-session-2");
 

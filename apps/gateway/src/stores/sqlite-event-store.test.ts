@@ -8,8 +8,18 @@ describe("SQLiteEventStore", () => {
   let store: SQLiteEventStore;
   const sessionId = "test-session";
 
+  /** Insert a parent session row so FK constraints are satisfied. */
+  function ensureSession(id: string): void {
+    db.getDatabase()
+      .prepare(
+        `INSERT OR IGNORE INTO sessions (session_id, created_at, last_activity) VALUES (?, ?, ?)`,
+      )
+      .run(id, Date.now(), Date.now());
+  }
+
   beforeEach(() => {
     db = new SQLiteDatabase(":memory:");
+    ensureSession(sessionId);
     store = new SQLiteEventStore(db, sessionId);
   });
 
@@ -89,6 +99,7 @@ describe("SQLiteEventStore", () => {
       const eventId = await store.storeEvent("my-stream", message);
 
       // Create store for different session
+      ensureSession("other-session");
       const otherStore = new SQLiteEventStore(db, "other-session");
       const streamId = await otherStore.getStreamIdForEventId(eventId);
 
@@ -183,6 +194,7 @@ describe("SQLiteEventStore", () => {
       });
 
       // Create store for different session and try to replay
+      ensureSession("other-session");
       const otherStore = new SQLiteEventStore(db, "other-session");
       const replayedEvents: JSONRPCMessage[] = [];
       const streamId = await otherStore.replayEventsAfter(eventId, {
@@ -222,6 +234,7 @@ describe("SQLiteEventStore", () => {
       await store.storeEvent("stream-1", message);
 
       // Store event in other session
+      ensureSession("other-session");
       const otherStore = new SQLiteEventStore(db, "other-session");
       await otherStore.storeEvent("stream-1", message);
 

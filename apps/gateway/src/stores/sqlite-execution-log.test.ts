@@ -6,9 +6,24 @@ describe("SQLiteExecutionLog", () => {
   let db: SQLiteDatabase;
   let log: SQLiteExecutionLog;
 
+  /** Insert a parent session row so FK constraints are satisfied. */
+  function ensureSession(id: string): void {
+    db.getDatabase()
+      .prepare(
+        `INSERT OR IGNORE INTO sessions (session_id, created_at, last_activity) VALUES (?, ?, ?)`,
+      )
+      .run(id, Date.now(), Date.now());
+  }
+
   beforeEach(() => {
     db = new SQLiteDatabase(":memory:");
     log = new SQLiteExecutionLog(db);
+    // Pre-create commonly used sessions
+    ensureSession("session-1");
+    ensureSession("session-2");
+    ensureSession("s");
+    ensureSession("s1");
+    ensureSession("s2");
   });
 
   afterEach(() => {

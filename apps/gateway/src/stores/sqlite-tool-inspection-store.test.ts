@@ -9,6 +9,15 @@ describe("SQLiteToolInspectionStore", () => {
   let db: SQLiteDatabase;
   let store: SQLiteToolInspectionStore;
 
+  /** Insert a parent session row so FK constraints are satisfied. */
+  function ensureSession(sessionId: string): void {
+    db.getDatabase()
+      .prepare(
+        `INSERT OR IGNORE INTO sessions (session_id, created_at, last_activity) VALUES (?, ?, ?)`,
+      )
+      .run(sessionId, Date.now(), Date.now());
+  }
+
   beforeEach(() => {
     db = new SQLiteDatabase(":memory:");
     store = new SQLiteToolInspectionStore(db);
@@ -26,6 +35,7 @@ describe("SQLiteToolInspectionStore", () => {
     });
 
     it("should return true after marking a tool as inspected", () => {
+      ensureSession("session1");
       store.markInspected("session1", "github", "search_issues");
       expect(store.isInspected("session1", "github", "search_issues")).toBe(
         true,
@@ -33,6 +43,7 @@ describe("SQLiteToolInspectionStore", () => {
     });
 
     it("should track multiple tools per session", () => {
+      ensureSession("session1");
       store.markInspected("session1", "github", "search_issues");
       store.markInspected("session1", "github", "create_pr");
       store.markInspected("session1", "slack", "send_message");
@@ -48,6 +59,7 @@ describe("SQLiteToolInspectionStore", () => {
     });
 
     it("should isolate sessions from each other", () => {
+      ensureSession("session1");
       store.markInspected("session1", "github", "search_issues");
 
       expect(store.isInspected("session1", "github", "search_issues")).toBe(
@@ -59,6 +71,7 @@ describe("SQLiteToolInspectionStore", () => {
     });
 
     it("should handle marking the same tool twice without error", () => {
+      ensureSession("session1");
       store.markInspected("session1", "github", "search_issues");
       store.markInspected("session1", "github", "search_issues");
 
@@ -70,6 +83,7 @@ describe("SQLiteToolInspectionStore", () => {
 
   describe("deleteSession", () => {
     it("should clear all inspections for a session", () => {
+      ensureSession("session1");
       store.markInspected("session1", "github", "search_issues");
       store.markInspected("session1", "slack", "send_message");
 
@@ -84,6 +98,8 @@ describe("SQLiteToolInspectionStore", () => {
     });
 
     it("should not affect other sessions", () => {
+      ensureSession("session1");
+      ensureSession("session2");
       store.markInspected("session1", "github", "search_issues");
       store.markInspected("session2", "github", "search_issues");
 
@@ -128,6 +144,14 @@ describe("SQLiteToolInspectionStore", () => {
       {
         const fileDb = new SQLiteDatabase(testDbPath);
         const fileStore = new SQLiteToolInspectionStore(fileDb);
+
+        // Insert parent session row for FK constraint
+        fileDb
+          .getDatabase()
+          .prepare(
+            `INSERT INTO sessions (session_id, created_at, last_activity) VALUES (?, ?, ?)`,
+          )
+          .run("session1", Date.now(), Date.now());
 
         fileStore.markInspected("session1", "github", "search_issues");
         fileStore.markInspected("session1", "slack", "send_message");

@@ -234,8 +234,21 @@ async function startHttpMode(
         // Session expires after 5 minutes of inactivity (default is 30 minutes)
         sessionTtlMs: SESSION_TTL_MS,
         // SQLite-backed event store for SSE resumability across restarts
-        eventStoreFactory: (sessionId) =>
-          new SQLiteEventStore(sqliteDb, sessionId),
+        eventStoreFactory: (sessionId) => {
+          // Insert a placeholder sessions row eagerly so that child tables
+          // (mcp_events, session_init_requests) can write their FK-constrained
+          // rows before setCapabilities() is called by onSessionInitialized.
+          // setCapabilities() uses INSERT OR ... DO UPDATE, so it will simply
+          // update this placeholder when the real capabilities arrive.
+          sqliteDb
+            .getDatabase()
+            .prepare(
+              `INSERT OR IGNORE INTO sessions (session_id, created_at, last_activity)
+               VALUES (?, ?, ?)`,
+            )
+            .run(sessionId, Date.now(), Date.now());
+          return new SQLiteEventStore(sqliteDb, sessionId);
+        },
         // Clean up session-scoped state when sessions are closed
         onSessionClosed: async (sessionId) => {
           logger.info(`Session ${sessionId} closed, cleaning up...`);
@@ -381,6 +394,20 @@ async function startStdioMode(
   // Initialize SQLite for execution logging (no capability store rebind for stdio)
   const { sqliteDb } = initializeSqlite(container, config, logger);
 
+  // Fixed session ID for stdio (single session mode)
+  const STDIO_SESSION_ID = "default";
+
+  // Insert a placeholder sessions row so that lua_executions and tool_inspections
+  // (which have FK constraints on sessions.session_id) can write rows even though
+  // the in-memory capability store never inserts into the sessions table.
+  sqliteDb
+    .getDatabase()
+    .prepare(
+      `INSERT OR IGNORE INTO sessions (session_id, created_at, last_activity)
+       VALUES (?, ?, ?)`,
+    )
+    .run(STDIO_SESSION_ID, Date.now(), Date.now());
+
   // Install NotifyingExecutionLog for dashboard WebSocket broadcasts
   let broadcastFn: ((event: DashboardEvent) => void) | undefined;
   let pendingEvents: DashboardEvent[] = [];
@@ -398,9 +425,6 @@ async function startStdioMode(
 
   // Resolve shared services (after SQLite rebindings)
   const services = resolveCommonServices(container);
-
-  // Fixed session ID for stdio (single session mode)
-  const SESSION_ID = "default";
 
   // Preload upstream server info and discover skills eagerly (single session)
   const aggregatedInstructions = await preloadInstructions(
@@ -427,7 +451,7 @@ async function startStdioMode(
     // Set up callback to initialize upstream clients when downstream client connects
     gatewayServer.setOnDownstreamInitialized(async (capabilities) => {
       await handleDownstreamInitialized(
-        SESSION_ID,
+        STDIO_SESSION_ID,
         capabilities,
         config,
         services,
@@ -493,7 +517,7 @@ async function startStdioMode(
     // Clean up working directory if it's a tempdir
     try {
       const workingDir =
-        services.capabilityStore.getWorkingDirectory(SESSION_ID);
+        services.capabilityStore.getWorkingDirectory(STDIO_SESSION_ID);
       if (workingDir && workingDir.includes("mcp-gateway-")) {
         cleanupSessionTempDir(workingDir);
         logger.debug(`Cleaned up tempdir: ${workingDir}`);
