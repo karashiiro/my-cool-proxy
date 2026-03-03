@@ -459,7 +459,12 @@ describe("SQLiteDatabase", () => {
 
     afterEach(() => {
       if (tempDir) {
-        rmSync(tempDir, { recursive: true, force: true });
+        rmSync(tempDir, {
+          recursive: true,
+          force: true,
+          maxRetries: 3,
+          retryDelay: 100,
+        });
         tempDir = null;
       }
     });

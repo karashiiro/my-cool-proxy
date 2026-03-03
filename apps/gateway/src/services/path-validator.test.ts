@@ -1,3 +1,4 @@
+import { resolve } from "path";
 import { describe, it, expect } from "vitest";
 import { isSafePathComponent, resolveAndValidate } from "./path-validator.js";
 
@@ -26,7 +27,7 @@ describe("isSafePathComponent", () => {
 describe("resolveAndValidate", () => {
   it("resolves a valid relative path within the base", () => {
     const result = resolveAndValidate("/base/dir", "child/file.txt");
-    expect(result).toBe("/base/dir/child/file.txt");
+    expect(result).toBe(resolve("/base/dir", "child/file.txt"));
   });
 
   it("throws for path traversal escaping base directory", () => {
@@ -44,6 +45,6 @@ describe("resolveAndValidate", () => {
 
   it("resolves nested paths correctly", () => {
     const result = resolveAndValidate("/base", "a/b/c/d.txt");
-    expect(result).toBe("/base/a/b/c/d.txt");
+    expect(result).toBe(resolve("/base", "a/b/c/d.txt"));
   });
 });

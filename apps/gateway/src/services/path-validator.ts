@@ -20,9 +20,10 @@ export function resolveAndValidate(
   basePath: string,
   relativePath: string,
 ): string {
-  const resolved = resolve(basePath, relativePath);
+  const normalizedBase = resolve(basePath);
+  const resolved = resolve(normalizedBase, relativePath);
 
-  if (!resolved.startsWith(basePath + sep)) {
+  if (!resolved.startsWith(normalizedBase + sep)) {
     throw new Error(
       `Invalid path: '${relativePath}' - path must be within the base directory`,
     );
