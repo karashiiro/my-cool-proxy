@@ -14,6 +14,7 @@ import type {
   ISkillOperationsService,
   IToolInspectionStore,
   IGatewayBuiltins,
+  IExecutionLog,
 } from "../types/interfaces.js";
 
 /**
@@ -35,6 +36,7 @@ export class GatewayBuiltinsBuilder {
     private config: ServerConfig,
     private logger: ILogger,
     private toolInspectionStore: IToolInspectionStore,
+    private executionLog: IExecutionLog,
   ) {}
 
   build(sessionId: string): IGatewayBuiltins {
@@ -347,6 +349,25 @@ export class GatewayBuiltinsBuilder {
         };
       }
     }
+
+    // Add get_result builtin for retrieving offloaded execution results
+    const executionLog = this.executionLog;
+    builtins.getResult = async (id: string) => {
+      if (!id || typeof id !== "string") {
+        return { error: "Missing required parameter: id" };
+      }
+      const resultJson = executionLog.getExecutionResult(id);
+      if (resultJson === undefined) {
+        return {
+          error: `No result found for execution ID '${id}'. The execution may not exist or may not have produced a result.`,
+        };
+      }
+      try {
+        return JSON.parse(resultJson);
+      } catch {
+        return resultJson;
+      }
+    };
 
     return builtins;
   }

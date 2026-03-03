@@ -118,6 +118,12 @@ export interface IGatewayBuiltins {
   ): Promise<unknown>;
 
   /**
+   * Retrieve a previously-offloaded execution result by its execution ID.
+   * Only available when result offloading is enabled.
+   */
+  getResult?(id: string): Promise<unknown>;
+
+  /**
    * Register a resource URI encountered in tool results for routing.
    * Called by the runtime when a tool result contains resource_link or
    * embedded resource content blocks.

@@ -24,6 +24,7 @@ import {
   cleanupSessionTempDir,
   initializeSamplingShim,
 } from "../../utils/index.js";
+import { initializeSqlite } from "../../startup.js";
 
 export class HttpServerManager {
   private serverHandle: ServerHandle | null = null;
@@ -48,6 +49,11 @@ export class HttpServerManager {
     const container = createContainer(config);
 
     const logger = container.get<ILogger>(TYPES.Logger);
+
+    // Initialize SQLite persistence (same as production startup)
+    initializeSqlite(container, config, logger, {
+      rebindCapabilityStore: true,
+    });
 
     // Store client manager for cleanup
     this.clientManager = container.get<IMCPClientManager>(

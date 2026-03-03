@@ -315,6 +315,22 @@ function validateDashboardConfig(config: ServerConfig): void {
 }
 
 /**
+ * Validates the resultSizeThreshold configuration if provided.
+ */
+function validateResultSizeThreshold(config: ServerConfig): void {
+  if (config.resultSizeThreshold === undefined) return;
+
+  if (
+    typeof config.resultSizeThreshold !== "number" ||
+    config.resultSizeThreshold < 0
+  ) {
+    throw new Error(
+      "Config 'resultSizeThreshold' must be a non-negative number if specified",
+    );
+  }
+}
+
+/**
  * Validates a single MCP client configuration.
  */
 function validateMcpClientConfig(
@@ -466,6 +482,7 @@ export function loadConfig(): ServerConfig {
     validateLoggingConfig(config);
     validateDatabaseConfig(config);
     validateDashboardConfig(config);
+    validateResultSizeThreshold(config);
 
     return config;
   } catch (error) {

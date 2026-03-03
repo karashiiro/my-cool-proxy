@@ -366,6 +366,15 @@ export interface ServerConfig {
    * The dashboard starts in both HTTP and stdio modes.
    */
   dashboard?: DashboardConfig;
+  /**
+   * Byte-size threshold for offloading large Lua execution results.
+   * When a result's JSON representation exceeds this threshold, the gateway
+   * returns a schema summary with an execution ID instead of the full payload.
+   * The full result can be retrieved via `_gateway.get_result()` in a follow-up script.
+   * Set to 0 to disable offloading entirely.
+   * @default 50000
+   */
+  resultSizeThreshold?: number;
 }
 
 export type { ILogger } from "@my-cool-proxy/logger";
@@ -620,6 +629,12 @@ export interface IExecutionLog {
    * @param result JSON-serialized result value
    */
   markToolCallResult(callId: string, result: string): void;
+
+  /**
+   * Get the stored result of an execution by its ID.
+   * @returns The JSON-serialized result string, or undefined if not found / no result
+   */
+  getExecutionResult(executionId: string): string | undefined;
 
   /**
    * Get recent executions for a session, ordered by created_at DESC.

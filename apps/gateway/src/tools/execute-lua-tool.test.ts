@@ -20,6 +20,10 @@ describe("ExecuteLuaTool", () => {
     luaRuntime = unitRef.get(TYPES.LuaRuntime);
     clientManager = unitRef.get(TYPES.MCPClientManager);
     logger = unitRef.get(TYPES.Logger);
+
+    // Ensure resultSizeThreshold defaults to undefined (uses 50_000 internally)
+    const config = unitRef.get(TYPES.ServerConfig);
+    config.resultSizeThreshold = undefined;
   });
 
   describe("execute", () => {
@@ -303,6 +307,43 @@ describe("ExecuteLuaTool", () => {
       });
       // Arrays should NOT be in structuredContent (MCP schema violation)
       expect(result.structuredContent).toBeUndefined();
+    });
+
+    describe("result offloading", () => {
+      it("should return normally when result is under threshold", async () => {
+        const smallResult = { a: 1, b: 2 };
+        luaRuntime.executeScript.mockResolvedValue(smallResult);
+
+        const config = unitRef.get(TYPES.ServerConfig);
+        config.resultSizeThreshold = 50_000;
+
+        const result = await tool.execute(
+          { script: "result({a=1,b=2})" },
+          { sessionId: "test" },
+        );
+
+        expect(result.structuredContent).toEqual(smallResult);
+      });
+
+      it("should not offload when threshold is 0 (disabled)", async () => {
+        const largeResult = Array.from({ length: 1000 }, (_, i) => ({
+          id: i,
+        }));
+        luaRuntime.executeScript.mockResolvedValue(largeResult);
+
+        const config = unitRef.get(TYPES.ServerConfig);
+        config.resultSizeThreshold = 0;
+
+        const result = await tool.execute(
+          { script: "result(data)" },
+          { sessionId: "test" },
+        );
+
+        // Should contain the raw JSON, not offloaded
+        const text =
+          result.content[0]?.type === "text" ? result.content[0].text : "";
+        expect(text).not.toContain("Result offloaded");
+      });
     });
 
     it("should handle array of objects without structuredContent", async () => {

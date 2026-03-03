@@ -448,6 +448,17 @@ Common issues:
       };
     }
 
+    // Conditional builtin: get_result (only when result offloading is enabled)
+    if (builtins.getResult) {
+      const getResult = builtins.getResult;
+      gatewayTable["get_result"] = async (args: { id: string }) => {
+        this.logger.debug(
+          `Calling _gateway.get_result({ id = "${args?.id}" })`,
+        );
+        return getResult(args?.id);
+      };
+    }
+
     // Set as global with underscore prefix
     engine.global.set("_gateway", gatewayTable);
 

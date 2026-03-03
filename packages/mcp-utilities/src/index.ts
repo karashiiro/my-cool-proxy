@@ -22,3 +22,6 @@ export {
 
 // Schema formatter utilities
 export { formatSchema, getSchemaType } from "./schema-formatter.js";
+
+// Schema inferrer utilities
+export { inferSchema } from "./schema-inferrer.js";

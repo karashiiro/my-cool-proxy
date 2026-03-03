@@ -35,6 +35,10 @@ export class NoopExecutionLog implements IExecutionLog {
 
   markToolCallResult(_callId: string, _result: string): void {}
 
+  getExecutionResult(_executionId: string): string | undefined {
+    return undefined;
+  }
+
   getExecutions(_sessionId: string, _limit?: number): LuaExecution[] {
     return [];
   }

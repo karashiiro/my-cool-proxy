@@ -336,6 +336,25 @@ describe("SQLiteExecutionLog", () => {
     });
   });
 
+  describe("getExecutionResult", () => {
+    it("should return stored result for an execution", () => {
+      const id = log.logExecution("session-1", "result(42)");
+      log.markExecutionResult(id, JSON.stringify({ items: [1, 2, 3] }));
+
+      const result = log.getExecutionResult(id);
+      expect(result).toBe(JSON.stringify({ items: [1, 2, 3] }));
+    });
+
+    it("should return undefined for non-existent execution", () => {
+      expect(log.getExecutionResult("nonexistent")).toBeUndefined();
+    });
+
+    it("should return undefined when execution has no result", () => {
+      const id = log.logExecution("session-1", "-- no result");
+      expect(log.getExecutionResult(id)).toBeUndefined();
+    });
+  });
+
   describe("getToolCalls", () => {
     it("should return tool calls in descending order by timestamp", async () => {
       const execId = log.logExecution("session-1", "multi-call script");

@@ -28,6 +28,7 @@ import { TYPES } from "../types/index.js";
 import type { ITool, ToolExecutionContext } from "./base-tool.js";
 import { getEffectiveSessionId } from "../utils/session.js";
 import { GatewayBuiltinsBuilder } from "./gateway-builtins-builder.js";
+import { maybeOffloadResult } from "./result-offloader.js";
 import { validateToolArgs } from "./tool-validation.js";
 
 /**
@@ -78,7 +79,8 @@ The \`_gateway\` global table provides built-in functions:
 - _gateway.list_prompts():await() - List all available prompts across connected servers
 - _gateway.get_prompt({ name = "...", arguments = {...} }):await() - Get a prompt by namespaced name (server-name/prompt-name). Use _gateway.complete() to discover valid values for prompt arguments
 - _gateway.complete({ ref = {...}, argument = { name = "...", value = "..." }, context = { arguments = {...} } }):await() - Get completions for a resource template variable (ref.type = "ref/resource", ref.uri = template URI) or prompt argument (ref.type = "ref/prompt", ref.name = namespaced prompt name). Pass partial value for fuzzy matching. Use context.arguments to provide other already-resolved variables for context-aware suggestions
-- _gateway.summary_stats():await() - Get gateway statistics (server/tool/resource/prompt counts)`;
+- _gateway.summary_stats():await() - Get gateway statistics (server/tool/resource/prompt counts)
+- _gateway.get_result({ id = "..." }):await() - Retrieve a previously-offloaded execution result by ID. Large results are automatically offloaded with a schema summary; use this to fetch the full data and filter it in Lua`;
 
 const SKILLS_NOTE = `
 
@@ -197,6 +199,11 @@ export class ExecuteLuaTool implements ITool {
         );
       }
 
+      // Check if result should be offloaded due to size
+      const threshold = this.config.resultSizeThreshold ?? 50_000;
+      const offloaded = maybeOffloadResult(result, executionId, threshold);
+      if (offloaded) return offloaded;
+
       // Check if result is already a valid CallToolResult
       if (
         result &&
@@ -271,6 +278,7 @@ export class ExecuteLuaTool implements ITool {
       this.config,
       this.logger,
       this.toolInspectionStore,
+      this.executionLog,
     ).build(sessionId);
   }
 }

@@ -157,6 +157,20 @@ export class SQLiteExecutionLog
   }
 
   /**
+   * Get the stored result of an execution by its ID.
+   * @param executionId The execution to retrieve the result for
+   * @returns The JSON-serialized result string, or undefined if not found / no result
+   */
+  getExecutionResult(executionId: string): string | undefined {
+    return safeExecute(() => {
+      const row = this.database
+        .prepare(`SELECT result FROM lua_executions WHERE execution_id = ?`)
+        .get(executionId) as { result: string | null } | undefined;
+      return row?.result ?? undefined;
+    }, "getExecutionResult");
+  }
+
+  /**
    * Get recent executions for a session, ordered by timestamp descending.
    * @param sessionId The session to query
    * @param limit Maximum number of executions to return (default 50)
