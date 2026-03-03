@@ -160,7 +160,13 @@ export class HttpServerManager {
                 cleanupSessionTempDir(workingDir);
               }
 
-              capabilityStore.deleteCapabilities(sessionId);
+              // NOTE: Session data (capabilities, init requests, events) is intentionally
+              // NOT deleted from SQLite here. The SDK preserves event stores across transport
+              // close and shutdown to enable session restoration after restart. Deleting the
+              // sessions row would cascade-delete session_init_requests and mcp_events,
+              // breaking restoration. Stale sessions are cleaned by purgeOldData (retention
+              // policy). Explicit DELETE requests are handled by the SDK via eventStore.clear().
+
               if (samplingShim) {
                 await samplingShim.close(sessionId);
               }

@@ -402,4 +402,91 @@ describe("Session Persistence E2E", () => {
       db.close();
     });
   });
+
+  describe("Session Data Preservation on Close", () => {
+    it("should preserve session_init_requests when deleteCapabilities is NOT called (fixed shutdown behavior)", async () => {
+      const sessionId = "restore-test-session";
+      const initRequest: JSONRPCMessage = {
+        jsonrpc: "2.0",
+        method: "initialize",
+        id: 1,
+        params: {
+          protocolVersion: "2025-03-26",
+          capabilities: { sampling: {} },
+          clientInfo: { name: "test-client", version: "1.0.0" },
+        },
+      };
+      const caps: ClientCapabilities = { sampling: { context: {} } };
+
+      // Phase 1: Create session, store init request, simulate shutdown WITHOUT deleteCapabilities
+      {
+        const db = new SQLiteDatabase(testDbPath);
+        const capStore = new SQLiteCapabilityStore(db, createMockLogger());
+        const eventStore = new SQLiteEventStore(db, sessionId);
+
+        capStore.setCapabilities(sessionId, caps);
+        await eventStore.storeInitializeRequest(sessionId, initRequest);
+
+        // Verify data exists before "shutdown"
+        expect(await eventStore.hasSession(sessionId)).toBe(true);
+        expect(await eventStore.getInitializeRequest(sessionId)).toEqual(
+          initRequest,
+        );
+
+        // Simulate fixed shutdown: close upstream connections, clean up in-memory
+        // state, but do NOT call deleteCapabilities — session data stays in SQLite
+        db.close();
+      }
+
+      // Phase 2: Reopen database (simulating restart), verify restoration data survived
+      {
+        const db = new SQLiteDatabase(testDbPath);
+        const eventStore = new SQLiteEventStore(db, sessionId);
+
+        // hasSession should return true — restoration can proceed
+        expect(await eventStore.hasSession(sessionId)).toBe(true);
+
+        // The stored init request should be retrievable for replay
+        const storedRequest = await eventStore.getInitializeRequest(sessionId);
+        expect(storedRequest).toEqual(initRequest);
+
+        db.close();
+      }
+    });
+
+    it("should CASCADE-delete session_init_requests when deleteCapabilities IS called (old broken behavior)", async () => {
+      const sessionId = "cascade-test-session";
+      const initRequest: JSONRPCMessage = {
+        jsonrpc: "2.0",
+        method: "initialize",
+        id: 1,
+        params: {
+          protocolVersion: "2025-03-26",
+          capabilities: {},
+          clientInfo: { name: "test-client", version: "1.0.0" },
+        },
+      };
+      const caps: ClientCapabilities = { sampling: { context: {} } };
+
+      const db = new SQLiteDatabase(testDbPath);
+      const capStore = new SQLiteCapabilityStore(db, createMockLogger());
+      const eventStore = new SQLiteEventStore(db, sessionId);
+
+      capStore.setCapabilities(sessionId, caps);
+      await eventStore.storeInitializeRequest(sessionId, initRequest);
+
+      // Verify data exists
+      expect(await eventStore.hasSession(sessionId)).toBe(true);
+
+      // Call deleteCapabilities — this deletes the sessions row, which
+      // CASCADE-deletes session_init_requests and mcp_events
+      capStore.deleteCapabilities(sessionId);
+
+      // Init request is gone — session restoration is impossible
+      expect(await eventStore.hasSession(sessionId)).toBe(false);
+      expect(await eventStore.getInitializeRequest(sessionId)).toBeUndefined();
+
+      db.close();
+    });
+  });
 });
