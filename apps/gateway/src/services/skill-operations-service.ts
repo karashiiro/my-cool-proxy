@@ -112,6 +112,7 @@ export class SkillOperationsService {
    * Create or modify a gateway skill.
    * Adapted from WriteGatewaySkillTool.
    */
+  // eslint-disable-next-line max-lines-per-function, sonarjs/cognitive-complexity, complexity
   async writeSkillFiles(
     skillName: string,
     content?: string,
@@ -222,6 +223,7 @@ export class SkillOperationsService {
   /**
    * Partially update an existing skill file using old_string/new_string replacement.
    */
+  // eslint-disable-next-line sonarjs/cognitive-complexity
   async updateSkillFile(
     skillName: string,
     file: string,

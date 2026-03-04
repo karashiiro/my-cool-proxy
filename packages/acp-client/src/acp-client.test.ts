@@ -338,9 +338,11 @@ describe("ACPClient", () => {
 
       // Handler should be captured
       expect(capturedHandler).not.toBeNull();
+      if (!capturedHandler)
+        throw new Error("capturedHandler not set after connect");
 
       // Test permission request for an "execute" kind tool (normally dangerous)
-      const result = await capturedHandler!.requestPermission(
+      const result = await capturedHandler.requestPermission(
         createPermissionRequest("Run Shell Command", "execute"),
       );
 
@@ -367,8 +369,11 @@ describe("ACPClient", () => {
 
       await client.connect();
 
+      if (!capturedHandler)
+        throw new Error("capturedHandler not set after connect");
+
       // Test "read" kind - should be approved
-      const readResult = await capturedHandler!.requestPermission(
+      const readResult = await capturedHandler.requestPermission(
         createPermissionRequest("Read File", "read"),
       );
       expect(readResult.outcome).toEqual({
@@ -380,7 +385,7 @@ describe("ACPClient", () => {
       );
 
       // Test "search" kind - should be approved
-      const searchResult = await capturedHandler!.requestPermission(
+      const searchResult = await capturedHandler.requestPermission(
         createPermissionRequest("Search Code", "search"),
       );
       expect(searchResult.outcome).toEqual({
@@ -389,7 +394,7 @@ describe("ACPClient", () => {
       });
 
       // Test "think" kind - should be approved
-      const thinkResult = await capturedHandler!.requestPermission(
+      const thinkResult = await capturedHandler.requestPermission(
         createPermissionRequest("Think", "think"),
       );
       expect(thinkResult.outcome).toEqual({
@@ -412,20 +417,23 @@ describe("ACPClient", () => {
 
       await client.connect();
 
+      if (!capturedHandler)
+        throw new Error("capturedHandler not set after connect");
+
       // Test "execute" kind - should be denied (not in allowed list)
-      const executeResult = await capturedHandler!.requestPermission(
+      const executeResult = await capturedHandler.requestPermission(
         createPermissionRequest("Run Shell", "execute"),
       );
       expect(executeResult.outcome).toEqual({ outcome: "cancelled" });
 
       // Test "edit" kind - should be denied
-      const editResult = await capturedHandler!.requestPermission(
+      const editResult = await capturedHandler.requestPermission(
         createPermissionRequest("Edit File", "edit"),
       );
       expect(editResult.outcome).toEqual({ outcome: "cancelled" });
 
       // Test "delete" kind - should be denied
-      const deleteResult = await capturedHandler!.requestPermission(
+      const deleteResult = await capturedHandler.requestPermission(
         createPermissionRequest("Delete File", "delete"),
       );
       expect(deleteResult.outcome).toEqual({ outcome: "cancelled" });
@@ -445,8 +453,11 @@ describe("ACPClient", () => {
 
       await client.connect();
 
+      if (!capturedHandler)
+        throw new Error("capturedHandler not set after connect");
+
       // Tool with no kind property - should be denied
-      const result = await capturedHandler!.requestPermission(
+      const result = await capturedHandler.requestPermission(
         createPermissionRequest("Unknown Tool", undefined),
       );
       expect(result.outcome).toEqual({ outcome: "cancelled" });
@@ -463,11 +474,14 @@ describe("ACPClient", () => {
 
       await client.connect();
 
+      if (!capturedHandler)
+        throw new Error("capturedHandler not set after connect");
+
       // Create a session with a toolTag
       await client.createSession(undefined, undefined, "sidecar-abc123");
 
       // Tool with matching tag in title - should be approved
-      const result = await capturedHandler!.requestPermission({
+      const result = await capturedHandler.requestPermission({
         sessionId: "acp-session-123",
         toolCall: {
           toolCallId: "sidecar-tool-call",
@@ -504,8 +518,11 @@ describe("ACPClient", () => {
 
       await client.connect();
 
+      if (!capturedHandler)
+        throw new Error("capturedHandler not set after connect");
+
       // Should be approved via dangerouslyAllowAll, not denied by empty toolKinds
-      const result = await capturedHandler!.requestPermission(
+      const result = await capturedHandler.requestPermission(
         createPermissionRequest("Execute Something", "execute"),
       );
 
@@ -529,8 +546,11 @@ describe("ACPClient", () => {
 
       await client.connect();
 
+      if (!capturedHandler)
+        throw new Error("capturedHandler not set after connect");
+
       // Any tool without a matching tag should be denied
-      const result = await capturedHandler!.requestPermission(
+      const result = await capturedHandler.requestPermission(
         createPermissionRequest("Random Tool", "execute"),
       );
 

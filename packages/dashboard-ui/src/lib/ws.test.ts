@@ -56,7 +56,10 @@ class MockWebSocket {
 
   /** Most recent instance created (convenience accessor). */
   static get latest(): MockWebSocket {
-    return MockWebSocket.instances[MockWebSocket.instances.length - 1]!;
+    const instance =
+      MockWebSocket.instances[MockWebSocket.instances.length - 1];
+    if (!instance) throw new Error("No MockWebSocket instances created");
+    return instance;
   }
 }
 

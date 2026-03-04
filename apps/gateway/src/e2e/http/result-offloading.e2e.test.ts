@@ -111,7 +111,8 @@ describe("Result Offloading E2E", () => {
     // Step 2: Extract the execution ID from the offloaded response
     const execIdMatch = offloadText.match(/Execution ID: (\S+)/);
     expect(execIdMatch).not.toBeNull();
-    const executionId = execIdMatch![1];
+    if (!execIdMatch) throw new Error("expected execIdMatch to be defined");
+    const executionId = execIdMatch[1];
 
     // Step 3: Retrieve and filter the full data using _gateway.get_result()
     const retrieveScript = `

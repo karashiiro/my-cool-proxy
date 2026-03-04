@@ -32,7 +32,7 @@ export class WasmoonRuntime implements ILuaRuntime {
 
   async executeScript(
     script: string,
-    mcpServers: Map<string, IMCPClientSession>,
+    mcpServers: ReadonlyMap<string, IMCPClientSession>,
     gatewayBuiltins: IGatewayBuiltins,
     onProgress?: (progress: number, total?: number, message?: string) => void,
     toolCallLog?: IToolCallLog,
@@ -156,7 +156,7 @@ Common issues:
 
   private async injectMCPServers(
     engine: LuaEngine,
-    mcpServers: Map<string, IMCPClientSession>,
+    mcpServers: ReadonlyMap<string, IMCPClientSession>,
     gatewayBuiltins: IGatewayBuiltins,
     aggregator?: ProgressAggregator,
     toolCallLog?: IToolCallLog,

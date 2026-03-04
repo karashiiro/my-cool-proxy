@@ -242,7 +242,10 @@ describe("mapMcpToAcpPrompt", () => {
     const result = mapMcpToAcpPrompt(params);
 
     // Last block should be the parameters block
-    const paramsBlock = result[result.length - 1]! as ContentBlock & {
+    const lastItem = result[result.length - 1];
+    if (!lastItem)
+      throw new Error("expected result to have at least one element");
+    const paramsBlock = lastItem as ContentBlock & {
       type: "text";
       text: string;
     };
@@ -269,7 +272,9 @@ describe("mapMcpToAcpPrompt", () => {
 
     // Should only have the message, no parameters block
     expect(result).toHaveLength(1);
-    const block = result[0]! as ContentBlock & { type: "text"; text: string };
+    const block0 = result[0];
+    if (!block0) throw new Error("expected result[0] to be defined");
+    const block = block0 as ContentBlock & { type: "text"; text: string };
     expect(block.text).not.toContain("[Sampling parameters:");
   });
 

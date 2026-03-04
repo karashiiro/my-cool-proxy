@@ -28,6 +28,7 @@ export interface TestConfigOptions {
  * @param skills - Optional array of test skills to create
  * @returns Object containing the config path and cleanup function
  */
+// eslint-disable-next-line sonarjs/cognitive-complexity
 export function generateTestConfig(
   config: ServerConfig,
   skills?: TestSkillDefinition[],
@@ -60,6 +61,7 @@ export function generateTestConfig(
         for (const [path, content] of Object.entries(skill.resources)) {
           const fullPath = join(skillDir, path);
           const dir = dirname(fullPath);
+          // eslint-disable-next-line max-depth
           if (dir && dir !== skillDir) {
             mkdirSync(dir, { recursive: true });
           }

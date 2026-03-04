@@ -32,6 +32,7 @@ import {
   MCPFormatterService,
   ResourceRoutingService,
   type IResourceRoutingService,
+  type ILuaRuntime as IAggLuaRuntime,
 } from "@my-cool-proxy/mcp-aggregation";
 import { ExecuteLuaTool } from "../tools/execute-lua-tool.js";
 import { ListServersTool } from "../tools/list-servers-tool.js";
@@ -118,7 +119,7 @@ const createToolRegistry = (
   const toolDiscovery = new ToolDiscoveryService(
     clientManager,
     logger,
-    luaRuntime,
+    luaRuntime as unknown as IAggLuaRuntime,
     new MCPFormatterService(),
   );
 
@@ -307,6 +308,7 @@ async function createTestServerWithResources(
   return { server, client: mcpClientSession };
 }
 
+// eslint-disable-next-line sonarjs/cognitive-complexity
 async function createTestServerWithPrompts(
   name: string,
   prompts: Array<{
@@ -2051,8 +2053,9 @@ describe("MCPGatewayServer - Resource Aggregation", () => {
       expect(resourceUri).toBe("file:///data/report.json");
 
       // Step 3: Read the resource using the original URI — routing table resolves it
+      if (!resourceUri) throw new Error("expected resourceUri to be defined");
       const readResult = await gatewayClient.readResource({
-        uri: resourceUri!,
+        uri: resourceUri,
       });
 
       expect(readResult.contents).toHaveLength(1);

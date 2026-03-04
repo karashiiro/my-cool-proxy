@@ -68,6 +68,7 @@ export class MCPClientSession {
     params: LoggingMessageNotification["params"],
   ) => void;
 
+  // eslint-disable-next-line @typescript-eslint/max-params
   constructor(
     client: Client,
     serverName: string,
@@ -99,6 +100,7 @@ export class MCPClientSession {
     this.setupNotificationHandlers();
   }
 
+  // eslint-disable-next-line max-lines-per-function
   private setupNotificationHandlers(): void {
     // Handle tools/list_changed notifications
     this.client.setNotificationHandler(

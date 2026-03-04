@@ -60,11 +60,12 @@ describe("ToolCallbackServer", () => {
         // Tool call should be captured
         const captured = server.getCapturedToolCall();
         expect(captured).not.toBeNull();
-        expect(captured!.name).toBe("calculator-add");
-        expect(captured!.input).toEqual({ a: 5, b: 3 });
+        if (!captured) throw new Error("expected captured to be defined");
+        expect(captured.name).toBe("calculator-add");
+        expect(captured.input).toEqual({ a: 5, b: 3 });
         // ID should be a non-empty string (UUID-like format)
-        expect(typeof captured!.id).toBe("string");
-        expect(captured!.id.length).toBeGreaterThan(0);
+        expect(typeof captured.id).toBe("string");
+        expect(captured.id.length).toBeGreaterThan(0);
       } finally {
         await server.stop();
       }
@@ -97,8 +98,9 @@ describe("ToolCallbackServer", () => {
 
         // Should only have the second tool call
         const captured = server.getCapturedToolCall();
-        expect(captured!.name).toBe("second-tool");
-        expect(captured!.input).toEqual({ y: 2 });
+        if (!captured) throw new Error("expected captured to be defined");
+        expect(captured.name).toBe("second-tool");
+        expect(captured.input).toEqual({ y: 2 });
       } finally {
         await server.stop();
       }
@@ -132,8 +134,9 @@ describe("ToolCallbackServer", () => {
 
         const captured1 = server1.getCapturedToolCall();
         const captured2 = server2.getCapturedToolCall();
-
-        expect(captured1!.id).not.toBe(captured2!.id);
+        if (!captured1) throw new Error("expected captured1 to be defined");
+        if (!captured2) throw new Error("expected captured2 to be defined");
+        expect(captured1.id).not.toBe(captured2.id);
       } finally {
         await server1.stop();
         await server2.stop();

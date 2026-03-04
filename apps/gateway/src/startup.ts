@@ -210,30 +210,30 @@ export async function initializeClientsForSession(
   const connectionPromises = Object.entries(config.mcpClients).map(
     async ([name, clientConfig]): Promise<ClientConnectionResult> => {
       if (clientConfig.type === "http") {
-        return clientManager.addHttpClient(
+        return clientManager.addHttpClient({
           name,
-          clientConfig.url,
+          endpoint: clientConfig.url,
           sessionId,
-          clientConfig.headers,
-          clientConfig.allowedTools,
+          headers: clientConfig.headers,
+          allowedTools: clientConfig.allowedTools,
           clientCapabilities,
-          clientConfig.dangerouslyEnableSampling,
-        );
+          dangerouslyEnableSampling: clientConfig.dangerouslyEnableSampling,
+        });
       } else if (clientConfig.type === "stdio") {
         // Generate log path for stdio server stderr
         const stderrLogPath = getServerLogPath(name, sessionId);
-        return clientManager.addStdioClient(
+        return clientManager.addStdioClient({
           name,
-          clientConfig.command,
+          command: clientConfig.command,
           sessionId,
-          clientConfig.args,
-          clientConfig.env,
-          clientConfig.allowedTools,
+          args: clientConfig.args,
+          env: clientConfig.env,
+          allowedTools: clientConfig.allowedTools,
           clientCapabilities,
           stderrLogPath,
-          clientConfig.dangerouslyEnableSampling,
+          dangerouslyEnableSampling: clientConfig.dangerouslyEnableSampling,
           cwd,
-        );
+        });
       } else {
         // Exhaustiveness check - TypeScript will error if a new type is added
         // but not handled above
@@ -284,6 +284,7 @@ export async function initializeClientsForSession(
  * create a working directory, initialize the sampling shim, connect to
  * upstream servers, and register proxy handlers.
  */
+// eslint-disable-next-line max-lines-per-function
 export async function handleDownstreamInitialized(
   sessionId: string,
   capabilities: ClientCapabilities,

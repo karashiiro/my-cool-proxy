@@ -107,6 +107,7 @@ export class MCPGatewayServer {
    */
   private activeDownstreamRequestId?: string | number;
 
+  // eslint-disable-next-line @typescript-eslint/max-params, max-lines-per-function
   constructor(
     @$inject(TYPES.ToolRegistry) private toolRegistry: IToolRegistry,
     @$inject(TYPES.MCPClientManager) private clientPool: IMCPClientManager,
@@ -272,6 +273,7 @@ export class MCPGatewayServer {
     }
   }
 
+  // eslint-disable-next-line max-lines-per-function
   private setupTools(): void {
     // Register all tools with McpServer for tools/list support.
     // The actual tools/call dispatch is overridden below at the Protocol level

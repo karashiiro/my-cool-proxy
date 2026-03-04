@@ -35,13 +35,13 @@ export default defineConfig([
     rules: {
       ...sonarjs.configs.recommended.rules,
       "sonarjs/cognitive-complexity": ["warn", 15],
-      // Security-oriented rules: warn instead of error (low signal-to-noise)
-      "sonarjs/no-clear-text-protocols": "warn",
-      "sonarjs/publicly-writable-directories": "warn",
-      "sonarjs/pseudo-random": "warn",
-      "sonarjs/os-command": "warn",
-      "sonarjs/no-os-command-from-path": "warn",
-      "sonarjs/slow-regex": "warn",
+      // Disabled: not useful for a server-side app that manages files/processes by design
+      "sonarjs/no-clear-text-protocols": "off",
+      "sonarjs/publicly-writable-directories": "off",
+      "sonarjs/pseudo-random": "off",
+      "sonarjs/os-command": "off",
+      "sonarjs/no-os-command-from-path": "off",
+      "sonarjs/slow-regex": "off",
     },
   },
 
@@ -52,6 +52,7 @@ export default defineConfig([
     rules: {
       ...pluginSecurity.configs.recommended.rules,
       "security/detect-object-injection": "off",
+      "security/detect-non-literal-fs-filename": "off",
     },
   },
 
@@ -87,7 +88,9 @@ export default defineConfig([
         { objectLiteralTypeAssertions: "never" },
       ],
       "@typescript-eslint/no-non-null-assertion": "warn",
-      "@typescript-eslint/method-signature-style": ["error", "property"],
+      // method-signature-style disabled: property style activates strict variance
+      // checking which is incompatible with cross-package structural typing in this monorepo
+      // "@typescript-eslint/method-signature-style": ["error", "property"],
     },
   },
 

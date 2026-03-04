@@ -126,7 +126,9 @@ describe("SQLiteEventStore", () => {
         eventId: string;
         message: JSONRPCMessage;
       }> = [];
-      const streamId = await store.replayEventsAfter(eventIds[0]!, {
+      const firstEventId = eventIds[0];
+      if (!firstEventId) throw new Error("expected eventIds[0] to be defined");
+      const streamId = await store.replayEventsAfter(firstEventId, {
         send: async (eventId, message) => {
           replayedEvents.push({ eventId, message });
         },
@@ -134,8 +136,14 @@ describe("SQLiteEventStore", () => {
 
       expect(streamId).toBe("stream-1");
       expect(replayedEvents).toHaveLength(2);
-      expect(replayedEvents[0]!.message).toEqual(messages[1]);
-      expect(replayedEvents[1]!.message).toEqual(messages[2]);
+      const replayed0 = replayedEvents[0];
+      const replayed1 = replayedEvents[1];
+      if (!replayed0)
+        throw new Error("expected replayedEvents[0] to be defined");
+      if (!replayed1)
+        throw new Error("expected replayedEvents[1] to be defined");
+      expect(replayed0.message).toEqual(messages[1]);
+      expect(replayed1.message).toEqual(messages[2]);
     });
 
     it("should return empty string for non-existent event", async () => {
@@ -175,7 +183,10 @@ describe("SQLiteEventStore", () => {
 
       // Should only get the stream-a event, not stream-b
       expect(replayedEvents).toHaveLength(1);
-      const replayedMsg = replayedEvents[0]!.message;
+      const replayedEvent0 = replayedEvents[0];
+      if (!replayedEvent0)
+        throw new Error("expected replayedEvents[0] to be defined");
+      const replayedMsg = replayedEvent0.message;
       expect("method" in replayedMsg && replayedMsg.method).toBe(
         "stream1-again",
       );

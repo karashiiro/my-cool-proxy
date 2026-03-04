@@ -163,7 +163,8 @@ describe("highlightLua", () => {
     // Extract button content and verify balanced spans
     const btnMatch = html.match(/<button[^>]*>(.*?)<\/button>/s);
     expect(btnMatch).toBeTruthy();
-    const btnContent = btnMatch![1]!;
+    if (!btnMatch) throw new Error("Expected button match in HTML");
+    const btnContent = btnMatch[1] ?? "";
     const openSpans = (btnContent.match(/<span[^>]*>/g) || []).length;
     const closeSpans = (btnContent.match(/<\/span>/g) || []).length;
     expect(openSpans).toBe(closeSpans);

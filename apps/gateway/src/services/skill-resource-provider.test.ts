@@ -140,11 +140,15 @@ describe("SkillResourceProvider", () => {
 
       const result = await provider.listResources();
 
-      expect(result[0]!.annotations).toEqual({
+      const result0 = result[0];
+      if (!result0) throw new Error("expected result[0] to be defined");
+      expect(result0.annotations).toEqual({
         audience: ["assistant"],
         priority: 0.5,
       });
-      expect(result[0]!.annotations!.lastModified).toBeUndefined();
+      if (!result0.annotations)
+        throw new Error("expected result0.annotations to be defined");
+      expect(result0.annotations.lastModified).toBeUndefined();
     });
 
     it("should return empty array when no skills exist", async () => {
@@ -265,7 +269,8 @@ describe("SkillResourceProvider", () => {
       ];
 
       for (const [uri, expectedMime] of testCases) {
-        const result = await provider.readResource(uri!);
+        if (!uri) throw new Error("expected uri to be defined");
+        const result = await provider.readResource(uri);
         expect(result?.contents[0]?.mimeType).toBe(expectedMime);
       }
     });

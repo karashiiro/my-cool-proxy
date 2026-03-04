@@ -126,9 +126,13 @@ export class SQLiteDatabase {
    * migrations, distinguishing fresh DBs from legacy v0 DBs.
    */
   private initializeDatabase(): void {
-    const currentVersion = (
+    const pragmaResult = (
       this.db.pragma("user_version") as Array<{ user_version: number }>
-    )[0]!.user_version;
+    )[0];
+    if (!pragmaResult) {
+      throw new Error("Failed to read database user_version pragma");
+    }
+    const currentVersion = pragmaResult.user_version;
 
     if (currentVersion === 0 && !this.tablesExist()) {
       // Fresh database — create schema at the current version, no migration needed

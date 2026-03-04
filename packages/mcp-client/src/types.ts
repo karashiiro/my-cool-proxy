@@ -19,26 +19,35 @@ export interface ClientConnectionResult {
 /**
  * Interface for the MCP client manager.
  */
+export interface AddHttpClientOptions {
+  name: string;
+  endpoint: string;
+  sessionId: string;
+  headers?: Record<string, string>;
+  allowedTools?: string[];
+  clientCapabilities?: ClientCapabilities;
+  dangerouslyEnableSampling?: boolean;
+}
+
+export interface AddStdioClientOptions {
+  name: string;
+  command: string;
+  sessionId: string;
+  args?: string[];
+  env?: Record<string, string>;
+  allowedTools?: string[];
+  clientCapabilities?: ClientCapabilities;
+  stderrLogPath?: string;
+  dangerouslyEnableSampling?: boolean;
+  cwd?: string;
+}
+
 export interface IMCPClientManager {
   addHttpClient: (
-    name: string,
-    endpoint: string,
-    sessionId: string,
-    headers?: Record<string, string>,
-    allowedTools?: string[],
-    clientCapabilities?: ClientCapabilities,
+    options: AddHttpClientOptions,
   ) => Promise<ClientConnectionResult>;
   addStdioClient: (
-    name: string,
-    command: string,
-    sessionId: string,
-    args?: string[],
-    env?: Record<string, string>,
-    allowedTools?: string[],
-    clientCapabilities?: ClientCapabilities,
-    stderrLogPath?: string,
-    dangerouslyEnableSampling?: boolean,
-    cwd?: string,
+    options: AddStdioClientOptions,
   ) => Promise<ClientConnectionResult>;
   getClient: (name: string, sessionId: string) => Promise<MCPClientSession>;
   getClientsBySession: (sessionId: string) => Map<string, MCPClientSession>;

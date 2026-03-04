@@ -147,8 +147,10 @@ describe("SQLiteDatabase", () => {
         .run("existing", Date.now(), Date.now());
 
       // Try to insert duplicate (should fail due to PRIMARY KEY constraint)
+      if (!db) throw new Error("expected db to be defined");
+      const currentDb = db;
       expect(() =>
-        db!.transaction(() => {
+        currentDb.transaction(() => {
           database
             .prepare(
               `INSERT INTO sessions (session_id, created_at, last_activity) VALUES (?, ?, ?)`,
@@ -313,7 +315,9 @@ describe("SQLiteDatabase", () => {
       const result = db.getDatabase().pragma("foreign_keys") as Array<{
         foreign_keys: number;
       }>;
-      expect(result[0]!.foreign_keys).toBe(1);
+      const pragmaRow = result[0];
+      if (!pragmaRow) throw new Error("expected result[0] to be defined");
+      expect(pragmaRow.foreign_keys).toBe(1);
     });
 
     it("should reject inserts with nonexistent parent session", () => {
@@ -578,15 +582,21 @@ describe("SQLiteDatabase", () => {
       const database = db.getDatabase();
 
       // user_version should be 1 after migration
-      const version = (
-        database.pragma("user_version") as Array<{ user_version: number }>
-      )[0]!.user_version;
+      const versionRows = database.pragma("user_version") as Array<{
+        user_version: number;
+      }>;
+      const versionRow = versionRows[0];
+      if (!versionRow) throw new Error("expected versionRows[0] to be defined");
+      const version = versionRow.user_version;
       expect(version).toBe(1);
 
       // foreign_keys pragma should be ON
-      const fkEnabled = (
-        database.pragma("foreign_keys") as Array<{ foreign_keys: number }>
-      )[0]!.foreign_keys;
+      const fkRows = database.pragma("foreign_keys") as Array<{
+        foreign_keys: number;
+      }>;
+      const fkRow = fkRows[0];
+      if (!fkRow) throw new Error("expected fkRows[0] to be defined");
+      const fkEnabled = fkRow.foreign_keys;
       expect(fkEnabled).toBe(1);
 
       // All pre-existing data was preserved
@@ -663,21 +673,26 @@ describe("SQLiteDatabase", () => {
         db = new SQLiteDatabase(dbPath);
       }).not.toThrow();
 
-      const version = (
-        db!.getDatabase().pragma("user_version") as Array<{
-          user_version: number;
-        }>
-      )[0]!.user_version;
+      if (!db) throw new Error("expected db to be defined");
+      const versionRows2 = db.getDatabase().pragma("user_version") as Array<{
+        user_version: number;
+      }>;
+      const versionRow2 = versionRows2[0];
+      if (!versionRow2)
+        throw new Error("expected versionRows2[0] to be defined");
+      const version = versionRow2.user_version;
       expect(version).toBe(1);
     });
 
     it("should set user_version to 1 after migration", () => {
       db = new SQLiteDatabase(":memory:");
-      const version = (
-        db.getDatabase().pragma("user_version") as Array<{
-          user_version: number;
-        }>
-      )[0]!.user_version;
+      const versionRows3 = db.getDatabase().pragma("user_version") as Array<{
+        user_version: number;
+      }>;
+      const versionRow3 = versionRows3[0];
+      if (!versionRow3)
+        throw new Error("expected versionRows3[0] to be defined");
+      const version = versionRow3.user_version;
       expect(version).toBe(1);
     });
 

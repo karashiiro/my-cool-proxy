@@ -145,7 +145,8 @@ A second test skill.
       expect(content?.uri).toBe("gw-skill://test-skill");
       expect(content?.mimeType).toBe("text/markdown");
 
-      if ("text" in content!) {
+      if (!content) throw new Error("expected content to be defined");
+      if ("text" in content) {
         expect(content.text).toContain("# Test Skill");
         expect(content.text).toContain("This is a test skill");
       }
@@ -162,7 +163,8 @@ A second test skill.
       expect(content?.uri).toBe("gw-skill://test-skill/scripts/example.py");
       expect(content?.mimeType).toBe("text/x-python");
 
-      if ("text" in content!) {
+      if (!content) throw new Error("expected content to be defined");
+      if ("text" in content) {
         expect(content.text).toContain("Hello from test skill!");
       }
     });
@@ -178,7 +180,8 @@ A second test skill.
       expect(content?.uri).toBe("gw-skill://test-skill/references/API.md");
       expect(content?.mimeType).toBe("text/markdown");
 
-      if ("text" in content!) {
+      if (!content) throw new Error("expected content to be defined");
+      if ("text" in content) {
         expect(content.text).toContain("# API Reference");
       }
     });

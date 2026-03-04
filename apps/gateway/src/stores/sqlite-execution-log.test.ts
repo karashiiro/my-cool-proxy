@@ -41,9 +41,11 @@ describe("SQLiteExecutionLog", () => {
       const id = log.logExecution("session-1", "result(1)");
       const executions = log.getExecutions("session-1");
       expect(executions).toHaveLength(1);
-      expect(executions[0]!.executionId).toBe(id);
-      expect(executions[0]!.status).toBe("success");
-      expect(executions[0]!.error).toBeNull();
+      const exec0 = executions[0];
+      if (!exec0) throw new Error("expected executions[0] to be defined");
+      expect(exec0.executionId).toBe(id);
+      expect(exec0.status).toBe("success");
+      expect(exec0.error).toBeNull();
     });
   });
 
@@ -53,8 +55,10 @@ describe("SQLiteExecutionLog", () => {
       log.markExecutionError(id, "attempt to call a nil value");
 
       const executions = log.getExecutions("session-1");
-      expect(executions[0]!.status).toBe("error");
-      expect(executions[0]!.error).toBe("attempt to call a nil value");
+      const exec0 = executions[0];
+      if (!exec0) throw new Error("expected executions[0] to be defined");
+      expect(exec0.status).toBe("error");
+      expect(exec0.error).toBe("attempt to call a nil value");
     });
   });
 
@@ -72,12 +76,14 @@ describe("SQLiteExecutionLog", () => {
 
       const calls = log.getToolCalls(execId);
       expect(calls).toHaveLength(1);
-      expect(calls[0]!.callId).toBe(callId);
-      expect(calls[0]!.executionId).toBe(execId);
-      expect(calls[0]!.serverName).toBe("my-server");
-      expect(calls[0]!.toolName).toBe("my-tool");
-      expect(calls[0]!.arguments).toBe('{"key":"value"}');
-      expect(calls[0]!.status).toBe("success");
+      const call0 = calls[0];
+      if (!call0) throw new Error("expected calls[0] to be defined");
+      expect(call0.callId).toBe(callId);
+      expect(call0.executionId).toBe(execId);
+      expect(call0.serverName).toBe("my-server");
+      expect(call0.toolName).toBe("my-tool");
+      expect(call0.arguments).toBe('{"key":"value"}');
+      expect(call0.status).toBe("success");
     });
 
     it("should allow null arguments", () => {
@@ -85,7 +91,9 @@ describe("SQLiteExecutionLog", () => {
       log.logToolCall(execId, "server", "tool");
 
       const calls = log.getToolCalls(execId);
-      expect(calls[0]!.arguments).toBeNull();
+      const call0 = calls[0];
+      if (!call0) throw new Error("expected calls[0] to be defined");
+      expect(call0.arguments).toBeNull();
     });
   });
 
@@ -96,8 +104,10 @@ describe("SQLiteExecutionLog", () => {
       log.markToolCallError(callId, "connection refused");
 
       const calls = log.getToolCalls(execId);
-      expect(calls[0]!.status).toBe("error");
-      expect(calls[0]!.error).toBe("connection refused");
+      const call0 = calls[0];
+      if (!call0) throw new Error("expected calls[0] to be defined");
+      expect(call0.status).toBe("error");
+      expect(call0.error).toBe("connection refused");
     });
   });
 
@@ -107,7 +117,9 @@ describe("SQLiteExecutionLog", () => {
       log.markExecutionResult(id, "42");
 
       const executions = log.getExecutions("session-1");
-      expect(executions[0]!.result).toBe("42");
+      const exec0 = executions[0];
+      if (!exec0) throw new Error("expected executions[0] to be defined");
+      expect(exec0.result).toBe("42");
     });
 
     it("should store JSON-serialized object results", () => {
@@ -116,14 +128,18 @@ describe("SQLiteExecutionLog", () => {
       log.markExecutionResult(id, resultJson);
 
       const executions = log.getExecutions("session-1");
-      expect(executions[0]!.result).toBe(resultJson);
+      const exec0 = executions[0];
+      if (!exec0) throw new Error("expected executions[0] to be defined");
+      expect(exec0.result).toBe(resultJson);
     });
 
     it("should leave result null when not set", () => {
       log.logExecution("session-1", "-- no result");
 
       const executions = log.getExecutions("session-1");
-      expect(executions[0]!.result).toBeNull();
+      const exec0 = executions[0];
+      if (!exec0) throw new Error("expected executions[0] to be defined");
+      expect(exec0.result).toBeNull();
     });
   });
 
@@ -137,7 +153,9 @@ describe("SQLiteExecutionLog", () => {
       log.markToolCallResult(callId, resultJson);
 
       const calls = log.getToolCalls(execId);
-      expect(calls[0]!.result).toBe(resultJson);
+      const call0 = calls[0];
+      if (!call0) throw new Error("expected calls[0] to be defined");
+      expect(call0.result).toBe(resultJson);
     });
 
     it("should leave result null when not set", () => {
@@ -145,7 +163,9 @@ describe("SQLiteExecutionLog", () => {
       log.logToolCall(execId, "server", "tool");
 
       const calls = log.getToolCalls(execId);
-      expect(calls[0]!.result).toBeNull();
+      const call0 = calls[0];
+      if (!call0) throw new Error("expected calls[0] to be defined");
+      expect(call0.result).toBeNull();
     });
   });
 
@@ -160,9 +180,13 @@ describe("SQLiteExecutionLog", () => {
 
       const executions = log.getExecutions("session-1");
       expect(executions).toHaveLength(3);
-      expect(executions[0]!.script).toBe("third");
-      expect(executions[1]!.script).toBe("second");
-      expect(executions[2]!.script).toBe("first");
+      const [exec0, exec1, exec2] = executions;
+      if (!exec0) throw new Error("expected executions[0] to be defined");
+      if (!exec1) throw new Error("expected executions[1] to be defined");
+      if (!exec2) throw new Error("expected executions[2] to be defined");
+      expect(exec0.script).toBe("third");
+      expect(exec1.script).toBe("second");
+      expect(exec2.script).toBe("first");
     });
 
     it("should only return executions for the requested session", () => {
@@ -171,11 +195,15 @@ describe("SQLiteExecutionLog", () => {
 
       const s1 = log.getExecutions("session-1");
       expect(s1).toHaveLength(1);
-      expect(s1[0]!.script).toBe("script-a");
+      const s1exec0 = s1[0];
+      if (!s1exec0) throw new Error("expected s1[0] to be defined");
+      expect(s1exec0.script).toBe("script-a");
 
       const s2 = log.getExecutions("session-2");
       expect(s2).toHaveLength(1);
-      expect(s2[0]!.script).toBe("script-b");
+      const s2exec0 = s2[0];
+      if (!s2exec0) throw new Error("expected s2[0] to be defined");
+      expect(s2exec0.script).toBe("script-b");
     });
 
     it("should respect the limit parameter", () => {
@@ -199,9 +227,10 @@ describe("SQLiteExecutionLog", () => {
       log.markExecutionResult(id, JSON.stringify("hello"));
       const execution = log.getExecution(id);
       expect(execution).toBeDefined();
-      expect(execution!.executionId).toBe(id);
-      expect(execution!.script).toBe("result('hello')");
-      expect(execution!.status).toBe("success");
+      if (!execution) throw new Error("expected execution to be defined");
+      expect(execution.executionId).toBe(id);
+      expect(execution.script).toBe("result('hello')");
+      expect(execution.status).toBe("success");
     });
 
     it("should return undefined for non-existent execution", () => {
@@ -213,8 +242,9 @@ describe("SQLiteExecutionLog", () => {
       log.markExecutionError(id, "attempt to call a nil value");
       const execution = log.getExecution(id);
       expect(execution).toBeDefined();
-      expect(execution!.status).toBe("error");
-      expect(execution!.error).toBe("attempt to call a nil value");
+      if (!execution) throw new Error("expected execution to be defined");
+      expect(execution.status).toBe("error");
+      expect(execution.error).toBe("attempt to call a nil value");
     });
   });
 
@@ -228,9 +258,12 @@ describe("SQLiteExecutionLog", () => {
 
       const all = log.getAllExecutions();
       expect(all).toHaveLength(3);
+      const [all0, , all2] = all;
+      if (!all0) throw new Error("expected all[0] to be defined");
+      if (!all2) throw new Error("expected all[2] to be defined");
       // Most recent first
-      expect(all[0]!.script).toBe("script3");
-      expect(all[2]!.script).toBe("script1");
+      expect(all0.script).toBe("script3");
+      expect(all2.script).toBe("script1");
     });
 
     it("should respect limit parameter", () => {
@@ -257,9 +290,12 @@ describe("SQLiteExecutionLog", () => {
 
       const filtered = log.getAllExecutions(50, 0, "github.search_code");
       expect(filtered).toHaveLength(2);
+      const [filtered0, filtered1] = filtered;
+      if (!filtered0) throw new Error("expected filtered[0] to be defined");
+      if (!filtered1) throw new Error("expected filtered[1] to be defined");
       // Most recent first
-      expect(filtered[0]!.script).toBe("script3");
-      expect(filtered[1]!.script).toBe("script1");
+      expect(filtered0.script).toBe("script3");
+      expect(filtered1.script).toBe("script1");
     });
 
     it("should return empty array when toolFilter matches nothing", () => {
@@ -281,7 +317,9 @@ describe("SQLiteExecutionLog", () => {
       // rowid DESC tiebreaker: script9 is most recent, skip first 3
       const page = log.getAllExecutions(3, 3);
       expect(page).toHaveLength(3);
-      expect(page[0]!.script).toBe("script6");
+      const page0 = page[0];
+      if (!page0) throw new Error("expected page[0] to be defined");
+      expect(page0.script).toBe("script6");
     });
   });
 
@@ -366,9 +404,13 @@ describe("SQLiteExecutionLog", () => {
 
       const calls = log.getToolCalls(execId);
       expect(calls).toHaveLength(3);
-      expect(calls[0]!.toolName).toBe("third-tool");
-      expect(calls[1]!.toolName).toBe("second-tool");
-      expect(calls[2]!.toolName).toBe("first-tool");
+      const [tcall0, tcall1, tcall2] = calls;
+      if (!tcall0) throw new Error("expected calls[0] to be defined");
+      if (!tcall1) throw new Error("expected calls[1] to be defined");
+      if (!tcall2) throw new Error("expected calls[2] to be defined");
+      expect(tcall0.toolName).toBe("third-tool");
+      expect(tcall1.toolName).toBe("second-tool");
+      expect(tcall2.toolName).toBe("first-tool");
     });
 
     it("should only return tool calls for the requested execution", () => {
@@ -379,11 +421,15 @@ describe("SQLiteExecutionLog", () => {
 
       const calls1 = log.getToolCalls(exec1);
       expect(calls1).toHaveLength(1);
-      expect(calls1[0]!.toolName).toBe("tool-a");
+      const calls1item0 = calls1[0];
+      if (!calls1item0) throw new Error("expected calls1[0] to be defined");
+      expect(calls1item0.toolName).toBe("tool-a");
 
       const calls2 = log.getToolCalls(exec2);
       expect(calls2).toHaveLength(1);
-      expect(calls2[0]!.toolName).toBe("tool-b");
+      const calls2item0 = calls2[0];
+      if (!calls2item0) throw new Error("expected calls2[0] to be defined");
+      expect(calls2item0.toolName).toBe("tool-b");
     });
 
     it("should return an empty array for unknown executions", () => {

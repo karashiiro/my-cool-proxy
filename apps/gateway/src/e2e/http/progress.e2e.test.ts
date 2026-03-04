@@ -120,15 +120,21 @@ describe("Progress Notification Proxy E2E (HTTP Mode)", () => {
       expect(progressUpdates.length).toBeGreaterThan(0);
 
       // The last progress update should be 100/100
-      const lastProgress = progressUpdates[progressUpdates.length - 1]!;
-      expect(lastProgress.progress).toBe(100);
-      expect(lastProgress.total).toBe(100);
+      const lastProgressItem = progressUpdates[progressUpdates.length - 1];
+      if (!lastProgressItem)
+        throw new Error("expected last progress item to be defined");
+      expect(lastProgressItem.progress).toBe(100);
+      expect(lastProgressItem.total).toBe(100);
 
       // Progress should be monotonically non-decreasing
       for (let i = 1; i < progressUpdates.length; i++) {
-        expect(progressUpdates[i]!.progress).toBeGreaterThanOrEqual(
-          progressUpdates[i - 1]!.progress,
-        );
+        const cur = progressUpdates[i];
+        const prev = progressUpdates[i - 1];
+        if (!cur)
+          throw new Error(`expected progressUpdates[${i}] to be defined`);
+        if (!prev)
+          throw new Error(`expected progressUpdates[${i - 1}] to be defined`);
+        expect(cur.progress).toBeGreaterThanOrEqual(prev.progress);
       }
     });
 
@@ -161,9 +167,11 @@ describe("Progress Notification Proxy E2E (HTTP Mode)", () => {
       expect(progressUpdates.length).toBeGreaterThan(0);
 
       // The final progress should be aggregated (200/200 for two 100/100 tasks)
-      const lastProgress = progressUpdates[progressUpdates.length - 1]!;
-      expect(lastProgress.progress).toBe(200);
-      expect(lastProgress.total).toBe(200);
+      const lastProgressItem = progressUpdates[progressUpdates.length - 1];
+      if (!lastProgressItem)
+        throw new Error("expected last progress item to be defined");
+      expect(lastProgressItem.progress).toBe(200);
+      expect(lastProgressItem.total).toBe(200);
     });
 
     it("should handle progress without total (undefined total propagation)", async () => {

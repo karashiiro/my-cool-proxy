@@ -3,6 +3,26 @@ import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 export type { ILogger } from "@my-cool-proxy/logger";
 
 /**
+ * Interface for the experimental tasks client.
+ * Uses method syntax so that callToolStream is checked bivariantly,
+ * allowing concrete SDK classes (with specific Zod schema types) to
+ * satisfy the `schema: unknown` parameter without strict contravariance errors.
+ */
+export interface ITasksClient {
+  callToolStream(
+    params: { name: string; arguments: Record<string, unknown> },
+    schema: unknown,
+    options?: {
+      onprogress?: (progress: {
+        progress: number;
+        total?: number;
+        message?: string;
+      }) => void;
+    },
+  ): AsyncGenerator<unknown>;
+}
+
+/**
  * Interface for MCP client sessions that the Lua runtime uses.
  * This is a minimal subset of what the full MCPClientSession provides.
  */
@@ -16,19 +36,7 @@ export interface IMCPClientSession {
    * Access to experimental SDK features (tasks, etc.)
    */
   experimental: {
-    tasks: {
-      callToolStream: (
-        params: { name: string; arguments: Record<string, unknown> },
-        schema: unknown,
-        options?: {
-          onprogress?: (progress: {
-            progress: number;
-            total?: number;
-            message?: string;
-          }) => void;
-        },
-      ) => AsyncGenerator<unknown>;
-    };
+    tasks: ITasksClient;
   };
 
   /**
@@ -186,7 +194,7 @@ export interface ILuaRuntime {
    */
   executeScript: (
     script: string,
-    mcpServers: Map<string, IMCPClientSession>,
+    mcpServers: ReadonlyMap<string, IMCPClientSession>,
     gatewayBuiltins: IGatewayBuiltins,
     onProgress?: (progress: number, total?: number, message?: string) => void,
     toolCallLog?: IToolCallLog,

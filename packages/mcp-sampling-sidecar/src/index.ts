@@ -37,6 +37,7 @@ interface CapturedResponse {
 /**
  * Main entry point: reads config from env, sets up MCP server, and proxies tool calls.
  */
+// eslint-disable-next-line max-lines-per-function
 async function main(): Promise<void> {
   const toolsJson = process.env["TOOLS_JSON"];
   const callbackUrl = process.env["CALLBACK_URL"];

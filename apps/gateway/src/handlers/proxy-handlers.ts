@@ -16,6 +16,7 @@ import type { MCPGatewayServer } from "../mcp/gateway-server.js";
  * These handlers forward requests from upstream servers to the downstream client
  * via the gateway server.
  */
+// eslint-disable-next-line max-lines-per-function
 export function registerProxyHandlers(
   sessionId: string,
   clientManager: IMCPClientManager,

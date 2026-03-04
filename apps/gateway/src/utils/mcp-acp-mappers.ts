@@ -166,6 +166,66 @@ function buildParametersBlock(params: SamplingParams): ContentBlock | null {
  * @param promptCapabilities - ACP agent's advertised prompt capabilities (from initialize handshake).
  *   When omitted, image and audio are NOT passed through natively (safe default).
  */
+/**
+ * Process a single message's content blocks, classifying them into text and non-text.
+ */
+function classifyContentBlocks(
+  contentBlocks: Exclude<SamplingMessage["content"], unknown[]>[],
+  promptCapabilities: PromptCapabilities,
+): { textParts: string[]; nonTextBlocks: ContentBlock[] } {
+  const textParts: string[] = [];
+  const nonTextBlocks: ContentBlock[] = [];
+
+  for (const block of contentBlocks) {
+    if (block.type === "text") {
+      textParts.push(block.text);
+    } else if (block.type === "image" && promptCapabilities.image) {
+      nonTextBlocks.push(mapMcpBlockToAcp(block));
+    } else if (block.type === "audio" && promptCapabilities.audio) {
+      nonTextBlocks.push(mapMcpBlockToAcp(block));
+    } else if (block.type === "image" || block.type === "audio") {
+      textParts.push(`[${block.type}: ${block.mimeType}]`);
+    } else {
+      const mapped = mapMcpBlockToAcp(block);
+      if (mapped.type === "text") {
+        textParts.push(mapped.text);
+      }
+    }
+  }
+
+  return { textParts, nonTextBlocks };
+}
+
+/**
+ * Append blocks for a single message with its role label.
+ */
+function appendMessageBlocks(
+  blocks: ContentBlock[],
+  message: SamplingMessage,
+  promptCapabilities: PromptCapabilities,
+): void {
+  const role = formatRole(message.role);
+  const contentBlocks = normalizeContent(message.content);
+  const { textParts, nonTextBlocks } = classifyContentBlocks(
+    contentBlocks,
+    promptCapabilities,
+  );
+
+  if (textParts.length > 0) {
+    blocks.push({
+      type: "text",
+      text: `[${role}]: ${textParts.join(" ")}`,
+    } as ContentBlock);
+  } else if (nonTextBlocks.length > 0) {
+    blocks.push({
+      type: "text",
+      text: `[${role}]:`,
+    } as ContentBlock);
+  }
+
+  blocks.push(...nonTextBlocks);
+}
+
 export function mapMcpToAcpPrompt(
   params: SamplingParams,
   promptCapabilities: PromptCapabilities = {},
@@ -181,8 +241,6 @@ export function mapMcpToAcpPrompt(
   }
 
   // Inject tool requirement directive if toolChoice.mode === "required"
-  // ACP doesn't have a native toolChoice mechanism, so we use prompt injection
-  // as a best-effort approach. The model may not always comply, but this provides the intent.
   if (
     params.toolChoice?.mode === "required" &&
     params.tools &&
@@ -196,48 +254,7 @@ export function mapMcpToAcpPrompt(
 
   // Messages with role labels
   for (const message of params.messages) {
-    const role = formatRole(message.role);
-    const contentBlocks = normalizeContent(message.content);
-
-    // Separate text and non-text blocks
-    const textParts: string[] = [];
-    const nonTextBlocks: ContentBlock[] = [];
-
-    for (const block of contentBlocks) {
-      if (block.type === "text") {
-        textParts.push(block.text);
-      } else if (block.type === "image" && promptCapabilities.image) {
-        nonTextBlocks.push(mapMcpBlockToAcp(block));
-      } else if (block.type === "audio" && promptCapabilities.audio) {
-        nonTextBlocks.push(mapMcpBlockToAcp(block));
-      } else if (block.type === "image" || block.type === "audio") {
-        // Agent doesn't support this content type - fall back to placeholder
-        textParts.push(`[${block.type}: ${block.mimeType}]`);
-      } else {
-        // tool_use, tool_result, etc. - serialize properly using the mapper
-        const mapped = mapMcpBlockToAcp(block);
-        if (mapped.type === "text") {
-          textParts.push(mapped.text);
-        }
-      }
-    }
-
-    // If there's any text, emit it with the role label
-    if (textParts.length > 0) {
-      blocks.push({
-        type: "text",
-        text: `[${role}]: ${textParts.join(" ")}`,
-      } as ContentBlock);
-    } else if (nonTextBlocks.length > 0) {
-      // No text, but has non-text content: emit role label separately
-      blocks.push({
-        type: "text",
-        text: `[${role}]:`,
-      } as ContentBlock);
-    }
-
-    // Append non-text blocks after the role-labeled text
-    blocks.push(...nonTextBlocks);
+    appendMessageBlocks(blocks, message, promptCapabilities);
   }
 
   // Sampling parameters info block (if interesting params present)

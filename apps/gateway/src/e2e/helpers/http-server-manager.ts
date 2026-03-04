@@ -294,26 +294,25 @@ async function initializeSingleClient(
   capabilities?: ClientCapabilities,
 ): Promise<void> {
   if (clientConfig.type === "http") {
-    await clientManager.addHttpClient(
+    await clientManager.addHttpClient({
       name,
-      clientConfig.url,
+      endpoint: clientConfig.url,
       sessionId,
-      clientConfig.headers,
-      clientConfig.allowedTools,
-      capabilities,
-      clientConfig.dangerouslyEnableSampling,
-    );
+      headers: clientConfig.headers,
+      allowedTools: clientConfig.allowedTools,
+      clientCapabilities: capabilities,
+      dangerouslyEnableSampling: clientConfig.dangerouslyEnableSampling,
+    });
   } else if (clientConfig.type === "stdio") {
-    await clientManager.addStdioClient(
+    await clientManager.addStdioClient({
       name,
-      clientConfig.command,
+      command: clientConfig.command,
       sessionId,
-      clientConfig.args,
-      clientConfig.env,
-      clientConfig.allowedTools,
-      capabilities,
-      undefined, // stderrLogPath - not used in e2e tests
-      clientConfig.dangerouslyEnableSampling,
-    );
+      args: clientConfig.args,
+      env: clientConfig.env,
+      allowedTools: clientConfig.allowedTools,
+      clientCapabilities: capabilities,
+      dangerouslyEnableSampling: clientConfig.dangerouslyEnableSampling,
+    });
   }
 }

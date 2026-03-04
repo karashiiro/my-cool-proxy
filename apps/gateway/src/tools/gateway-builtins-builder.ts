@@ -25,6 +25,7 @@ import type {
  * closes over the provided `sessionId`.
  */
 export class GatewayBuiltinsBuilder {
+  // eslint-disable-next-line @typescript-eslint/max-params
   constructor(
     private resourceAggregation: ResourceAggregationService,
     private promptAggregation: PromptAggregationService,
@@ -39,6 +40,7 @@ export class GatewayBuiltinsBuilder {
     private executionLog: IExecutionLog,
   ) {}
 
+  // eslint-disable-next-line max-lines-per-function
   build(sessionId: string): IGatewayBuiltins {
     const builtins: IGatewayBuiltins = {
       listResources: async () => {

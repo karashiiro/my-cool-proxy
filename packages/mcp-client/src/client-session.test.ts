@@ -222,7 +222,9 @@ describe("MCPClientSession", () => {
 
       // Trigger notification
       expect(notificationHandler).toBeDefined();
-      await notificationHandler!();
+      if (!notificationHandler)
+        throw new Error("Expected notificationHandler to be defined");
+      await notificationHandler();
 
       // Should log cache invalidation
       expect(logger.info).toHaveBeenCalledWith(

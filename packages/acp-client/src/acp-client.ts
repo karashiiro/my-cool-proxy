@@ -464,7 +464,8 @@ export class ACPClient {
       logger: this.logger,
       allowOwnTools: this.allowOwnToolsConfig,
     });
-    this.connection = new acp.ClientSideConnection(() => this.handler!, stream);
+    const handler = this.handler;
+    this.connection = new acp.ClientSideConnection(() => handler, stream);
 
     // Perform the initialization handshake
     const initResult = await this.connection.initialize({

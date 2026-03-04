@@ -41,6 +41,7 @@ const MAX_DELAY_MS = 30_000;
  * Create a dashboard WebSocket client that connects to `/ws` and auto-reconnects
  * with exponential backoff. Returns a client object with reactive getters.
  */
+// eslint-disable-next-line max-lines-per-function
 export function createDashboardWs(): DashboardWsClient {
   // Internal mutable state
   let _connected = false;

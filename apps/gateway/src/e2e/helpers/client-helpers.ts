@@ -83,7 +83,8 @@ export async function closeClients(
   await Promise.all(
     clients.filter(Boolean).map(async (client) => {
       try {
-        await client!.close();
+        if (!client) throw new Error("expected client to be defined");
+        await client.close();
       } catch {
         // Ignore cleanup errors
       }

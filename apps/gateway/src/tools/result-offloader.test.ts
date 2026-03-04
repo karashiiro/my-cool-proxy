@@ -43,7 +43,9 @@ describe("maybeOffloadResult", () => {
     const result = maybeOffloadResult(large, EXEC_ID, 100);
 
     expect(result).not.toBeNull();
-    const text = result!.content[0]!;
+    if (!result) throw new Error("expected result to be defined");
+    const text = result.content[0];
+    if (!text) throw new Error("expected result.content[0] to be defined");
     expect(text.type).toBe("text");
     if (text.type === "text") {
       expect(text.text).toContain("Result offloaded");
@@ -62,7 +64,9 @@ describe("maybeOffloadResult", () => {
     const result = maybeOffloadResult(large, EXEC_ID, 100);
 
     expect(result).not.toBeNull();
-    const text = result!.content[0]!;
+    if (!result) throw new Error("expected result to be defined");
+    const text = result.content[0];
+    if (!text) throw new Error("expected result.content[0] to be defined");
     if (text.type === "text") {
       expect(text.text).toContain("Result offloaded");
       expect(text.text).toContain("10000 number items");
@@ -78,7 +82,9 @@ describe("maybeOffloadResult", () => {
     const result = maybeOffloadResult(large, EXEC_ID, 100);
 
     expect(result).not.toBeNull();
-    const text = result!.content[0]!;
+    if (!result) throw new Error("expected result to be defined");
+    const text = result.content[0];
+    if (!text) throw new Error("expected result.content[0] to be defined");
     if (text.type === "text") {
       expect(text.text).toContain("Result offloaded");
       expect(text.text).toContain("object with 50 keys");
@@ -92,7 +98,9 @@ describe("maybeOffloadResult", () => {
     const result = maybeOffloadResult(large, EXEC_ID, 100);
 
     expect(result).not.toBeNull();
-    const text = result!.content[0]!;
+    if (!result) throw new Error("expected result to be defined");
+    const text = result.content[0];
+    if (!text) throw new Error("expected result.content[0] to be defined");
     if (text.type === "text") {
       expect(text.text).toContain("Result offloaded");
       expect(text.text).toContain("100000 bytes, string");
@@ -107,7 +115,9 @@ describe("maybeOffloadResult", () => {
     const result = maybeOffloadResult(42, EXEC_ID, 1);
 
     expect(result).not.toBeNull();
-    const text = result!.content[0]!;
+    if (!result) throw new Error("expected result to be defined");
+    const text = result.content[0];
+    if (!text) throw new Error("expected result.content[0] to be defined");
     if (text.type === "text") {
       expect(text.text).toContain("Result offloaded");
       expect(text.text).toContain("number");
@@ -120,7 +130,9 @@ describe("maybeOffloadResult", () => {
     // Use threshold of 1 to force offloading
     const result = maybeOffloadResult(data, EXEC_ID, 1);
 
-    const text = result!.content[0]!;
+    if (!result) throw new Error("expected result to be defined");
+    const text = result.content[0];
+    if (!text) throw new Error("expected result.content[0] to be defined");
     if (text.type === "text") {
       expect(text.text).toContain("math.min(10, #data)");
       expect(text.text).toContain("table.insert(subset, data[i])");
@@ -131,7 +143,9 @@ describe("maybeOffloadResult", () => {
     const data = { "my-key": 1, "another.key": 2, normal: 3, extra: 4 };
     const result = maybeOffloadResult(data, EXEC_ID, 1);
 
-    const text = result!.content[0]!;
+    if (!result) throw new Error("expected result to be defined");
+    const text = result.content[0];
+    if (!text) throw new Error("expected result.content[0] to be defined");
     if (text.type === "text") {
       // Should use bracket notation: data["my-key"] not data.my-key
       expect(text.text).toContain('["my-key"] = data["my-key"]');

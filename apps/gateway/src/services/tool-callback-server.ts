@@ -158,8 +158,9 @@ export class ToolCallbackServer {
           this.server as { closeAllConnections: () => void }
         ).closeAllConnections();
       }
+      const server = this.server;
       await new Promise<void>((resolve, reject) => {
-        this.server!.close((err) => (err ? reject(err) : resolve()));
+        server.close((err) => (err ? reject(err) : resolve()));
       });
       this.server = null;
     }

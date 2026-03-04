@@ -5,6 +5,7 @@
  * @param schema - The JSON Schema object to format
  * @returns Array of formatted lines
  */
+// eslint-disable-next-line sonarjs/cognitive-complexity
 export function formatSchema(schema: unknown, indent: number = 1): string[] {
   const lines: string[] = [];
 

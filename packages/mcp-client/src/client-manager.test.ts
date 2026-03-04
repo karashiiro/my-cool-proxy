@@ -69,7 +69,11 @@ describe("MCPClientManager", () => {
     });
 
     it("creates and connects HTTP client", async () => {
-      const res = await clientManager.addHttpClient("name", "http://x", "s");
+      const res = await clientManager.addHttpClient({
+        name: "name",
+        endpoint: "http://x",
+        sessionId: "s",
+      });
       expect(res.success).toBe(true);
       expect(mockSdkClient.connect).toHaveBeenCalledWith(mockTransport);
     });
@@ -85,24 +89,23 @@ describe("MCPClientManager", () => {
     });
 
     it("creates and connects stdio client", async () => {
-      const res = await clientManager.addStdioClient("n", "node", "s");
+      const res = await clientManager.addStdioClient({
+        name: "n",
+        command: "node",
+        sessionId: "s",
+      });
       expect(res.success).toBe(true);
       expect(mockSdkClient.connect).toHaveBeenCalledWith(mockTransport);
     });
 
     it("passes cwd to StdioClientTransport when provided", async () => {
-      await clientManager.addStdioClient(
-        "cwd-test",
-        "node",
-        "sess-cwd",
-        ["server.js"],
-        undefined,
-        undefined,
-        undefined,
-        undefined, // stderrLogPath
-        undefined, // dangerouslyEnableSampling
-        "/home/user/project", // cwd
-      );
+      await clientManager.addStdioClient({
+        name: "cwd-test",
+        command: "node",
+        sessionId: "sess-cwd",
+        args: ["server.js"],
+        cwd: "/home/user/project",
+      });
       expect(StdioClientTransport).toHaveBeenCalledWith(
         expect.objectContaining({
           command: "node",
@@ -113,7 +116,11 @@ describe("MCPClientManager", () => {
     });
 
     it("does not include cwd in StdioClientTransport options when not provided", async () => {
-      await clientManager.addStdioClient("no-cwd", "node", "sess-no-cwd");
+      await clientManager.addStdioClient({
+        name: "no-cwd",
+        command: "node",
+        sessionId: "sess-no-cwd",
+      });
       expect(StdioClientTransport).toHaveBeenCalledWith(
         expect.objectContaining({
           command: "node",
@@ -131,7 +138,11 @@ describe("MCPClientManager", () => {
         return mockTransport as StreamableHTTPClientTransport;
       } as unknown as typeof StreamableHTTPClientTransport);
 
-      await clientManager.addHttpClient("s1", "http://x", "session-a");
+      await clientManager.addHttpClient({
+        name: "s1",
+        endpoint: "http://x",
+        sessionId: "session-a",
+      });
       const c = await clientManager.getClient("s1", "session-a");
       expect(c).toBe(mockClientSession);
     });
@@ -162,16 +173,12 @@ describe("MCPClientManager", () => {
 
     it("pipes stderr to file when stderrLogPath provided", async () => {
       const path = "/tmp/log.txt";
-      await clientManager.addStdioClient(
-        "name",
-        "node",
-        "sess",
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        path,
-      );
+      await clientManager.addStdioClient({
+        name: "name",
+        command: "node",
+        sessionId: "sess",
+        stderrLogPath: path,
+      });
       expect(createWriteStream).toHaveBeenCalledWith(path, { flags: "w" });
       expect(mockStderrStream.pipe).toHaveBeenCalled();
       expect(logger.debug).toHaveBeenCalled();
@@ -179,16 +186,12 @@ describe("MCPClientManager", () => {
 
     it("closes stderr stream on session close", async () => {
       const path = "/tmp/log2.txt";
-      await clientManager.addStdioClient(
-        "name2",
-        "node",
-        "sess2",
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        path,
-      );
+      await clientManager.addStdioClient({
+        name: "name2",
+        command: "node",
+        sessionId: "sess2",
+        stderrLogPath: path,
+      });
       await clientManager.closeSession("sess2");
       expect(mockWriteStream.end).toHaveBeenCalled();
     });
@@ -207,15 +210,13 @@ describe("MCPClientManager", () => {
       const caps: ClientCapabilities = {
         sampling: { context: {}, tools: {} },
       };
-      await clientManager.addHttpClient(
-        "caps",
-        "http://x",
-        "sess-caps",
-        undefined,
-        undefined,
-        caps,
-        true, // dangerouslyEnableSampling
-      );
+      await clientManager.addHttpClient({
+        name: "caps",
+        endpoint: "http://x",
+        sessionId: "sess-caps",
+        clientCapabilities: caps,
+        dangerouslyEnableSampling: true,
+      });
       expect(Client).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({
@@ -229,17 +230,14 @@ describe("MCPClientManager", () => {
 
     it("forwards capabilities for stdio client", async () => {
       const caps: ClientCapabilities = { sampling: { tools: {} } };
-      await clientManager.addStdioClient(
-        "stdio-caps",
-        "node",
-        "sess-s",
-        ["server.js"],
-        undefined,
-        undefined,
-        caps,
-        undefined, // stderrLogPath
-        true, // dangerouslyEnableSampling
-      );
+      await clientManager.addStdioClient({
+        name: "stdio-caps",
+        command: "node",
+        sessionId: "sess-s",
+        args: ["server.js"],
+        clientCapabilities: caps,
+        dangerouslyEnableSampling: true,
+      });
       expect(Client).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({
@@ -254,15 +252,13 @@ describe("MCPClientManager", () => {
       const caps: ClientCapabilities = {
         sampling: { context: {}, tools: {} },
       };
-      await clientManager.addHttpClient(
-        "untrusted",
-        "http://x",
-        "sess-untrusted",
-        undefined,
-        undefined,
-        caps,
-        false, // dangerouslyEnableSampling
-      );
+      await clientManager.addHttpClient({
+        name: "untrusted",
+        endpoint: "http://x",
+        sessionId: "sess-untrusted",
+        clientCapabilities: caps,
+        dangerouslyEnableSampling: false,
+      });
       expect(Client).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({
@@ -276,15 +272,12 @@ describe("MCPClientManager", () => {
 
     it("does NOT forward sampling when dangerouslyEnableSampling=undefined", async () => {
       const caps: ClientCapabilities = { sampling: { tools: {} } };
-      await clientManager.addHttpClient(
-        "default-deny",
-        "http://x",
-        "sess-default",
-        undefined,
-        undefined,
-        caps,
-        undefined, // dangerouslyEnableSampling (default-deny)
-      );
+      await clientManager.addHttpClient({
+        name: "default-deny",
+        endpoint: "http://x",
+        sessionId: "sess-default",
+        clientCapabilities: caps,
+      });
       expect(Client).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({
@@ -297,15 +290,13 @@ describe("MCPClientManager", () => {
       const capsWithoutSampling: ClientCapabilities = {
         elicitation: { form: {} },
       };
-      await clientManager.addHttpClient(
-        "no-client-sampling",
-        "http://x",
-        "sess-no-sampling",
-        undefined,
-        undefined,
-        capsWithoutSampling,
-        true, // dangerouslyEnableSampling (but client lacks sampling)
-      );
+      await clientManager.addHttpClient({
+        name: "no-client-sampling",
+        endpoint: "http://x",
+        sessionId: "sess-no-sampling",
+        clientCapabilities: capsWithoutSampling,
+        dangerouslyEnableSampling: true,
+      });
       expect(Client).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({
@@ -340,26 +331,24 @@ describe("MCPClientManager", () => {
     });
 
     it("logs when allowedTools configured for HTTP client", async () => {
-      await clientManager.addHttpClient(
-        "filtered",
-        "http://x",
-        "s",
-        undefined,
-        ["t1", "t2"],
-      );
+      await clientManager.addHttpClient({
+        name: "filtered",
+        endpoint: "http://x",
+        sessionId: "s",
+        allowedTools: ["t1", "t2"],
+      });
       expect(logger.info).toHaveBeenCalledWith(
         expect.stringContaining("configured with tool filter"),
       );
     });
 
     it("logs when all tools blocked for HTTP client", async () => {
-      await clientManager.addHttpClient(
-        "blocked",
-        "http://x",
-        "s2",
-        undefined,
-        [],
-      );
+      await clientManager.addHttpClient({
+        name: "blocked",
+        endpoint: "http://x",
+        sessionId: "s2",
+        allowedTools: [],
+      });
       expect(logger.warn).toHaveBeenCalled();
     });
   });
@@ -377,7 +366,11 @@ describe("MCPClientManager", () => {
       const loggingHandler = vi.fn();
       clientManager.setLoggingMessageHandler(loggingHandler);
 
-      await clientManager.addHttpClient("log-test", "http://x", "sess-log");
+      await clientManager.addHttpClient({
+        name: "log-test",
+        endpoint: "http://x",
+        sessionId: "sess-log",
+      });
 
       // Get the logging callback that was passed to MCPClientSession
       const sessionCalls = vi.mocked(MCPClientSession).mock.calls;
@@ -388,9 +381,11 @@ describe("MCPClientManager", () => {
         | undefined;
 
       expect(loggingCallback).toBeDefined();
+      if (!loggingCallback)
+        throw new Error("Expected loggingCallback to be defined");
 
       // Simulate calling the callback
-      loggingCallback!({ level: "info", data: "test message" });
+      loggingCallback({ level: "info", data: "test message" });
 
       // Verify the handler was called with params AND sessionId
       expect(loggingHandler).toHaveBeenCalledWith(
@@ -409,7 +404,11 @@ describe("MCPClientManager", () => {
       const loggingHandler = vi.fn();
       clientManager.setLoggingMessageHandler(loggingHandler);
 
-      await clientManager.addStdioClient("stdio-log", "node", "sess-stdio-log");
+      await clientManager.addStdioClient({
+        name: "stdio-log",
+        command: "node",
+        sessionId: "sess-stdio-log",
+      });
 
       // Verify MCPClientSession was called with logging callback for stdio client
       const sessionCalls = vi.mocked(MCPClientSession).mock.calls;
@@ -422,7 +421,11 @@ describe("MCPClientManager", () => {
     it("does not pass logging callback when handler not set", async () => {
       // Don't set any logging handler
 
-      await clientManager.addHttpClient("no-log", "http://x", "sess-no-log");
+      await clientManager.addHttpClient({
+        name: "no-log",
+        endpoint: "http://x",
+        sessionId: "sess-no-log",
+      });
 
       // Verify MCPClientSession was called with undefined for logging callback
       const sessionCalls = vi.mocked(MCPClientSession).mock.calls;

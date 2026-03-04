@@ -132,7 +132,7 @@ function createDataServer(): McpServer {
         {
           uri: uri.toString(),
           mimeType: "application/json",
-          text: fileContents["test-data.json"]!,
+          text: fileContents["test-data.json"] ?? "",
         },
       ],
     };
@@ -145,7 +145,7 @@ function createDataServer(): McpServer {
         {
           uri: uri.toString(),
           mimeType: "text/yaml",
-          text: fileContents["config.yaml"]!,
+          text: fileContents["config.yaml"] ?? "",
         },
       ],
     };

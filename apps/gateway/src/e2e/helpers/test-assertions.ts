@@ -66,7 +66,8 @@ export function getFirstContent(result: CallToolResultWithContent): Content {
   expect(result.content).toHaveLength(1);
   const content = result.content[0];
   expect(content).toBeDefined();
-  return content!;
+  if (!content) throw new Error("expected result.content[0] to be defined");
+  return content;
 }
 
 /**

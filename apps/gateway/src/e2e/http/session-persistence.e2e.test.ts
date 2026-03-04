@@ -135,7 +135,10 @@ describe("Session Persistence E2E", () => {
 
         // Replay from first event - should get events 2 and 3
         const replayedEvents: JSONRPCMessage[] = [];
-        const streamId = await eventStore.replayEventsAfter(eventIds[0]!, {
+        const firstEventId = eventIds[0];
+        if (!firstEventId)
+          throw new Error("expected eventIds[0] to be defined");
+        const streamId = await eventStore.replayEventsAfter(firstEventId, {
           send: async (_, message) => {
             replayedEvents.push(message);
           },
@@ -352,7 +355,9 @@ describe("Session Persistence E2E", () => {
       const result = database.pragma("journal_mode") as Array<{
         journal_mode: string;
       }>;
-      expect(result[0]!.journal_mode).toBe("wal");
+      const journalRow = result[0];
+      if (!journalRow) throw new Error("expected result[0] to be defined");
+      expect(journalRow.journal_mode).toBe("wal");
 
       db.close();
     });

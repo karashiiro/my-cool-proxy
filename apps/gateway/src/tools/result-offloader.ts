@@ -23,6 +23,90 @@ export function maybeOffloadResult(
 /**
  * Build a human-readable offloaded response with schema summary and retrieval instructions.
  */
+function appendRetrievalHeader(
+  lines: string[],
+  header: string,
+  executionId: string,
+): void {
+  lines.push(header);
+  lines.push("");
+  lines.push(`Execution ID: ${executionId}`);
+}
+
+function appendArraySliceExample(lines: string[], executionId: string): void {
+  lines.push("");
+  lines.push("Retrieve and filter in a follow-up script:");
+  lines.push("");
+  lines.push(
+    `  local data = _gateway.get_result({ id = "${executionId}" }):await()`,
+  );
+  lines.push("  -- Example: get first 10 items");
+  lines.push("  local subset = {}");
+  lines.push("  for i = 1, math.min(10, #data) do");
+  lines.push("    table.insert(subset, data[i])");
+  lines.push("  end");
+  lines.push("  result(subset)");
+}
+
+function buildArrayResponse(
+  lines: string[],
+  result: unknown[],
+  byteLength: number,
+  executionId: string,
+): void {
+  const count = result.length;
+  if (count > 0 && typeof result[0] === "object" && result[0] !== null) {
+    appendRetrievalHeader(
+      lines,
+      `Result offloaded (${byteLength} bytes, ${count} items).`,
+      executionId,
+    );
+    lines.push("");
+    lines.push("Item structure:");
+    const schema = inferSchema(result[0]);
+    lines.push(...formatSchema(schema));
+    appendArraySliceExample(lines, executionId);
+  } else {
+    const itemType = count > 0 ? typeof result[0] : "unknown";
+    appendRetrievalHeader(
+      lines,
+      `Result offloaded (${byteLength} bytes, ${count} ${itemType} items).`,
+      executionId,
+    );
+    appendArraySliceExample(lines, executionId);
+  }
+}
+
+function buildObjectResponse(
+  lines: string[],
+  result: Record<string, unknown>,
+  byteLength: number,
+  executionId: string,
+): void {
+  const keys = Object.keys(result);
+  appendRetrievalHeader(
+    lines,
+    `Result offloaded (${byteLength} bytes, object with ${keys.length} keys).`,
+    executionId,
+  );
+  lines.push("");
+  lines.push("Structure:");
+  lines.push(...formatSchema(inferSchema(result)));
+  lines.push("");
+  lines.push("Retrieve and filter in a follow-up script:");
+  lines.push("");
+  lines.push(
+    `  local data = _gateway.get_result({ id = "${executionId}" }):await()`,
+  );
+  lines.push("  -- Access specific fields");
+  lines.push(
+    `  result({ ${keys
+      .slice(0, 3)
+      .map((k) => `["${k}"] = data["${k}"]`)
+      .join(", ")} })`,
+  );
+}
+
 function buildOffloadedResponse(
   result: unknown,
   byteLength: number,
@@ -31,81 +115,20 @@ function buildOffloadedResponse(
   const lines: string[] = [];
 
   if (Array.isArray(result)) {
-    const count = result.length;
-    if (count > 0 && typeof result[0] === "object" && result[0] !== null) {
-      // Array of objects
-      lines.push(`Result offloaded (${byteLength} bytes, ${count} items).`);
-      lines.push("");
-      lines.push(`Execution ID: ${executionId}`);
-      lines.push("");
-      lines.push("Item structure:");
-      const schema = inferSchema(result[0]);
-      const formatted = formatSchema(schema);
-      lines.push(...formatted);
-      lines.push("");
-      lines.push("Retrieve and filter in a follow-up script:");
-      lines.push("");
-      lines.push(
-        `  local data = _gateway.get_result({ id = "${executionId}" }):await()`,
-      );
-      lines.push("  -- Example: get first 10 items");
-      lines.push("  local subset = {}");
-      lines.push("  for i = 1, math.min(10, #data) do");
-      lines.push("    table.insert(subset, data[i])");
-      lines.push("  end");
-      lines.push("  result(subset)");
-    } else {
-      // Array of primitives
-      const itemType = count > 0 ? typeof result[0] : "unknown";
-      lines.push(
-        `Result offloaded (${byteLength} bytes, ${count} ${itemType} items).`,
-      );
-      lines.push("");
-      lines.push(`Execution ID: ${executionId}`);
-      lines.push("");
-      lines.push("Retrieve and filter in a follow-up script:");
-      lines.push("");
-      lines.push(
-        `  local data = _gateway.get_result({ id = "${executionId}" }):await()`,
-      );
-      lines.push("  -- Example: slice first 10 elements");
-      lines.push("  local subset = {}");
-      lines.push("  for i = 1, math.min(10, #data) do");
-      lines.push("    table.insert(subset, data[i])");
-      lines.push("  end");
-      lines.push("  result(subset)");
-    }
+    buildArrayResponse(lines, result, byteLength, executionId);
   } else if (typeof result === "object" && result !== null) {
-    // Object with many keys
-    const keys = Object.keys(result as Record<string, unknown>);
-    lines.push(
-      `Result offloaded (${byteLength} bytes, object with ${keys.length} keys).`,
-    );
-    lines.push("");
-    lines.push(`Execution ID: ${executionId}`);
-    lines.push("");
-    lines.push("Structure:");
-    const schema = inferSchema(result);
-    const formatted = formatSchema(schema);
-    lines.push(...formatted);
-    lines.push("");
-    lines.push("Retrieve and filter in a follow-up script:");
-    lines.push("");
-    lines.push(
-      `  local data = _gateway.get_result({ id = "${executionId}" }):await()`,
-    );
-    lines.push("  -- Access specific fields");
-    lines.push(
-      `  result({ ${keys
-        .slice(0, 3)
-        .map((k) => `["${k}"] = data["${k}"]`)
-        .join(", ")} })`,
+    buildObjectResponse(
+      lines,
+      result as Record<string, unknown>,
+      byteLength,
+      executionId,
     );
   } else if (typeof result === "string") {
-    // Large string
-    lines.push(`Result offloaded (${byteLength} bytes, string).`);
-    lines.push("");
-    lines.push(`Execution ID: ${executionId}`);
+    appendRetrievalHeader(
+      lines,
+      `Result offloaded (${byteLength} bytes, string).`,
+      executionId,
+    );
     lines.push("");
     lines.push("Retrieve and filter in a follow-up script:");
     lines.push("");
@@ -115,10 +138,11 @@ function buildOffloadedResponse(
     lines.push("  -- Example: get first 1000 characters");
     lines.push("  result(string.sub(data, 1, 1000))");
   } else {
-    // Fallback for primitives (number, boolean) — unlikely to exceed threshold
-    lines.push(`Result offloaded (${byteLength} bytes, ${typeof result}).`);
-    lines.push("");
-    lines.push(`Execution ID: ${executionId}`);
+    appendRetrievalHeader(
+      lines,
+      `Result offloaded (${byteLength} bytes, ${typeof result}).`,
+      executionId,
+    );
     lines.push("");
     lines.push("Retrieve in a follow-up script:");
     lines.push("");

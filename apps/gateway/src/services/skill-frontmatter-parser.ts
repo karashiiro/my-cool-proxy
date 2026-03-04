@@ -30,7 +30,7 @@ export function parseFrontmatter(content: string): ParseFrontmatterResult {
     return { ok: false, error: "no_frontmatter" };
   }
 
-  const frontmatterYaml = match[1]!;
+  const frontmatterYaml = match[1] ?? "";
 
   let parsed: unknown;
   try {

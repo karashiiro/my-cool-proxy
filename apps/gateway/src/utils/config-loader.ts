@@ -86,6 +86,7 @@ function validateSkillsConfig(config: ServerConfig): void {
 /**
  * Validates ACP agent configuration if provided.
  */
+// eslint-disable-next-line sonarjs/cognitive-complexity
 function validateACPAgentConfig(
   agent: NonNullable<ServerConfig["acp"]>["agent"],
 ): void {
@@ -239,6 +240,7 @@ function validateDatabaseConfig(config: ServerConfig): void {
 /**
  * Validates the logging configuration if provided.
  */
+// eslint-disable-next-line sonarjs/cognitive-complexity
 function validateLoggingConfig(config: ServerConfig): void {
   if (config.logging === undefined) return;
 
@@ -333,6 +335,7 @@ function validateResultSizeThreshold(config: ServerConfig): void {
 /**
  * Validates a single MCP client configuration.
  */
+// eslint-disable-next-line sonarjs/cognitive-complexity
 function validateMcpClientConfig(
   name: string,
   clientConfig: MCPClientConfig,

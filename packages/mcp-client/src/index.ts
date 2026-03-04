@@ -13,5 +13,7 @@ export type {
   ClientConnectionResult,
   ClientCapabilities,
   IMCPClientManager,
+  AddHttpClientOptions,
+  AddStdioClientOptions,
   ICacheService,
 } from "./types.js";

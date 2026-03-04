@@ -82,8 +82,12 @@ describe("Dashboard API", () => {
       const data = (await res.json()) as ExecutionsResponse;
       expect(data.executions).toHaveLength(2);
       expect(data.total).toBe(2);
-      expect(data.executions[0]!.script).toBe("script2");
-      expect(data.executions[1]!.script).toBe("script1");
+      const dexec0 = data.executions[0];
+      const dexec1 = data.executions[1];
+      if (!dexec0) throw new Error("expected data.executions[0] to be defined");
+      if (!dexec1) throw new Error("expected data.executions[1] to be defined");
+      expect(dexec0.script).toBe("script2");
+      expect(dexec1.script).toBe("script1");
     });
 
     it("should respect limit query param", async () => {
@@ -110,7 +114,9 @@ describe("Dashboard API", () => {
       const data = (await res.json()) as ExecutionsResponse;
       expect(data.executions).toHaveLength(3);
       expect(data.total).toBe(10);
-      expect(data.executions[0]!.script).toBe("s6");
+      const dexec0 = data.executions[0];
+      if (!dexec0) throw new Error("expected data.executions[0] to be defined");
+      expect(dexec0.script).toBe("s6");
     });
 
     it("should clamp limit to valid range", async () => {
@@ -242,9 +248,11 @@ describe("Dashboard API", () => {
       expect(res.status).toBe(200);
       const data = (await res.json()) as LuaToolCall[];
       expect(data).toHaveLength(1);
-      expect(data[0]!.serverName).toBe("server");
-      expect(data[0]!.toolName).toBe("tool");
-      expect(data[0]!.arguments).toBe('{"key":"val"}');
+      const tcall0 = data[0];
+      if (!tcall0) throw new Error("expected data[0] to be defined");
+      expect(tcall0.serverName).toBe("server");
+      expect(tcall0.toolName).toBe("tool");
+      expect(tcall0.arguments).toBe('{"key":"val"}');
     });
 
     it("should return empty array for execution with no tool calls", async () => {
@@ -269,9 +277,12 @@ describe("Dashboard API", () => {
       const res = await app.request(`/api/executions/${execId}/tool-calls`);
       const data = (await res.json()) as LuaToolCall[];
       expect(data).toHaveLength(2);
+      const [dtcall0, dtcall1] = data;
+      if (!dtcall0) throw new Error("expected data[0] to be defined");
+      if (!dtcall1) throw new Error("expected data[1] to be defined");
       // Descending order
-      expect(data[0]!.toolName).toBe("second-tool");
-      expect(data[1]!.toolName).toBe("first-tool");
+      expect(dtcall0.toolName).toBe("second-tool");
+      expect(dtcall1.toolName).toBe("first-tool");
     });
   });
 
@@ -320,14 +331,16 @@ describe("Dashboard API", () => {
       const data = (await res.json()) as SessionInfo[];
 
       expect(data).toHaveLength(1);
-      expect(data[0]!.sessionId).toBe("session-1");
-      expect(data[0]!.connectedServers).toEqual(["github", "context7"]);
-      expect(data[0]!.capabilities.sampling).toBe(true);
-      expect(data[0]!.capabilities.roots).toBe(true);
-      expect(data[0]!.capabilities.elicitation).toBe(false);
-      expect(data[0]!.workingDirectory).toBe("/tmp/test");
-      expect(data[0]!.createdAt).toBe(1000);
-      expect(data[0]!.lastActivity).toBe(2000);
+      const session0 = data[0];
+      if (!session0) throw new Error("expected data[0] to be defined");
+      expect(session0.sessionId).toBe("session-1");
+      expect(session0.connectedServers).toEqual(["github", "context7"]);
+      expect(session0.capabilities.sampling).toBe(true);
+      expect(session0.capabilities.roots).toBe(true);
+      expect(session0.capabilities.elicitation).toBe(false);
+      expect(session0.workingDirectory).toBe("/tmp/test");
+      expect(session0.createdAt).toBe(1000);
+      expect(session0.lastActivity).toBe(2000);
     });
 
     it("should include failed servers", async () => {
@@ -353,7 +366,9 @@ describe("Dashboard API", () => {
       const res = await customApp.request("/api/sessions");
       const data = (await res.json()) as SessionInfo[];
 
-      expect(data[0]!.failedServers).toEqual([
+      const session0 = data[0];
+      if (!session0) throw new Error("expected data[0] to be defined");
+      expect(session0.failedServers).toEqual([
         { name: "broken-server", error: "Connection refused" },
       ]);
     });

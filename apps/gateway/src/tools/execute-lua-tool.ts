@@ -112,6 +112,7 @@ export class ExecuteLuaTool implements ITool {
     openWorldHint: true,
   };
 
+  // eslint-disable-next-line @typescript-eslint/max-params
   constructor(
     @$inject(TYPES.LuaRuntime) private luaRuntime: ILuaRuntime,
     @$inject(TYPES.MCPClientManager) private clientPool: IMCPClientManager,
@@ -151,6 +152,7 @@ export class ExecuteLuaTool implements ITool {
    * @param context - Execution context with session ID and progress callback
    * @returns MCP `CallToolResult` with the script's output or error details
    */
+  // eslint-disable-next-line max-lines-per-function
   async execute(
     args: Record<string, unknown>,
     context: ToolExecutionContext,

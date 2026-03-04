@@ -94,17 +94,18 @@ async function maybeStartDashboard(
   const capabilityStore = container.get<ICapabilityStore>(
     TYPES.CapabilityStore,
   );
-  return startDashboardServer(
+  return startDashboardServer({
     executionLog,
     clientManager,
     capabilityStore,
-    sqliteDb,
-    config.dashboard,
-    DASHBOARD_STATIC_DIR,
+    db: sqliteDb,
+    config: config.dashboard,
+    staticDir: DASHBOARD_STATIC_DIR,
     logger,
-  );
+  });
 }
 
+// eslint-disable-next-line max-lines-per-function
 async function startHttpMode(
   container: TypedContainer<ContainerBindingMap>,
   config: ServerConfig,
@@ -391,6 +392,7 @@ async function startHttpMode(
   process.on("SIGTERM", shutdown);
 }
 
+// eslint-disable-next-line max-lines-per-function
 async function startStdioMode(
   container: TypedContainer<ContainerBindingMap>,
   config: ServerConfig,
@@ -485,6 +487,7 @@ async function startStdioMode(
 
   // Graceful shutdown with double-shutdown guard
   let shuttingDown = false;
+  // eslint-disable-next-line sonarjs/cognitive-complexity, complexity
   const shutdown = async () => {
     if (shuttingDown) return;
     shuttingDown = true;

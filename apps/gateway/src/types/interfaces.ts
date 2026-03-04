@@ -1,8 +1,13 @@
-import type { MCPClientSession } from "@my-cool-proxy/mcp-client";
+import type {
+  MCPClientSession,
+  AddHttpClientOptions,
+  AddStdioClientOptions,
+} from "@my-cool-proxy/mcp-client";
 import type { ACPAgentConfig } from "@my-cool-proxy/acp-client";
 import type {
   IGatewayBuiltins,
   IToolCallLog,
+  ILuaRuntime,
 } from "@my-cool-proxy/lua-runtime";
 import type { SkillMetadata } from "./skill.js";
 import type {
@@ -12,20 +17,13 @@ import type {
 
 export type {
   ACPAgentConfig,
+  AddHttpClientOptions,
+  AddStdioClientOptions,
   ClientCapabilities,
   IGatewayBuiltins,
+  ILuaRuntime,
   IToolCallLog,
 };
-
-export interface ILuaRuntime {
-  executeScript: (
-    script: string,
-    mcpServers: Map<string, MCPClientSession>,
-    gatewayBuiltins: IGatewayBuiltins,
-    onProgress?: (progress: number, total?: number, message?: string) => void,
-    toolCallLog?: IToolCallLog,
-  ) => Promise<unknown>;
-}
 
 export interface ClientConnectionResult {
   name: string;
@@ -35,25 +33,10 @@ export interface ClientConnectionResult {
 
 export interface IMCPClientManager {
   addHttpClient: (
-    name: string,
-    endpoint: string,
-    sessionId: string,
-    headers?: Record<string, string>,
-    allowedTools?: string[],
-    clientCapabilities?: ClientCapabilities,
-    dangerouslyEnableSampling?: boolean,
+    options: AddHttpClientOptions,
   ) => Promise<ClientConnectionResult>;
   addStdioClient: (
-    name: string,
-    command: string,
-    sessionId: string,
-    args?: string[],
-    env?: Record<string, string>,
-    allowedTools?: string[],
-    clientCapabilities?: ClientCapabilities,
-    stderrLogPath?: string,
-    dangerouslyEnableSampling?: boolean,
-    cwd?: string,
+    options: AddStdioClientOptions,
   ) => Promise<ClientConnectionResult>;
   getClient: (name: string, sessionId: string) => Promise<MCPClientSession>;
   getClientsBySession: (sessionId: string) => Map<string, MCPClientSession>;

@@ -9,9 +9,11 @@ function prop(
 ): Record<string, unknown> {
   let current = schema;
   for (const key of path) {
-    current = (current.properties as Record<string, Record<string, unknown>>)[
-      key
-    ]!;
+    const next = (
+      current.properties as Record<string, Record<string, unknown>>
+    )[key];
+    if (!next) throw new Error(`Schema property '${key}' not found`);
+    current = next;
   }
   return current;
 }
