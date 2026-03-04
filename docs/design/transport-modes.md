@@ -17,7 +17,7 @@ flowchart TB
     subgraph Stdio["Stdio Mode"]
         direction TB
         S1["Single session"]
-        S2["Eager client initialization"]
+        S2["Deferred client initialization"]
         S3["Stdio-based communication"]
         S4["CLI tool use cases"]
     end
@@ -69,7 +69,7 @@ See [Session Management - Session Persistence](./session-management.md#session-p
 
 1. Client sends `mcp-session-id` header with requests
 2. If no header provided, a pending ID is generated: `pending-${timestamp}-${random}`
-3. Session IDs are propagated to upstream MCP servers (unless pending or "default")
+3. Each session's upstream connections get their own independent session IDs
 4. Each session gets its own Gateway server instance via the session factory
 
 ### Configuration
@@ -86,6 +86,18 @@ Environment overrides:
 
 - `PORT` - Override the port
 - `HOST` - Override the host
+
+### Client Roots
+
+When the downstream client advertises the `roots` capability, the gateway queries `roots/list` (with a 5-second timeout) before spawning stdio upstream servers. The first valid local filesystem path is used as the `cwd` for those processes, allowing tools like Playwright to operate in the client's project directory.
+
+### Graceful Shutdown
+
+On SIGINT/SIGTERM, HTTP mode:
+
+1. Sets a shutdown flag to immediately reject new sessions
+2. Enforces a 5-second timeout on draining existing connections
+3. Force-closes connections that don't drain in time
 
 ### When to Use HTTP Mode
 
@@ -110,13 +122,18 @@ sequenceDiagram
     Note over Parent,Upstream: Startup
     Parent->>Gateway: Launch via command
     Gateway->>Gateway: Load config
-    Gateway->>Clients: initializeAllClients("default")
+    Gateway->>Gateway: Create StdioServerTransport
+    Gateway->>Gateway: Connect to transport
+    Note over Gateway: Waiting for downstream client
+
+    Note over Parent,Upstream: Client Connects
+    Parent->>Gateway: MCP initialize
+    Note over Gateway: onDownstreamInitialized callback
+    Gateway->>Clients: initializeClientsForSession("default")
     loop For each configured server
         Clients->>Upstream: Connect
         Upstream-->>Clients: Connected
     end
-    Gateway->>Gateway: Create StdioServerTransport
-    Gateway->>Gateway: Connect to transport
     Note over Gateway: Ready for requests
 
     Note over Parent,Upstream: Runtime
@@ -131,12 +148,12 @@ sequenceDiagram
 
 ### Key Characteristics
 
-| Aspect            | Description                                    |
-| ----------------- | ---------------------------------------------- |
-| **Sessions**      | Single session with fixed ID "default"         |
-| **Client Init**   | All MCP clients initialized eagerly at startup |
-| **Transport**     | Uses `StdioServerTransport` from MCP SDK       |
-| **Communication** | JSON-RPC over stdin/stdout                     |
+| Aspect            | Description                                                               |
+| ----------------- | ------------------------------------------------------------------------- |
+| **Sessions**      | Single session with fixed ID "default"                                    |
+| **Client Init**   | MCP clients initialized when downstream client completes initialize handshake |
+| **Transport**     | Uses `StdioServerTransport` from MCP SDK                                  |
+| **Communication** | JSON-RPC over stdin/stdout                                                |
 
 ### Configuration
 
@@ -154,6 +171,10 @@ Port and host settings are ignored in stdio mode.
 - **Must build first** - Run `pnpm build && node dist/index.js`
 - **Single session only** - No concurrent clients supported
 
+### Client Roots
+
+Same as HTTP mode: when the downstream client advertises `roots`, the gateway queries `roots/list` (with a 5-second timeout) and uses the first valid local path as `cwd` for stdio upstream servers.
+
 ### When to Use Stdio Mode
 
 - CLI tools that launch the gateway as a subprocess
@@ -166,7 +187,7 @@ Port and host settings are ignored in stdio mode.
 | Feature               | HTTP Mode   | Stdio Mode    |
 | --------------------- | ----------- | ------------- |
 | Multiple sessions     | Yes         | No            |
-| Client initialization | Lazy        | Eager         |
+| Client initialization | Lazy        | Deferred      |
 | Session ID            | From header | "default"     |
 | Development server    | Works       | Not supported |
 | Typical use case      | Web APIs    | CLI tools     |

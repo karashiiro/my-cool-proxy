@@ -8,7 +8,7 @@ In HTTP mode, each client gets an isolated session with:
 
 - Dedicated MCP client connections to upstream servers
 - Separate caches for tools, resources, and prompts
-- Session ID propagation to upstream servers
+- Session-scoped state (upstream session IDs are independent)
 
 ```mermaid
 flowchart TB
@@ -135,7 +135,8 @@ sequenceDiagram
     Client->>HTTP: DELETE request
     Note over HTTP: onSessionClosed callback
     HTTP->>ClientMgr: closeClientsForSession(sessionId)
-    Note over ClientMgr: Session clients cleaned up
+    Note over ClientMgr: Client connections closed
+    Note over ClientMgr: Session data RETAINED in SQLite<br/>(for restart survivability)
 ```
 
 ## Session ID Handling
@@ -146,30 +147,21 @@ sequenceDiagram
 2. **Generated pending** - If no header: `pending-${timestamp}-${random}`
 3. **Fixed default** - Stdio mode always uses "default"
 
-### Session ID Propagation
+### Session ID Isolation
 
-Session IDs are passed to upstream HTTP servers:
+The gateway does **not** propagate session IDs to upstream servers. Each upstream MCP connection establishes its own independent session with its own server-assigned session ID. The gateway's internal session ID (`mcp-session-id`) is only used to:
+
+- Key the in-process client map (`${serverName}-${sessionId}`)
+- Scope session state within the gateway (capabilities, events, tool inspection cache)
 
 ```mermaid
 flowchart LR
     Agent["Agent"] -->|"mcp-session-id: abc123"| Gateway["Gateway"]
-    Gateway -->|"mcp-session-id: abc123"| Server1["Upstream Server 1"]
-    Gateway -->|"mcp-session-id: abc123"| Server2["Upstream Server 2"]
+    Gateway -->|"own session ID"| Server1["Upstream Server 1"]
+    Gateway -->|"own session ID"| Server2["Upstream Server 2"]
 ```
 
-**Exception:** Pending and default session IDs are NOT propagated to avoid conflicts:
-
-- `pending-*` IDs are temporary and shouldn't create upstream sessions
-- `default` is reserved for stdio mode
-
-Implementation in `packages/mcp-client/src/client-manager.ts`:
-
-```typescript
-const headers: Record<string, string> = { ...config.headers };
-if (sessionId !== "default" && !sessionId.startsWith("pending-")) {
-  headers["mcp-session-id"] = sessionId;
-}
-```
+Implementation in `packages/mcp-client/src/client-manager.ts` — upstream headers explicitly do not include the gateway's session ID.
 
 ## Session Management
 
@@ -192,7 +184,7 @@ The HTTP server uses three callbacks for session management:
 
 - `sessionFactory`: Creates a new `MCPGatewayServer` instance for each session
 - `onSessionInitialized`: Called after session is ready, initializes MCP clients
-- `onSessionClosed`: Cleans up session resources (closes clients)
+- `onSessionClosed`: Closes upstream client connections (session data is intentionally **not** deleted from SQLite to support restart survivability; cleanup is handled by `purgeOldData` retention policy)
 
 ## Client Session Features
 
@@ -296,11 +288,12 @@ In HTTP mode, session state is automatically persisted to SQLite, enabling sessi
 
 ### SQLite Components
 
-| Component               | Purpose                                              |
-| ----------------------- | ---------------------------------------------------- |
-| `SQLiteDatabase`        | Database connection and schema management            |
-| `SQLiteCapabilityStore` | Persists client capabilities and working directories |
-| `SQLiteEventStore`      | Persists SSE events for resumability                 |
+| Component                    | Purpose                                              |
+| ---------------------------- | ---------------------------------------------------- |
+| `SQLiteDatabase`             | Database connection and schema management            |
+| `SQLiteCapabilityStore`      | Persists client capabilities and working directories |
+| `SQLiteEventStore`           | Persists SSE events for resumability                 |
+| `SQLiteToolInspectionStore`  | Persists tool-details/inspect-tool-response state per session |
 
 ### Database Location
 
@@ -323,9 +316,10 @@ Session data is stored at platform-specific locations:
 | File                                                 | Purpose                          |
 | ---------------------------------------------------- | -------------------------------- |
 | `apps/gateway/src/stores/sqlite-database.ts`         | Database connection wrapper      |
-| `apps/gateway/src/stores/sqlite-capability-store.ts` | Session capability persistence   |
-| `apps/gateway/src/stores/sqlite-event-store.ts`      | SSE event persistence            |
-| `apps/gateway/src/utils/db-paths.ts`                 | Platform-specific database paths |
+| `apps/gateway/src/stores/sqlite-capability-store.ts`      | Session capability persistence        |
+| `apps/gateway/src/stores/sqlite-event-store.ts`           | SSE event persistence                 |
+| `apps/gateway/src/stores/sqlite-tool-inspection-store.ts` | Tool inspection state persistence     |
+| `apps/gateway/src/utils/db-paths.ts`                      | Platform-specific database paths      |
 
 ## Session Restoration
 
@@ -336,8 +330,9 @@ When the gateway restarts, persisted sessions can be restored automatically.
 The `onSessionRestored` callback handles session restoration:
 
 1. Triggered when a client reconnects with a previously-stored session ID
-2. Re-initializes upstream MCP client connections
-3. Blocks incoming requests until upstream servers are ready
+2. Waits for the `onDownstreamInitialized` callback (fires when the reconnecting client completes its MCP initialize handshake)
+3. Re-initializes upstream MCP client connections
+4. Blocks incoming requests until upstream servers are ready
 
 ```mermaid
 sequenceDiagram
@@ -367,18 +362,18 @@ When clients reconnect, they can provide a `Last-Event-ID` header. The gateway r
 | Aspect              | HTTP Mode                  | Stdio Mode            |
 | ------------------- | -------------------------- | --------------------- |
 | Session ID          | From header or generated   | Fixed "default"       |
-| Client init         | Lazy (on first request)    | Eager (at startup)    |
+| Client init         | Lazy (on first request)    | Deferred (on downstream init) |
 | Multiple sessions   | Yes                        | No                    |
 | Server factory      | `serveHttp()` with factory | `serveStdio()` direct |
 | Gateway instances   | One per session            | Single instance       |
-| Session persistence | SQLite-backed              | Not used              |
+| Session persistence | SQLite-backed              | Partial (see below)   |
 
 In stdio mode:
 
-- All clients initialized at startup via `serveStdio()`
+- All clients initialized when the downstream client completes the MCP initialize handshake
 - Single gateway server connects to stdio transport
 - No session isolation needed
-- Session persistence is not used (single fixed session)
+- SQLite is used for execution logging (`SQLiteExecutionLog`) and tool inspection persistence (`SQLiteToolInspectionStore`), but not for capability/event store persistence (those remain in-memory)
 
 ## Implementation Files
 
@@ -396,7 +391,7 @@ In stdio mode:
 1. **Always use session-scoped clients** - Never share clients between sessions
 2. **Handle cache invalidation** - Subscribe to notification handlers
 3. **Clean up resources** - Close clients when sessions end
-4. **Propagate session IDs** - Pass through to upstream where appropriate
+4. **Respect session isolation** - Each upstream connection manages its own session ID
 
 ### For Operators
 

@@ -155,6 +155,7 @@ The `_gateway` global table provides built-in functions for accessing gateway fu
 | `_gateway.get_prompt({ name, arguments })`                  | Get a specific prompt by its namespaced name          |
 | `_gateway.complete({ ref, argument, context })`             | Get completions for resource templates or prompt args |
 | `_gateway.summary_stats()`                                  | Get gateway statistics (server/tool/resource counts)  |
+| `_gateway.get_result({ id = "..." })`                       | Retrieve a previously-offloaded execution result by ID |
 | `_gateway.invoke_skill_script({ skillName, script, args })` | Execute a skill script (when skills enabled)          |
 | `_gateway.write_skill({ skillName, content, files })`       | Create/modify a skill (when skills mutable)           |
 | `_gateway.update_skill({ skillName, file, ... })`           | Partially update a skill file (when skills mutable)   |
@@ -271,17 +272,33 @@ The `execute` tool processes script results:
 
 ```mermaid
 flowchart TB
-    Result["Script Result"] --> Check{"Result type?"}
+    Result["Script Result"] --> SizeCheck{"Exceeds size\nthreshold?"}
+    SizeCheck -->|Yes| Offload["Return schema summary\n+ execution ID"]
+    SizeCheck -->|No| Check{"Result type?"}
     Check -->|"CallToolResult"| AsIs["Return as-is"]
     Check -->|"Object"| Structured["Add structuredContent"]
     Check -->|"Array"| TextOnly["Return as text only"]
     Check -->|"Primitive"| Wrap["Wrap in text content"]
 
-    Structured --> Return["Return CallToolResult"]
+    Offload --> Return["Return CallToolResult"]
+    Structured --> Return
     TextOnly --> Return
     Wrap --> Return
     AsIs --> Return
 ```
+
+### Large Result Offloading
+
+When a script result's JSON serialization exceeds `resultSizeThreshold` (default 50KB, configurable, set to `0` to disable), the result is automatically offloaded. Instead of the full data, agents receive:
+
+- Byte count and item count of the original result
+- An execution ID for retrieval via `_gateway.get_result()`
+- An inferred JSON schema summary of the result's structure
+- Example Lua filter code
+
+Agents then call `_gateway.get_result({ id = "..." }):await()` in a follow-up `execute` script to retrieve the full result and filter it to only the fields they need.
+
+Implementation: `apps/gateway/src/tools/result-offloader.ts`
 
 ### structuredContent
 
@@ -363,12 +380,31 @@ end
 result({ user_names = names })
 ```
 
+### Pagination Example
+
+Many list/search tools paginate results. Loop to fetch all pages:
+
+```lua
+local all_items = {}
+local page = 1
+while true do
+    local res = my_server.list_things({ page = page, perPage = 100 }):await()
+    for _, item in ipairs(res.items) do
+        table.insert(all_items, { name = item.name, id = item.id })
+    end
+    if not res.hasNextPage then break end
+    page = page + 1
+end
+result(all_items)
+```
+
 ## Implementation Files
 
 | File                                                 | Purpose                                   |
 | ---------------------------------------------------- | ----------------------------------------- |
 | `packages/lua-runtime/src/runtime.ts`                | Main `WasmoonRuntime` class               |
 | `apps/gateway/src/tools/execute-lua-tool.ts`         | Gateway tool that invokes runtime         |
+| `apps/gateway/src/tools/result-offloader.ts`         | Large result offloading with schema summaries |
 | `apps/gateway/src/tools/gateway-builtins-builder.ts` | Constructs `_gateway` table with builtins |
 | `packages/mcp-utilities/src/lua-identifier.ts`       | Name sanitization utilities               |
 | `packages/mcp-utilities/src/resource-uri.ts`         | URI utilities for skill resources         |

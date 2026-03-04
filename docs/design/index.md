@@ -37,7 +37,7 @@ In HTTP mode, each client session gets:
 
 - Isolated MCP client connections to upstream servers
 - Separate caches for resources, prompts, and tool lists
-- Session IDs propagated to upstream servers for request correlation
+- Session-scoped state (upstream session IDs are independent)
 
 See [Session Management](./session-management.md) for details.
 
@@ -156,7 +156,7 @@ The gateway supports two transport modes:
 | Aspect      | HTTP Mode                 | Stdio Mode              |
 | ----------- | ------------------------- | ----------------------- |
 | Sessions    | Multiple concurrent       | Single                  |
-| Client Init | Lazy (on first request)   | Eager (at startup)      |
+| Client Init | Lazy (on first request)   | Deferred (on downstream init) |
 | Use Case    | Web APIs, multiple agents | CLI tools, single agent |
 
 See [Transport Modes](./transport-modes.md) for details.
@@ -190,3 +190,4 @@ See the [Configuration Guide](../configuration.md) for the full configuration re
 - [Resource Namespacing](./resource-namespacing.md) - Resource and prompt aggregation
 - [Sampling](./sampling.md) - Sampling support, security model, and ACP shim
 - [Skills](./skills.md) - Reusable process documents for agents
+- [Logging](../logging.md) - Logging configuration and output

@@ -46,6 +46,12 @@ node dist/index.js --config-path
 pnpm build && node dist/index.js --config-path
 ```
 
+Run with `--paths` to display all platform-specific directories at once (config, data, and log):
+
+```bash
+node dist/index.js --paths
+```
+
 ### Setting Up Your Config
 
 **Option 1: Auto-create (Recommended)**
@@ -125,6 +131,12 @@ CONFIG_PATH=/path/to/custom-config.json pnpm dev
 - **database** (object, optional): Database configuration for data retention
   - **retentionDays** (number, optional): Number of days to retain data before automatic cleanup on startup (default: `7`)
 - **dashboard** (object, optional): Dashboard web UI configuration (see [Dashboard](#dashboard))
+- **logging** (object, optional): Logging configuration (see [Logging](#logging-1))
+  - **console** (object, optional): Console output configuration
+    - **level** (string, optional): Log level for console output. Default: `"info"`. Valid values: `trace`, `debug`, `info`, `warn`, `error`, `fatal`
+  - **file** (object, optional): File output configuration
+    - **level** (string, optional): Log level for file output. Default: `"trace"`. Valid values: `trace`, `debug`, `info`, `warn`, `error`, `fatal`
+- **resultSizeThreshold** (number, optional): Byte-size threshold for offloading large Lua execution results. When a result's JSON exceeds this threshold, the gateway returns a schema summary with an execution ID instead of the full payload. The full result can be retrieved via `_gateway.get_result()` in a follow-up script. Set to `0` to disable offloading. Default: `50000`
 
 #### MCP Client Configuration
 
@@ -178,6 +190,7 @@ The following environment variables can override config file values:
 - `PORT` - Override the port number
 - `HOST` - Override the hostname
 - `CONFIG_PATH` - Specify a custom config file path
+- `QUIET_LOGS` - When set to any value, reduces the default console log level from `"info"` to `"warn"`. Has no effect if `logging.console.level` is explicitly configured
 
 ### Example
 
@@ -291,7 +304,7 @@ Run the gateway as a stdio-based MCP server that clients launch directly. This i
 **Key differences from HTTP mode:**
 
 - Single session only (no multi-client support)
-- All upstream MCP clients initialize at startup (not lazily)
+- All upstream MCP clients initialize when the downstream client connects (not lazily per-request like HTTP, but not at process startup either)
 
 **Configuration:**
 
@@ -1069,7 +1082,7 @@ Session data is stored in a SQLite database at the platform-specific data direct
 2. **On tool calls**: SSE events are persisted for resumability
 3. **On server restart**: Sessions can resume because state is persisted
 4. **On client reconnect**: SSE events are replayed if the client provides `Last-Event-ID`
-5. **On session close**: Session data is cleaned up from the database
+5. **On session close**: Client connections are cleaned up (session data is retained in SQLite for restart survivability; stale data is purged by retention policy)
 
 ### Event Retention
 
@@ -1129,4 +1142,4 @@ The cleanup runs once at server startup in both HTTP and stdio modes. It logs th
 
 ### Stdio Mode
 
-Session persistence is **not used in stdio mode**. Stdio transport has a single fixed session (`default`) that exists only for the lifetime of the process. There's no benefit to persisting state across restarts since the session ID is always the same and the client process also terminates with the gateway.
+Stdio mode uses SQLite for execution logging (`SQLiteExecutionLog`) and tool inspection persistence (`SQLiteToolInspectionStore`), but not for capability or event store persistence. Those remain in-memory for stdio's single fixed session. Stdio transport has a single fixed session (`default`) that exists only for the lifetime of the process. There's no benefit to persisting state across restarts since the session ID is always the same and the client process also terminates with the gateway.
