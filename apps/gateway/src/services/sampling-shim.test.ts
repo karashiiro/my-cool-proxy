@@ -12,13 +12,19 @@ vi.mock("@my-cool-proxy/acp-client", () => ({
 }));
 
 // Mock the mappers, tempdir utilities, and root utils
-vi.mock("../utils/index.js", () => ({
-  mapMcpToAcpPrompt: vi.fn(),
-  mapAcpToMcpResult: vi.fn(),
-  createSessionTempDir: vi.fn((sessionId: string) => `/tmp/test-${sessionId}`),
-  cleanupSessionTempDir: vi.fn(),
-  findValidLocalRoot: vi.fn(),
-}));
+vi.mock("../utils/index.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../utils/index.js")>();
+  return {
+    mapMcpToAcpPrompt: vi.fn(),
+    mapAcpToMcpResult: vi.fn(),
+    createSessionTempDir: vi.fn(
+      (sessionId: string) => `/tmp/test-${sessionId}`,
+    ),
+    cleanupSessionTempDir: vi.fn(),
+    findValidLocalRoot: vi.fn(),
+    withTimeout: actual.withTimeout,
+  };
+});
 
 const createMockLogger = (): ILogger => ({
   info: vi.fn(),

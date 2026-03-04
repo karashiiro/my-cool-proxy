@@ -37,6 +37,8 @@ export interface IMCPClientManager {
     allowedTools?: string[],
     clientCapabilities?: ClientCapabilities,
     stderrLogPath?: string,
+    dangerouslyEnableSampling?: boolean,
+    cwd?: string,
   ): Promise<ClientConnectionResult>;
   getClient(name: string, sessionId: string): Promise<MCPClientSession>;
   getClientsBySession(sessionId: string): Map<string, MCPClientSession>;

@@ -22,7 +22,12 @@ import type {
 } from "@my-cool-proxy/mcp-aggregation";
 import { MCPGatewayServer } from "./mcp/gateway-server.js";
 import { registerProxyHandlers } from "./handlers/proxy-handlers.js";
-import { createSessionTempDir, initializeSamplingShim } from "./utils/index.js";
+import {
+  createSessionTempDir,
+  initializeSamplingShim,
+  withTimeout,
+} from "./utils/index.js";
+import { findValidLocalRoot } from "./utils/root-utils.js";
 import { ensureServerLogDir, getServerLogPath } from "./utils/log-paths.js";
 import { getDbPath, ensureDbDirectory } from "./utils/db-paths.js";
 import { SQLiteDatabase } from "./stores/sqlite-database.js";
@@ -197,6 +202,7 @@ export async function initializeClientsForSession(
   config: ServerConfig,
   clientManager: IMCPClientManager,
   clientCapabilities?: ClientCapabilities,
+  cwd?: string,
 ): Promise<InitializationResult> {
   // Ensure server log directory exists for stdio server stderr redirection
   ensureServerLogDir();
@@ -226,6 +232,7 @@ export async function initializeClientsForSession(
           clientCapabilities,
           stderrLogPath,
           clientConfig.dangerouslyEnableSampling,
+          cwd,
         );
       } else {
         // Exhaustiveness check - TypeScript will error if a new type is added
@@ -323,12 +330,41 @@ export async function handleDownstreamInitialized(
     );
   }
 
+  // Resolve client roots to a local filesystem path for use as stdio server cwd.
+  // This ensures stdio servers (e.g. Playwright) use the client's project directory
+  // instead of the gateway's working directory.
+  let stdioCwd: string | undefined;
+  if (capabilities.roots) {
+    try {
+      const rootsResult = await withTimeout(
+        gatewayServer.forwardListRootsRequest(),
+        5000,
+        "Roots request timed out",
+      );
+      stdioCwd = findValidLocalRoot(rootsResult.roots);
+      if (stdioCwd) {
+        logger.info(
+          `Session ${sessionId}: Resolved client root as stdio cwd: ${stdioCwd}`,
+        );
+      } else {
+        logger.debug(
+          `Session ${sessionId}: No valid local root found, stdio servers will use default cwd`,
+        );
+      }
+    } catch (error) {
+      logger.warn(
+        `Session ${sessionId}: Failed to resolve client roots for stdio cwd: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
   // Now initialize upstream MCP clients with the (possibly augmented) capabilities
   const initResult = await initializeClientsForSession(
     sessionId,
     config,
     clientManager,
     upstreamCapabilities,
+    stdioCwd,
   );
 
   if (initResult.failed.length > 0) {

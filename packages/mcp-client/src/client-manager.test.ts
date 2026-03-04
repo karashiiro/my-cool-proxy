@@ -89,6 +89,38 @@ describe("MCPClientManager", () => {
       expect(res.success).toBe(true);
       expect(mockSdkClient.connect).toHaveBeenCalledWith(mockTransport);
     });
+
+    it("passes cwd to StdioClientTransport when provided", async () => {
+      await clientManager.addStdioClient(
+        "cwd-test",
+        "node",
+        "sess-cwd",
+        ["server.js"],
+        undefined,
+        undefined,
+        undefined,
+        undefined, // stderrLogPath
+        undefined, // dangerouslyEnableSampling
+        "/home/user/project", // cwd
+      );
+      expect(StdioClientTransport).toHaveBeenCalledWith(
+        expect.objectContaining({
+          command: "node",
+          args: ["server.js"],
+          cwd: "/home/user/project",
+        }),
+      );
+    });
+
+    it("does not include cwd in StdioClientTransport options when not provided", async () => {
+      await clientManager.addStdioClient("no-cwd", "node", "sess-no-cwd");
+      expect(StdioClientTransport).toHaveBeenCalledWith(
+        expect.objectContaining({
+          command: "node",
+          cwd: undefined,
+        }),
+      );
+    });
   });
 
   describe("getClient / getClientsBySession", () => {

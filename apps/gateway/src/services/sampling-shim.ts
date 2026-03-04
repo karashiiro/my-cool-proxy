@@ -26,6 +26,7 @@ import {
   mapMcpToAcpPrompt,
   mapAcpToMcpResult,
   findValidLocalRoot,
+  withTimeout,
 } from "../utils/index.js";
 import { $inject } from "../container/decorators.js";
 import { TYPES } from "../types/index.js";
@@ -122,15 +123,11 @@ export class SamplingShim implements ISamplingShim {
     const provider = this.rootsProviders.get(sessionId);
     if (provider) {
       try {
-        const rootsResult = await Promise.race([
+        const rootsResult = await withTimeout(
           provider(),
-          new Promise<never>((_, reject) =>
-            setTimeout(
-              () => reject(new Error("roots/list timed out")),
-              SamplingShim.ROOTS_TIMEOUT_MS,
-            ),
-          ),
-        ]);
+          SamplingShim.ROOTS_TIMEOUT_MS,
+          "roots/list timed out",
+        );
         const localRoot = findValidLocalRoot(rootsResult.roots);
         if (localRoot) {
           this.logger.info(

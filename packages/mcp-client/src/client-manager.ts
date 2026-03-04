@@ -173,6 +173,7 @@ export class MCPClientManager implements IMCPClientManager {
     clientCapabilities?: ClientCapabilities,
     stderrLogPath?: string,
     dangerouslyEnableSampling?: boolean,
+    cwd?: string,
   ): Promise<ClientConnectionResult> {
     const key = `${name}-${sessionId}`;
     if (this.clients.has(key)) {
@@ -213,6 +214,7 @@ export class MCPClientManager implements IMCPClientManager {
         args,
         env,
         stderr: stderrLogPath ? "pipe" : "inherit",
+        cwd,
       });
 
       await sdkClient.connect(transport);
