@@ -1,4 +1,4 @@
-import { LuaFactory, LuaEngine } from "wasmoon";
+import { LuaFactory, type LuaEngine } from "wasmoon";
 import type {
   ILuaRuntime,
   ILogger,
