@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { spawn, type ChildProcess } from "child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import {
   ACPClient,
   type ILogger,
@@ -83,7 +83,7 @@ describe("ACPClient", () => {
     };
 
     // Configure spawn mock
-    const { spawn } = await import("child_process");
+    const { spawn } = await import("node:child_process");
     vi.mocked(spawn).mockReturnValue(mockProcess as ChildProcess);
 
     // Configure ClientSideConnection mock - capture the handler for permission testing

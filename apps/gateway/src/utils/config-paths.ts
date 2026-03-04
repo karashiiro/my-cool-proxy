@@ -1,5 +1,5 @@
-import { existsSync } from "fs";
-import { resolve } from "path";
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
 import { appPaths } from "./app-paths.js";
 
 const CONFIG_FILENAME = "config.json";

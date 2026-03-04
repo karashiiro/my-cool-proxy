@@ -332,18 +332,17 @@ export class MCPGatewayServer {
               total?: number,
               message?: string,
             ) => {
-              const params: Record<string, unknown> = {
-                progressToken,
-                progress,
+              const progressNotification: ServerNotification = {
+                method: "notifications/progress" as const,
+                params: {
+                  progressToken,
+                  progress,
+                  ...(total !== undefined && { total }),
+                  ...(message !== undefined && { message }),
+                },
               };
-              if (total !== undefined) params.total = total;
-              if (message !== undefined) params.message = message;
-
               extra
-                .sendNotification({
-                  method: "notifications/progress" as const,
-                  params,
-                } as ServerNotification)
+                .sendNotification(progressNotification)
                 .catch((err: unknown) => {
                   this.logger.warn(
                     `Failed to send progress notification: ${err instanceof Error ? err.message : String(err)}`,

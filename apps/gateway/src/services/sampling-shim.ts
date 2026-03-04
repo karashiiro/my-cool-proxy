@@ -264,12 +264,13 @@ export class SamplingShim implements ISamplingShim {
           input: capturedToolCall.input,
         };
 
-        return {
+        const toolUseResult: CreateMessageResultWithTools = {
           role: "assistant",
           content: [toolUseContent],
           model: "acp-agent",
           stopReason: "toolUse",
-        } as CreateMessageResultWithTools;
+        };
+        return toolUseResult;
       }
 
       // No tool call captured - return normal text result

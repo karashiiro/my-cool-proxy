@@ -21,7 +21,8 @@ export async function aggregateFromServers<T>(
   const promises = Array.from(clients.entries()).map(async ([name, client]) => {
     try {
       const result = await fetchFn(name, client);
-      return { name, result } as AggregationResult<T>;
+      const aggregationResult: AggregationResult<T> = { name, result };
+      return aggregationResult;
     } catch (error) {
       if (
         options?.suppressErrorContaining &&

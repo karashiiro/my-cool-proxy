@@ -64,7 +64,7 @@ function createDataServer(): McpServer {
         content: [
           {
             type: "text",
-            text: `Available files:\n${files.map((f) => `- file://${f}`).join("\n")}`,
+            text: `Available files:\n${files.map((f) => "- file://" + f).join("\n")}`,
           },
         ],
       };

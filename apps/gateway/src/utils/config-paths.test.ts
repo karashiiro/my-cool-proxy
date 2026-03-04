@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdirSync, writeFileSync, rmSync, existsSync } from "fs";
-import { resolve } from "path";
-import { tmpdir } from "os";
+import { mkdirSync, writeFileSync, rmSync, existsSync } from "node:fs";
+import { resolve } from "node:path";
+import { tmpdir } from "node:os";
 import {
   getConfigPaths,
   getActiveConfigPath,

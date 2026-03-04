@@ -279,6 +279,7 @@ export async function startDashboardServer(
           if ("closeAllConnections" in server) {
             server.closeAllConnections();
           }
+          // eslint-disable-next-line sonarjs/no-nested-functions
           server.close((err) => {
             clearTimeout(timeout);
             if (err) reject(err);

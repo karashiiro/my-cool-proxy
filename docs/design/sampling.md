@@ -156,14 +156,14 @@ flowchart TB
 
 ### Component Responsibilities
 
-| Component             | Purpose                                           |
-| --------------------- | ------------------------------------------------- |
-| `SamplingShim`        | Thin orchestrator; lifecycle management           |
-| `mapMcpToAcpPrompt()` | Convert MCP sampling params to ACP content blocks |
-| `mapAcpToMcpResult()` | Convert ACP response to MCP CreateMessageResult   |
+| Component             | Purpose                                                                                                            |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `SamplingShim`        | Thin orchestrator; lifecycle management                                                                            |
+| `mapMcpToAcpPrompt()` | Convert MCP sampling params to ACP content blocks                                                                  |
+| `mapAcpToMcpResult()` | Convert ACP response to MCP CreateMessageResult                                                                    |
 | `CapabilityStore`     | Track downstream client capabilities and working directories per session; provides session tempdir as fallback cwd |
-| `ACPClient`           | Long-lived connection to agent process            |
-| `ACPClientSession`    | Short-lived session per sampling request          |
+| `ACPClient`           | Long-lived connection to agent process                                                                             |
+| `ACPClientSession`    | Short-lived session per sampling request                                                                           |
 
 ### Request Flow
 
@@ -226,6 +226,7 @@ stateDiagram-v2
 - **Working directory** - Resolved lazily per request via `roots/list` on the downstream client. If the client advertises roots, the first valid local root is used as cwd (giving the agent access to the real project directory). Falls back to a session tempdir if roots/list fails, times out (5s), or returns no valid local paths.
 
 > **Note:** `roots/list` is consumed at two distinct points in the session lifecycle:
+>
 > 1. **Session initialization** — sets the `cwd` for stdio upstream servers (via `startup.ts`)
 > 2. **Sampling request time** — ACP working directory resolution (via `SamplingShim`)
 
@@ -362,12 +363,12 @@ Tool calls are captured to ensure spec compliance:
 
 ### Component Details
 
-| Component              | Purpose                                     | Lifecycle            |
-| ---------------------- | ------------------------------------------- | -------------------- |
-| `ACPClientHandler`     | Approves sidecar tool permission requests   | Per-gateway-session  |
-| `ToolCallbackServer`   | Captures tool calls with full arguments     | Per-sampling-request |
-| `mcp-sampling-sidecar` | Exposes tools to agent via MCP              | Per-sampling-request |
-| Tool tag               | UUID suffix for identifying sidecar tools   | Per-sampling-request |
+| Component              | Purpose                                   | Lifecycle            |
+| ---------------------- | ----------------------------------------- | -------------------- |
+| `ACPClientHandler`     | Approves sidecar tool permission requests | Per-gateway-session  |
+| `ToolCallbackServer`   | Captures tool calls with full arguments   | Per-sampling-request |
+| `mcp-sampling-sidecar` | Exposes tools to agent via MCP            | Per-sampling-request |
+| Tool tag               | UUID suffix for identifying sidecar tools | Per-sampling-request |
 
 ### Tool Name Tagging
 

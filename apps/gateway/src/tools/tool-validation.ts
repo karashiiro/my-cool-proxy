@@ -71,7 +71,7 @@ export function validateToolArgs<T extends ToolSchemaDefinition>(
 
   if (errors.length > 0) {
     throw new Error(
-      `Invalid tool arguments:\n${errors.map((e) => `  - ${e}`).join("\n")}`,
+      `Invalid tool arguments:\n${errors.map((e) => "  - " + e).join("\n")}`,
     );
   }
 

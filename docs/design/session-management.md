@@ -288,12 +288,12 @@ In HTTP mode, session state is automatically persisted to SQLite, enabling sessi
 
 ### SQLite Components
 
-| Component                    | Purpose                                              |
-| ---------------------------- | ---------------------------------------------------- |
-| `SQLiteDatabase`             | Database connection and schema management            |
-| `SQLiteCapabilityStore`      | Persists client capabilities and working directories |
-| `SQLiteEventStore`           | Persists SSE events for resumability                 |
-| `SQLiteToolInspectionStore`  | Persists tool-details/inspect-tool-response state per session |
+| Component                   | Purpose                                                       |
+| --------------------------- | ------------------------------------------------------------- |
+| `SQLiteDatabase`            | Database connection and schema management                     |
+| `SQLiteCapabilityStore`     | Persists client capabilities and working directories          |
+| `SQLiteEventStore`          | Persists SSE events for resumability                          |
+| `SQLiteToolInspectionStore` | Persists tool-details/inspect-tool-response state per session |
 
 ### Database Location
 
@@ -313,13 +313,13 @@ Session data is stored at platform-specific locations:
 
 ### Implementation Files
 
-| File                                                 | Purpose                          |
-| ---------------------------------------------------- | -------------------------------- |
-| `apps/gateway/src/stores/sqlite-database.ts`         | Database connection wrapper      |
-| `apps/gateway/src/stores/sqlite-capability-store.ts`      | Session capability persistence        |
-| `apps/gateway/src/stores/sqlite-event-store.ts`           | SSE event persistence                 |
-| `apps/gateway/src/stores/sqlite-tool-inspection-store.ts` | Tool inspection state persistence     |
-| `apps/gateway/src/utils/db-paths.ts`                      | Platform-specific database paths      |
+| File                                                      | Purpose                           |
+| --------------------------------------------------------- | --------------------------------- |
+| `apps/gateway/src/stores/sqlite-database.ts`              | Database connection wrapper       |
+| `apps/gateway/src/stores/sqlite-capability-store.ts`      | Session capability persistence    |
+| `apps/gateway/src/stores/sqlite-event-store.ts`           | SSE event persistence             |
+| `apps/gateway/src/stores/sqlite-tool-inspection-store.ts` | Tool inspection state persistence |
+| `apps/gateway/src/utils/db-paths.ts`                      | Platform-specific database paths  |
 
 ## Session Restoration
 
@@ -359,14 +359,14 @@ When clients reconnect, they can provide a `Last-Event-ID` header. The gateway r
 
 ## Stdio Mode Differences
 
-| Aspect              | HTTP Mode                  | Stdio Mode            |
-| ------------------- | -------------------------- | --------------------- |
-| Session ID          | From header or generated   | Fixed "default"       |
+| Aspect              | HTTP Mode                  | Stdio Mode                    |
+| ------------------- | -------------------------- | ----------------------------- |
+| Session ID          | From header or generated   | Fixed "default"               |
 | Client init         | Lazy (on first request)    | Deferred (on downstream init) |
-| Multiple sessions   | Yes                        | No                    |
-| Server factory      | `serveHttp()` with factory | `serveStdio()` direct |
-| Gateway instances   | One per session            | Single instance       |
-| Session persistence | SQLite-backed              | Partial (see below)   |
+| Multiple sessions   | Yes                        | No                            |
+| Server factory      | `serveHttp()` with factory | `serveStdio()` direct         |
+| Gateway instances   | One per session            | Single instance               |
+| Session persistence | SQLite-backed              | Partial (see below)           |
 
 In stdio mode:
 

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { mkdirSync, writeFileSync, rmSync, existsSync } from "fs";
-import { resolve } from "path";
-import { tmpdir } from "os";
+import { mkdirSync, writeFileSync, rmSync, existsSync } from "node:fs";
+import { resolve } from "node:path";
+import { tmpdir } from "node:os";
 import { SkillDiscoveryService } from "./skill-discovery-service.js";
 import type { ILogger, ServerConfig } from "../types/interfaces.js";
 

@@ -1,4 +1,4 @@
-import { resolve } from "path";
+import { resolve } from "node:path";
 import { getActiveConfigDir } from "./config-paths.js";
 import type { TextContent } from "@modelcontextprotocol/sdk/types.js";
 

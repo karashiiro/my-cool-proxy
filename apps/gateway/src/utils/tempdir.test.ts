@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { existsSync, mkdirSync, writeFileSync, readdirSync } from "fs";
-import { join } from "path";
-import { tmpdir } from "os";
+import { existsSync, mkdirSync, writeFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { createSessionTempDir, cleanupSessionTempDir } from "./tempdir.js";
 
 describe("tempdir utilities", () => {

@@ -7,16 +7,12 @@
  * - Structured: logger.info({ key: value }, "message") - adds searchable context
  */
 export interface ILogger {
-  info(message: string): void;
-  info(obj: object, message: string): void;
-  warn(message: string): void;
-  warn(obj: object, message: string): void;
-  error(message: string, error?: Error): void;
-  error(obj: object, message: string): void;
-  debug(message: string): void;
-  debug(obj: object, message: string): void;
-  fatal(message: string): void;
-  fatal(obj: object, message: string): void;
+  info: ((message: string) => void) & ((obj: object, message: string) => void);
+  warn: ((message: string) => void) & ((obj: object, message: string) => void);
+  error: ((message: string, error?: Error) => void) &
+    ((obj: object, message: string) => void);
+  debug: ((message: string) => void) & ((obj: object, message: string) => void);
+  fatal: ((message: string) => void) & ((obj: object, message: string) => void);
 }
 
 /**

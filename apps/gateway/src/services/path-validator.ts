@@ -1,4 +1,4 @@
-import { resolve, sep } from "path";
+import { resolve, sep } from "node:path";
 
 /**
  * Validate that a relative path component doesn't contain path traversal.

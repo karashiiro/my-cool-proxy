@@ -74,8 +74,8 @@ export interface ITool {
    * @param context - Execution context (e.g., sessionId)
    * @returns A CallToolResult containing the tool's output
    */
-  execute(
+  execute: (
     args: Record<string, unknown>,
     context: ToolExecutionContext,
-  ): Promise<CallToolResult>;
+  ) => Promise<CallToolResult>;
 }

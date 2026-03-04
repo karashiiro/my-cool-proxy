@@ -5,8 +5,8 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { MCPClientSession } from "./client-session.js";
 import type { ILogger, ClientCapabilities } from "./types.js";
-import { createWriteStream } from "fs";
-import type { WriteStream } from "fs";
+import { createWriteStream } from "node:fs";
+import type { WriteStream } from "node:fs";
 
 // Mock the SDK modules and fs
 vi.mock("@modelcontextprotocol/sdk/client/index.js");

@@ -14,10 +14,10 @@ This file is in structured JSON format (newline-delimited), suitable for machine
 
 The gateway has two independent output streams with separately configurable levels:
 
-| Output | Format | Default Level | Description |
-| --- | --- | --- | --- |
-| **Console** (stderr) | Human-readable | `info` | Visible in the terminal |
-| **File** (`gateway.log`) | Structured JSON | `trace` | Captures everything |
+| Output                   | Format          | Default Level | Description             |
+| ------------------------ | --------------- | ------------- | ----------------------- |
+| **Console** (stderr)     | Human-readable  | `info`        | Visible in the terminal |
+| **File** (`gateway.log`) | Structured JSON | `trace`       | Captures everything     |
 
 Both streams can be configured independently via the `logging` section in `config.json`. See the [Configuration Guide](./configuration.md#logging-1) for details.
 

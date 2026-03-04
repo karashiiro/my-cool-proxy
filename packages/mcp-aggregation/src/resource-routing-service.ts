@@ -13,28 +13,28 @@ export interface IResourceRoutingService {
    * Register a resource URI from a `listResources()` result.
    * These registrations are cleared on session invalidation.
    */
-  registerUri(sessionId: string, uri: string, serverName: string): void;
+  registerUri: (sessionId: string, uri: string, serverName: string) => void;
 
   /**
    * Register a resource template URI from a `listResourceTemplates()` result.
    * These registrations are cleared on session invalidation.
    */
-  registerTemplate(
+  registerTemplate: (
     sessionId: string,
     uriTemplate: string,
     serverName: string,
-  ): void;
+  ) => void;
 
   /**
    * Register a resource URI encountered in tool results or prompt results.
    * These registrations persist across session invalidation because they
    * remain valid references even when the resource list changes.
    */
-  registerEncounteredUri(
+  registerEncounteredUri: (
     sessionId: string,
     uri: string,
     serverName: string,
-  ): void;
+  ) => void;
 
   /**
    * Look up which server owns a given resource URI.
@@ -46,20 +46,20 @@ export interface IResourceRoutingService {
    *
    * @returns The server name, or undefined if no route is found
    */
-  getServerForUri(sessionId: string, uri: string): string | undefined;
+  getServerForUri: (sessionId: string, uri: string) => string | undefined;
 
   /**
    * Clear listing-derived routes (URI map + template map) for a session.
    * Called when a server reports `resources/list_changed`.
    * Encounter-based registrations are preserved.
    */
-  invalidateSession(sessionId: string): void;
+  invalidateSession: (sessionId: string) => void;
 
   /**
    * Fully remove all routing data for a session (URI map, templates, encounters).
    * Called when an HTTP session is closed to prevent memory leaks.
    */
-  deleteSession(sessionId: string): void;
+  deleteSession: (sessionId: string) => void;
 }
 
 interface TemplateEntry {

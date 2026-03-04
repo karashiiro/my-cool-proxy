@@ -148,12 +148,12 @@ sequenceDiagram
 
 ### Key Characteristics
 
-| Aspect            | Description                                                               |
-| ----------------- | ------------------------------------------------------------------------- |
-| **Sessions**      | Single session with fixed ID "default"                                    |
+| Aspect            | Description                                                                   |
+| ----------------- | ----------------------------------------------------------------------------- |
+| **Sessions**      | Single session with fixed ID "default"                                        |
 | **Client Init**   | MCP clients initialized when downstream client completes initialize handshake |
-| **Transport**     | Uses `StdioServerTransport` from MCP SDK                                  |
-| **Communication** | JSON-RPC over stdin/stdout                                                |
+| **Transport**     | Uses `StdioServerTransport` from MCP SDK                                      |
+| **Communication** | JSON-RPC over stdin/stdout                                                    |
 
 ### Configuration
 

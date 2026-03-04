@@ -153,11 +153,11 @@ sequenceDiagram
 
 The gateway supports two transport modes:
 
-| Aspect      | HTTP Mode                 | Stdio Mode              |
-| ----------- | ------------------------- | ----------------------- |
-| Sessions    | Multiple concurrent       | Single                  |
+| Aspect      | HTTP Mode                 | Stdio Mode                    |
+| ----------- | ------------------------- | ----------------------------- |
+| Sessions    | Multiple concurrent       | Single                        |
 | Client Init | Lazy (on first request)   | Deferred (on downstream init) |
-| Use Case    | Web APIs, multiple agents | CLI tools, single agent |
+| Use Case    | Web APIs, multiple agents | CLI tools, single agent       |
 
 See [Transport Modes](./transport-modes.md) for details.
 

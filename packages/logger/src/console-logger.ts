@@ -1,8 +1,8 @@
 import type { ILogger, LoggerConfig, LogLevel } from "./types.js";
 import pino from "pino";
-import { mkdirSync } from "fs";
-import { dirname } from "path";
-import { createWriteStream } from "fs";
+import { mkdirSync } from "node:fs";
+import { dirname } from "node:path";
+import { createWriteStream } from "node:fs";
 import pretty from "pino-pretty";
 
 /** Numeric log levels in pino - lower is more verbose */

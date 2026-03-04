@@ -1,5 +1,5 @@
-import { mkdirSync, readFileSync, writeFileSync } from "fs";
-import { dirname } from "path";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import type { ServerConfig, MCPClientConfig } from "../types/interfaces.js";
 import { getActiveConfigPath, getPlatformConfigPath } from "./config-paths.js";
 
@@ -460,8 +460,11 @@ export function loadConfig(): ServerConfig {
     const createdPath = createDefaultConfig();
 
     // Log to stderr (stdout may be used for MCP protocol in stdio mode)
+    // eslint-disable-next-line no-console
     console.error(`\n  Created default config at: ${createdPath}`);
+    // eslint-disable-next-line no-console
     console.error(`  Edit this file to add your MCP servers.`);
+    // eslint-disable-next-line no-console
     console.error(`  See docs/configuration.md for configuration options.\n`);
 
     // Return the default config directly (we know what we wrote)

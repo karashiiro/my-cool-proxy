@@ -1,13 +1,13 @@
 import { injectable } from "inversify";
-import { spawn } from "child_process";
-import { resolve, dirname } from "path";
+import { spawn } from "node:child_process";
+import { resolve, dirname } from "node:path";
 import {
   existsSync,
   statSync,
   mkdirSync,
   writeFileSync,
   readFileSync,
-} from "fs";
+} from "node:fs";
 import { getErrorMessage } from "@my-cool-proxy/mcp-utilities";
 import type { ILogger, ISkillDiscoveryService } from "../types/interfaces.js";
 import { $inject } from "../container/decorators.js";

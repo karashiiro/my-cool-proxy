@@ -18,13 +18,13 @@ export type {
 };
 
 export interface ILuaRuntime {
-  executeScript(
+  executeScript: (
     script: string,
     mcpServers: Map<string, MCPClientSession>,
     gatewayBuiltins: IGatewayBuiltins,
     onProgress?: (progress: number, total?: number, message?: string) => void,
     toolCallLog?: IToolCallLog,
-  ): Promise<unknown>;
+  ) => Promise<unknown>;
 }
 
 export interface ClientConnectionResult {
@@ -34,7 +34,7 @@ export interface ClientConnectionResult {
 }
 
 export interface IMCPClientManager {
-  addHttpClient(
+  addHttpClient: (
     name: string,
     endpoint: string,
     sessionId: string,
@@ -42,8 +42,8 @@ export interface IMCPClientManager {
     allowedTools?: string[],
     clientCapabilities?: ClientCapabilities,
     dangerouslyEnableSampling?: boolean,
-  ): Promise<ClientConnectionResult>;
-  addStdioClient(
+  ) => Promise<ClientConnectionResult>;
+  addStdioClient: (
     name: string,
     command: string,
     sessionId: string,
@@ -54,9 +54,9 @@ export interface IMCPClientManager {
     stderrLogPath?: string,
     dangerouslyEnableSampling?: boolean,
     cwd?: string,
-  ): Promise<ClientConnectionResult>;
-  getClient(name: string, sessionId: string): Promise<MCPClientSession>;
-  getClientsBySession(sessionId: string): Map<string, MCPClientSession>;
+  ) => Promise<ClientConnectionResult>;
+  getClient: (name: string, sessionId: string) => Promise<MCPClientSession>;
+  getClientsBySession: (sessionId: string) => Map<string, MCPClientSession>;
   /**
    * Get servers that failed to connect for a given session.
    * Failed servers are tracked from connection attempts and remain until
@@ -64,34 +64,34 @@ export interface IMCPClientManager {
    * @param sessionId - The session ID to get failed servers for
    * @returns Map of server name to error message
    */
-  getFailedServers(sessionId: string): Map<string, string>;
+  getFailedServers: (sessionId: string) => Map<string, string>;
   /**
    * Close all clients and clear failed server records for a specific session.
    * Should be called when a session terminates to prevent memory leaks.
    * @param sessionId - The session ID to clean up
    */
-  closeSession(sessionId: string): Promise<void>;
-  getActiveSessions(): string[];
-  setResourceListChangedHandler(
+  closeSession: (sessionId: string) => Promise<void>;
+  getActiveSessions: () => string[];
+  setResourceListChangedHandler: (
     handler: (serverName: string, sessionId: string) => void,
-  ): void;
-  setPromptListChangedHandler(
+  ) => void;
+  setPromptListChangedHandler: (
     handler: (serverName: string, sessionId: string) => void,
-  ): void;
-  setToolListChangedHandler(
+  ) => void;
+  setToolListChangedHandler: (
     handler: (serverName: string, sessionId: string) => void,
-  ): void;
-  setLoggingMessageHandler(
+  ) => void;
+  setLoggingMessageHandler: (
     handler: (
       params: LoggingMessageNotification["params"],
       sessionId: string,
     ) => void,
-  ): void;
-  close(): Promise<void>;
+  ) => void;
+  close: () => Promise<void>;
 }
 
 export interface IAuthStrategy {
-  authenticate(token: string): Promise<AuthInfo | null>;
+  authenticate: (token: string) => Promise<AuthInfo | null>;
 }
 
 export interface AuthInfo {
@@ -207,7 +207,7 @@ export interface ISamplingShim {
    * Initialize the shim for a gateway session.
    * Spawns an ACP agent process and establishes a connection.
    */
-  initialize(sessionId: string): Promise<void>;
+  initialize: (sessionId: string) => Promise<void>;
 
   /**
    * Handle a sampling request by forwarding it through the ACP agent.
@@ -221,10 +221,10 @@ export interface ISamplingShim {
    * since ACP responses don't contain tool blocks. The union type allows for future
    * expansion and matches the MCP SDK's `createMessage()` return type.
    */
-  handleSamplingRequest(
+  handleSamplingRequest: (
     sessionId: string,
     params: import("@modelcontextprotocol/sdk/types.js").CreateMessageRequest["params"],
-  ): Promise<
+  ) => Promise<
     | import("@modelcontextprotocol/sdk/types.js").CreateMessageResult
     | import("@modelcontextprotocol/sdk/types.js").CreateMessageResultWithTools
   >;
@@ -233,22 +233,22 @@ export interface ISamplingShim {
    * Register a callback that retrieves roots from the downstream client.
    * Called per-session so the shim can resolve a project root as cwd.
    */
-  setRootsProvider(
+  setRootsProvider: (
     sessionId: string,
     provider: () => Promise<
       import("@modelcontextprotocol/sdk/types.js").ListRootsResult
     >,
-  ): void;
+  ) => void;
 
   /**
    * Close the ACP agent for a specific session.
    */
-  close(sessionId: string): Promise<void>;
+  close: (sessionId: string) => Promise<void>;
 
   /**
    * Close all ACP agents across all sessions.
    */
-  closeAll(): Promise<void>;
+  closeAll: () => Promise<void>;
 }
 
 /**
@@ -403,15 +403,15 @@ export interface ToolInfo {
 }
 
 export interface IShutdownHandler {
-  shutdown(): Promise<void>;
+  shutdown: () => Promise<void>;
 }
 
 export interface ICacheService<T> {
-  get(key: string): T | undefined;
-  set(key: string, value: T): void;
-  delete(key: string): void;
-  clear(): void;
-  has(key: string): boolean;
+  get: (key: string) => T | undefined;
+  set: (key: string, value: T) => void;
+  delete: (key: string) => void;
+  clear: () => void;
+  has: (key: string) => boolean;
 }
 
 /**
@@ -422,42 +422,42 @@ export interface ICapabilityStore {
   /**
    * Store capabilities for a session.
    */
-  setCapabilities(sessionId: string, caps: ClientCapabilities): void;
+  setCapabilities: (sessionId: string, caps: ClientCapabilities) => void;
 
   /**
    * Get capabilities for a session.
    */
-  getCapabilities(sessionId: string): ClientCapabilities | undefined;
+  getCapabilities: (sessionId: string) => ClientCapabilities | undefined;
 
   /**
    * Check if a session has a specific capability.
    */
-  hasCapability(
+  hasCapability: (
     sessionId: string,
     capability: "sampling" | "elicitation",
-  ): boolean;
+  ) => boolean;
 
   /**
    * Check if a session has a specific elicitation mode.
    */
-  hasElicitationMode(sessionId: string, mode: "form" | "url"): boolean;
+  hasElicitationMode: (sessionId: string, mode: "form" | "url") => boolean;
 
   /**
    * Remove capabilities for a session (cleanup).
    */
-  deleteCapabilities(sessionId: string): void;
+  deleteCapabilities: (sessionId: string) => void;
 
   /**
    * Store the working directory for a session.
    * This is either a valid local root from the client, or a tempdir.
    */
-  setWorkingDirectory(sessionId: string, cwd: string): void;
+  setWorkingDirectory: (sessionId: string, cwd: string) => void;
 
   /**
    * Get the working directory for a session.
    * Returns undefined if not set.
    */
-  getWorkingDirectory(sessionId: string): string | undefined;
+  getWorkingDirectory: (sessionId: string) => string | undefined;
 }
 
 /**
@@ -483,20 +483,20 @@ export interface IServerInfoPreloader {
    * Probe all configured MCP servers and gather their info.
    * This creates temporary connections just to get server metadata.
    */
-  preloadServerInfo(config: ServerConfig): Promise<PreloadedServerInfo[]>;
+  preloadServerInfo: (config: ServerConfig) => Promise<PreloadedServerInfo[]>;
 
   /**
    * Build aggregated instructions from preloaded server info.
    * Returns a formatted string suitable for the gateway's instructions field.
    */
-  buildAggregatedInstructions(servers: PreloadedServerInfo[]): string;
+  buildAggregatedInstructions: (servers: PreloadedServerInfo[]) => string;
 
   /**
    * Build skill instructions section from discovered skills.
    * Returns a formatted string with skill metadata in XML format.
    * Returns empty string if no skills are available.
    */
-  buildSkillInstructions(skills: SkillMetadata[]): string;
+  buildSkillInstructions: (skills: SkillMetadata[]) => string;
 }
 
 /**
@@ -504,23 +504,23 @@ export interface IServerInfoPreloader {
  * Encapsulates skill script execution and skill file writing logic.
  */
 export interface ISkillOperationsService {
-  executeSkillScript(
+  executeSkillScript: (
     skillName: string,
     script: string,
     scriptArgs: string[],
-  ): Promise<unknown>;
-  writeSkillFiles(
+  ) => Promise<unknown>;
+  writeSkillFiles: (
     skillName: string,
     content?: string,
     files?: Array<{ path: string; content: string }>,
-  ): Promise<unknown>;
-  updateSkillFile(
+  ) => Promise<unknown>;
+  updateSkillFile: (
     skillName: string,
     file: string,
     oldString: string,
     newString: string,
     replaceAll?: boolean,
-  ): Promise<unknown>;
+  ) => Promise<unknown>;
 }
 
 /**
@@ -532,25 +532,25 @@ export interface IToolInspectionStore {
   /**
    * Mark a tool as inspected for a session.
    */
-  markInspected(
+  markInspected: (
     sessionId: string,
     luaServerName: string,
     luaToolName: string,
-  ): void;
+  ) => void;
 
   /**
    * Check if a tool has been inspected for a session.
    */
-  isInspected(
+  isInspected: (
     sessionId: string,
     luaServerName: string,
     luaToolName: string,
-  ): boolean;
+  ) => boolean;
 
   /**
    * Remove all inspection records for a session (cleanup).
    */
-  deleteSession(sessionId: string): void;
+  deleteSession: (sessionId: string) => void;
 }
 
 /**
@@ -596,64 +596,64 @@ export interface IExecutionLog {
    * Log the start of a Lua script execution.
    * @returns The generated execution ID for linking tool calls
    */
-  logExecution(sessionId: string, script: string): string;
+  logExecution: (sessionId: string, script: string) => string;
 
   /**
    * Mark an execution as failed with an error message.
    */
-  markExecutionError(executionId: string, error: string): void;
+  markExecutionError: (executionId: string, error: string) => void;
 
   /**
    * Store the final result of a Lua script execution.
    * @param result JSON-serialized result value
    */
-  markExecutionResult(executionId: string, result: string): void;
+  markExecutionResult: (executionId: string, result: string) => void;
 
   /**
    * Log a tool call made within a Lua script execution.
    * @returns The generated call ID
    */
-  logToolCall(
+  logToolCall: (
     executionId: string,
     serverName: string,
     toolName: string,
     args?: string,
-  ): string;
+  ) => string;
 
   /**
    * Mark a tool call as failed with an error message.
    */
-  markToolCallError(callId: string, error: string): void;
+  markToolCallError: (callId: string, error: string) => void;
 
   /**
    * Store the result of a tool call.
    * @param result JSON-serialized result value
    */
-  markToolCallResult(callId: string, result: string): void;
+  markToolCallResult: (callId: string, result: string) => void;
 
   /**
    * Get the stored result of an execution by its ID.
    * @returns The JSON-serialized result string, or undefined if not found / no result
    */
-  getExecutionResult(executionId: string): string | undefined;
+  getExecutionResult: (executionId: string) => string | undefined;
 
   /**
    * Get recent executions for a session, ordered by created_at DESC.
    * @param sessionId The session to query
    * @param limit Maximum number of executions to return (default 50)
    */
-  getExecutions(sessionId: string, limit?: number): LuaExecution[];
+  getExecutions: (sessionId: string, limit?: number) => LuaExecution[];
 
   /**
    * Get tool calls for an execution, ordered by created_at DESC.
    * @param executionId The execution to query
    */
-  getToolCalls(executionId: string): LuaToolCall[];
+  getToolCalls: (executionId: string) => LuaToolCall[];
 
   /**
    * Get a single execution by ID.
    */
-  getExecution(executionId: string): LuaExecution | undefined;
+  getExecution: (executionId: string) => LuaExecution | undefined;
 
   /**
    * Get recent executions across ALL sessions, ordered by created_at DESC.
@@ -661,22 +661,22 @@ export interface IExecutionLog {
    * @param offset Number of executions to skip (default 0)
    * @param toolFilter Optional "server.tool" string to filter by tool usage
    */
-  getAllExecutions(
+  getAllExecutions: (
     limit?: number,
     offset?: number,
     toolFilter?: string,
-  ): LuaExecution[];
+  ) => LuaExecution[];
 
   /**
    * Count total executions across ALL sessions.
    * @param toolFilter Optional "server.tool" string to filter by tool usage
    */
-  countExecutions(toolFilter?: string): number;
+  countExecutions: (toolFilter?: string) => number;
 
   /**
    * Get distinct tool names with usage counts, ordered by count descending.
    */
-  getDistinctTools(): ToolUsage[];
+  getDistinctTools: () => ToolUsage[];
 }
 
 // Re-export skill types for convenience

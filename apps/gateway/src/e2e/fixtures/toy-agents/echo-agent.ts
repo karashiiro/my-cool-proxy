@@ -1,4 +1,4 @@
-import { Readable, Writable } from "stream";
+import { Readable, Writable } from "node:stream";
 import * as acp from "@agentclientprotocol/sdk";
 
 /**

@@ -1,8 +1,8 @@
 import { injectable } from "inversify";
-import { existsSync, mkdirSync } from "fs";
+import { existsSync, mkdirSync } from "node:fs";
 import type { Stats } from "node:fs";
 import { readFile, readdir, stat, access } from "node:fs/promises";
-import { resolve } from "path";
+import { resolve } from "node:path";
 import { getErrorMessage } from "@my-cool-proxy/mcp-utilities";
 import type { ILogger, ServerConfig } from "../types/interfaces.js";
 import type { ISkillDiscoveryService, SkillMetadata } from "../types/skill.js";

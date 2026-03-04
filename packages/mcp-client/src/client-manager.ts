@@ -1,7 +1,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { createWriteStream, type WriteStream } from "fs";
+import { createWriteStream, type WriteStream } from "node:fs";
 import { getErrorMessage } from "@my-cool-proxy/mcp-utilities";
 import type {
   ClientConnectionResult,

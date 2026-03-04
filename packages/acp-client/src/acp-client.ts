@@ -1,6 +1,6 @@
-import { spawn, type ChildProcess } from "child_process";
-import { Readable, Writable } from "stream";
-import { readFile, writeFile } from "fs/promises";
+import { spawn, type ChildProcess } from "node:child_process";
+import { Readable, Writable } from "node:stream";
+import { readFile, writeFile } from "node:fs/promises";
 import * as acp from "@agentclientprotocol/sdk";
 import type {
   ContentBlock,

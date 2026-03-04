@@ -5,10 +5,10 @@ import {
   writeFileSync,
   symlinkSync,
   realpathSync,
-} from "fs";
-import { tmpdir } from "os";
-import { join, isAbsolute } from "path";
-import { readFileSync } from "fs";
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join, isAbsolute } from "node:path";
+import { readFileSync } from "node:fs";
 import {
   sandboxPath,
   sandboxPathForRead,

@@ -44,10 +44,10 @@ const LUA_KEYWORDS = new Set([
  */
 export function sanitizeLuaIdentifier(name: string): string {
   // Replace invalid characters with underscores
-  let sanitized = name.replace(/[^a-zA-Z0-9_]/g, "_");
+  let sanitized = name.replace(/\W/g, "_");
 
   // If starts with a number, prefix with underscore
-  if (/^[0-9]/.test(sanitized)) {
+  if (/^\d/.test(sanitized)) {
     sanitized = `_${sanitized}`;
   }
 

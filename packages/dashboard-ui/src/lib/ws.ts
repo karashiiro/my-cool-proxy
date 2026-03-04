@@ -25,13 +25,13 @@ export interface ExecutionCompletedEvent {
 export interface DashboardWsClient {
   readonly connected: boolean;
   readonly pendingExecutions: number;
-  onExecutionNew(cb: (event: ExecutionNewEvent) => void): () => void;
-  onExecutionCompleted(
+  onExecutionNew: (cb: (event: ExecutionNewEvent) => void) => () => void;
+  onExecutionCompleted: (
     cb: (event: ExecutionCompletedEvent) => void,
-  ): () => void;
-  onSessionChanged(cb: () => void): () => void;
-  clearPending(): void;
-  close(): void;
+  ) => () => void;
+  onSessionChanged: (cb: () => void) => () => void;
+  clearPending: () => void;
+  close: () => void;
 }
 
 const MIN_DELAY_MS = 1_000;

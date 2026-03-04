@@ -12,20 +12,20 @@ export interface IToolRegistry {
    * Register a new tool with the registry
    * @param tool - The tool to register
    */
-  register(tool: ITool): void;
+  register: (tool: ITool) => void;
 
   /**
    * Get a tool by its name
    * @param name - The tool name
    * @returns The tool if found, undefined otherwise
    */
-  get(name: string): ITool | undefined;
+  get: (name: string) => ITool | undefined;
 
   /**
    * Get all registered tools
    * @returns Array of all registered tools
    */
-  getAll(): ITool[];
+  getAll: () => ITool[];
 }
 
 /**

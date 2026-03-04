@@ -9,13 +9,15 @@ import { generateTimeId, safeExecute } from "./store-utils.js";
  * Matches @karashiiro/mcp's EventStore interface.
  */
 export interface ExtendedEventStore extends EventStore {
-  clear(): void;
-  hasSession?(sessionId: string): Promise<boolean>;
-  storeInitializeRequest?(
+  clear: () => void;
+  hasSession?: (sessionId: string) => Promise<boolean>;
+  storeInitializeRequest?: (
     sessionId: string,
     request: JSONRPCMessage,
-  ): Promise<void>;
-  getInitializeRequest?(sessionId: string): Promise<JSONRPCMessage | undefined>;
+  ) => Promise<void>;
+  getInitializeRequest?: (
+    sessionId: string,
+  ) => Promise<JSONRPCMessage | undefined>;
 }
 
 /**

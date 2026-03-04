@@ -1,4 +1,4 @@
-import { resolve } from "path";
+import { resolve } from "node:path";
 import { describe, it, expect } from "vitest";
 import { isSafePathComponent, resolveAndValidate } from "./path-validator.js";
 
