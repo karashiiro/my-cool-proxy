@@ -458,6 +458,10 @@ describe("SQLiteDatabase", () => {
     let tempDir: string | null = null;
 
     afterEach(() => {
+      if (db) {
+        db.close();
+        db = null;
+      }
       if (tempDir) {
         rmSync(tempDir, {
           recursive: true,
