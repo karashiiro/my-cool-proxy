@@ -20,6 +20,7 @@ import { MCPGatewayServer } from "./mcp/gateway-server.js";
 import type { IResourceRoutingService } from "@my-cool-proxy/mcp-aggregation";
 import { parseArgs } from "./utils/cli-args.js";
 import { getConfigPaths, getPlatformConfigDir } from "./utils/config-paths.js";
+import { appPaths } from "./utils/app-paths.js";
 import { cleanupSessionTempDir } from "./utils/index.js";
 import { SQLiteEventStore } from "./stores/sqlite-event-store.js";
 import {
@@ -578,6 +579,7 @@ function printHelp(): void {
   console.log("Usage: my-cool-proxy [options]\n");
   console.log("Options:");
   console.log("  -c, --config-path    Show config file search paths and exit");
+  console.log("      --paths          Show all platform directories and exit");
   console.log("  -h, --help           Show this help message and exit\n");
   console.log("Environment variables:");
   console.log("  CONFIG_PATH          Override config file location");
@@ -604,6 +606,19 @@ function printConfigPaths(): void {
   console.log(`Platform config directory: ${getPlatformConfigDir()}`);
 }
 
+/**
+ * Print all platform-specific directory paths and exit.
+ *
+ * Note: We use console.log here instead of the injected logger because
+ * these CLI utilities run before the DI container is created.
+ */
+function printPaths(): void {
+  console.log("Platform directories:\n");
+  console.log(`  Config:  ${appPaths.config}`);
+  console.log(`  Data:    ${appPaths.data}`);
+  console.log(`  Log:     ${appPaths.log}`);
+}
+
 async function main() {
   // Handle CLI arguments before loading config
   const args = parseArgs(process.argv.slice(2));
@@ -615,6 +630,11 @@ async function main() {
 
   if (args.showConfigPath) {
     printConfigPaths();
+    process.exit(0);
+  }
+
+  if (args.showPaths) {
+    printPaths();
     process.exit(0);
   }
 
