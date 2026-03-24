@@ -2,7 +2,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { createWriteStream, type WriteStream } from "node:fs";
-import { getErrorMessage } from "@my-cool-proxy/mcp-utilities";
+import { getErrorMessage, withTimeout } from "@my-cool-proxy/mcp-utilities";
 import type {
   ClientConnectionResult,
   ILogger,
@@ -11,6 +11,12 @@ import type {
 } from "./types.js";
 import type { LoggingMessageNotification } from "@modelcontextprotocol/sdk/types.js";
 import { MCPClientSession } from "./client-session.js";
+
+/**
+ * Maximum time to wait for an HTTP upstream server to complete connection and
+ * MCP protocol handshake (ms). Covers network connection + protocol init.
+ */
+export const CLIENT_CONNECT_TIMEOUT_MS = 30_000; // 30 seconds
 
 export class MCPClientManager implements IMCPClientManager {
   private clients = new Map<string, MCPClientSession>();
@@ -119,7 +125,11 @@ export class MCPClientManager implements IMCPClientManager {
             ? { headers: allHeaders }
             : undefined,
       });
-      await sdkClient.connect(transport);
+      await withTimeout(
+        sdkClient.connect(transport),
+        CLIENT_CONNECT_TIMEOUT_MS,
+        `connect to ${name} at ${endpoint}`,
+      );
 
       // Capture callbacks before creating session to allow TypeScript narrowing
       const onResourceListChanged = this.onResourceListChanged;

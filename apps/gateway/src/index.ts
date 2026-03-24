@@ -29,6 +29,7 @@ import {
   preloadInstructions,
   handleDownstreamInitialized,
 } from "./startup.js";
+import { getErrorMessage, withTimeout } from "@my-cool-proxy/mcp-utilities";
 import { startDashboardServer } from "./dashboard/dashboard-server.js";
 import { NotifyingExecutionLog } from "./dashboard/notifying-execution-log.js";
 import type { DashboardHandle, DashboardEvent } from "./dashboard/types.js";
@@ -40,6 +41,12 @@ import { resolvePackageRoot } from "./utils/package-root.js";
  * Sessions expire after this duration of inactivity.
  */
 const SESSION_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * Maximum time to wait for upstream servers to initialize during session restoration (ms).
+ * Upstream server init can be slow on cold start.
+ */
+const SESSION_RESTORE_TIMEOUT_MS = 30_000; // 30 seconds
 
 /**
  * Resolve the dashboard static files directory.
@@ -160,7 +167,11 @@ async function startHttpMode(
   // Each session has a promise that resolves when upstream servers are connected
   const sessionInitPromises = new Map<
     string,
-    { promise: Promise<void>; resolve: () => void }
+    {
+      promise: Promise<void>;
+      resolve: () => void;
+      reject: (reason?: unknown) => void;
+    }
   >();
 
   // Helper to get or create init promise for a session
@@ -168,10 +179,12 @@ async function startHttpMode(
     let entry = sessionInitPromises.get(sessionId);
     if (!entry) {
       let resolve: () => void = () => {};
-      const promise = new Promise<void>((r) => {
-        resolve = r;
+      let reject: (reason?: unknown) => void = () => {};
+      const promise = new Promise<void>((res, rej) => {
+        resolve = res;
+        reject = rej;
       });
-      entry = { promise, resolve };
+      entry = { promise, resolve, reject };
       sessionInitPromises.set(sessionId, entry);
     }
     return entry;
@@ -213,13 +226,22 @@ async function startHttpMode(
 
       // Set up callback to initialize upstream clients when downstream client connects
       gatewayServer.setOnDownstreamInitialized(async (capabilities) => {
-        await handleDownstreamInitialized(
-          sessionId,
-          capabilities,
-          config,
-          services,
-          gatewayServer,
-        );
+        try {
+          await handleDownstreamInitialized(
+            sessionId,
+            capabilities,
+            config,
+            services,
+            gatewayServer,
+          );
+        } catch (error) {
+          logger.error(
+            `Session ${sessionId}: handleDownstreamInitialized failed: ${getErrorMessage(error)}`,
+          );
+          // Reject the init promise so onSessionRestored doesn't hang
+          getSessionInitPromise(sessionId).reject(error);
+          return;
+        }
 
         // Signal that this session is fully initialized (upstream servers connected)
         // This allows restored sessions to wait for completion before accepting requests
@@ -306,7 +328,11 @@ async function startHttpMode(
             `Session ${sessionId} restored, waiting for upstream servers...`,
           );
           const entry = getSessionInitPromise(sessionId);
-          await entry.promise;
+          await withTimeout(
+            entry.promise,
+            SESSION_RESTORE_TIMEOUT_MS,
+            `session ${sessionId} restoration`,
+          );
           logger.info(
             `Session ${sessionId} restoration complete, upstream servers ready`,
           );

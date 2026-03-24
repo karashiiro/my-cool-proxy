@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { MCPGatewayServer } from "./gateway-server.js";
+import { MCPGatewayServer, NOTIFICATION_TIMEOUT_MS } from "./gateway-server.js";
 import { WasmoonRuntime } from "@my-cool-proxy/lua-runtime";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -3692,5 +3692,251 @@ describe("MCPGatewayServer - Progressive Discovery with inspect-tool-response", 
     const errorText = inspectResult.content[0].text;
     expect(errorText).toContain("not found");
     expect(errorText).toContain("Available tools");
+  });
+});
+
+describe("MCPGatewayServer - notification handler timeout", () => {
+  let logger: ILogger;
+
+  beforeEach(() => {
+    logger = createMockLogger();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("AC5.1: Resource list changed handler completes successfully when re-listing succeeds", async () => {
+    const mockClientManager = createMockClientManager(new Map());
+
+    const resourceRoutingService = new ResourceRoutingService(logger);
+    const mockResourceAggregation = {
+      handleResourceListChanged: vi.fn(),
+      listResources: vi.fn().mockResolvedValue({ resources: [] }),
+      listResourceTemplates: vi
+        .fn()
+        .mockResolvedValue({ resourceTemplates: [] }),
+    } as unknown as ResourceAggregationService;
+
+    const mockPromptAggregation = {
+      handlePromptListChanged: vi.fn(),
+      listPrompts: vi.fn(),
+    } as unknown as PromptAggregationService;
+
+    new MCPGatewayServer(
+      new ToolRegistry(),
+      mockClientManager,
+      logger,
+      mockResourceAggregation,
+      mockPromptAggregation,
+      new CompletionAggregationService(
+        mockClientManager,
+        logger,
+        resourceRoutingService,
+      ),
+    );
+
+    // Get the resource list changed handler from the mock
+    const setResourceListChangedHandlerMock =
+      mockClientManager.setResourceListChangedHandler as unknown as {
+        mock: { calls: Array<unknown[]> };
+      };
+    const resourceListChangedHandler = setResourceListChangedHandlerMock.mock
+      .calls[0]?.[0] as (serverName: string, sessionId: string) => void;
+
+    // Trigger the handler
+    resourceListChangedHandler("test-server", "default");
+
+    // Advance timers and wait for microtasks
+    await vi.runAllTimersAsync();
+
+    // Verify that handleResourceListChanged was called (fire-and-forget handler was invoked)
+    expect(
+      mockResourceAggregation.handleResourceListChanged,
+    ).toHaveBeenCalledWith("test-server", "default");
+    // Verify that re-listing was attempted
+    expect(mockResourceAggregation.listResources).toHaveBeenCalled();
+    expect(mockResourceAggregation.listResourceTemplates).toHaveBeenCalled();
+    // Verify no error was logged when re-listing succeeds
+    expect(logger.error).not.toHaveBeenCalled();
+  });
+
+  it("AC5.2 + AC5.3: Resource list changed handler still processes when re-listing times out and logs error", async () => {
+    const neverResolvingPromise = new Promise<never>(() => {});
+    const mockClientManager = createMockClientManager(new Map());
+
+    const resourceRoutingService = new ResourceRoutingService(logger);
+    const mockResourceAggregation = {
+      handleResourceListChanged: vi.fn(),
+      listResources: vi.fn().mockReturnValue(neverResolvingPromise),
+      listResourceTemplates: vi.fn().mockReturnValue(neverResolvingPromise),
+    } as unknown as ResourceAggregationService;
+
+    const mockPromptAggregation = {
+      handlePromptListChanged: vi.fn(),
+    } as unknown as PromptAggregationService;
+
+    new MCPGatewayServer(
+      new ToolRegistry(),
+      mockClientManager,
+      logger,
+      mockResourceAggregation,
+      mockPromptAggregation,
+      new CompletionAggregationService(
+        mockClientManager,
+        logger,
+        resourceRoutingService,
+      ),
+    );
+
+    // Get the resource list changed handler from the mock
+    const setResourceListChangedHandlerMock =
+      mockClientManager.setResourceListChangedHandler as unknown as {
+        mock: { calls: Array<unknown[]> };
+      };
+    const resourceListChangedHandler = setResourceListChangedHandlerMock.mock
+      .calls[0]?.[0] as (serverName: string, sessionId: string) => void;
+
+    // Trigger the handler
+    resourceListChangedHandler("test-server", "default");
+
+    // Advance timers past the timeout
+    await vi.advanceTimersByTimeAsync(NOTIFICATION_TIMEOUT_MS + 100);
+
+    // Verify that handleResourceListChanged was called (AC5.1: fire-and-forget handler was invoked)
+    expect(
+      mockResourceAggregation.handleResourceListChanged,
+    ).toHaveBeenCalledWith("test-server", "default");
+    // Verify that re-listing was attempted
+    expect(mockResourceAggregation.listResources).toHaveBeenCalled();
+    expect(mockResourceAggregation.listResourceTemplates).toHaveBeenCalled();
+
+    // Verify that logger.error was called with timeout error (AC5.3)
+    expect(logger.error).toHaveBeenCalled();
+    const loggerErrorMock = logger.error as unknown as {
+      mock: { calls: Array<unknown[]> };
+    };
+    const errorCall = loggerErrorMock.mock.calls.find((call: unknown[]) =>
+      String(call[0]).includes("Failed to re-list resources"),
+    );
+    expect(errorCall).toBeDefined();
+    if (errorCall) {
+      expect(String(errorCall[0])).toContain("test-server");
+    }
+  });
+
+  it("AC5.1: Prompt list changed handler completes successfully when re-listing succeeds", async () => {
+    const mockClientManager = createMockClientManager(new Map());
+
+    const resourceRoutingService = new ResourceRoutingService(logger);
+    const mockPromptAggregation = {
+      handlePromptListChanged: vi.fn(),
+      listPrompts: vi.fn().mockResolvedValue({ prompts: [] }),
+    } as unknown as PromptAggregationService;
+
+    const mockResourceAggregation = {
+      handleResourceListChanged: vi.fn(),
+    } as unknown as ResourceAggregationService;
+
+    new MCPGatewayServer(
+      new ToolRegistry(),
+      mockClientManager,
+      logger,
+      mockResourceAggregation,
+      mockPromptAggregation,
+      new CompletionAggregationService(
+        mockClientManager,
+        logger,
+        resourceRoutingService,
+      ),
+    );
+
+    // Get the prompt list changed handler from the mock
+    const setPromptListChangedHandlerMock =
+      mockClientManager.setPromptListChangedHandler as unknown as {
+        mock: { calls: Array<unknown[]> };
+      };
+    const promptListChangedHandler = setPromptListChangedHandlerMock.mock
+      .calls[0]?.[0] as (serverName: string, sessionId: string) => void;
+
+    // Trigger the handler
+    promptListChangedHandler("test-server", "default");
+
+    // Advance timers and wait for microtasks
+    await vi.runAllTimersAsync();
+
+    // Verify that handlePromptListChanged was called (fire-and-forget handler was invoked)
+    expect(mockPromptAggregation.handlePromptListChanged).toHaveBeenCalledWith(
+      "test-server",
+      "default",
+    );
+    // Verify that re-listing was attempted
+    expect(mockPromptAggregation.listPrompts).toHaveBeenCalled();
+    // Verify no error was logged when re-listing succeeds
+    expect(logger.error).not.toHaveBeenCalled();
+  });
+
+  it("AC5.2 + AC5.3: Prompt list changed handler still processes when re-listing times out and logs error", async () => {
+    const neverResolvingPromise = new Promise<never>(() => {});
+    const mockClientManager = createMockClientManager(new Map());
+
+    const resourceRoutingService = new ResourceRoutingService(logger);
+    const mockPromptAggregation = {
+      handlePromptListChanged: vi.fn(),
+      listPrompts: vi.fn().mockReturnValue(neverResolvingPromise),
+    } as unknown as PromptAggregationService;
+
+    const mockResourceAggregation = {
+      handleResourceListChanged: vi.fn(),
+    } as unknown as ResourceAggregationService;
+
+    new MCPGatewayServer(
+      new ToolRegistry(),
+      mockClientManager,
+      logger,
+      mockResourceAggregation,
+      mockPromptAggregation,
+      new CompletionAggregationService(
+        mockClientManager,
+        logger,
+        resourceRoutingService,
+      ),
+    );
+
+    // Get the prompt list changed handler from the mock
+    const setPromptListChangedHandlerMock =
+      mockClientManager.setPromptListChangedHandler as unknown as {
+        mock: { calls: Array<unknown[]> };
+      };
+    const promptListChangedHandler = setPromptListChangedHandlerMock.mock
+      .calls[0]?.[0] as (serverName: string, sessionId: string) => void;
+
+    // Trigger the handler
+    promptListChangedHandler("test-server", "default");
+
+    // Advance timers past the timeout
+    await vi.advanceTimersByTimeAsync(NOTIFICATION_TIMEOUT_MS + 100);
+
+    // Verify that handlePromptListChanged was called (AC5.1: fire-and-forget handler was invoked)
+    expect(mockPromptAggregation.handlePromptListChanged).toHaveBeenCalledWith(
+      "test-server",
+      "default",
+    );
+    // Verify that re-listing was attempted
+    expect(mockPromptAggregation.listPrompts).toHaveBeenCalled();
+
+    // Verify that logger.error was called with timeout error (AC5.3)
+    expect(logger.error).toHaveBeenCalled();
+    const loggerErrorMock = logger.error as unknown as {
+      mock: { calls: Array<unknown[]> };
+    };
+    const errorCall = loggerErrorMock.mock.calls.find((call: unknown[]) =>
+      String(call[0]).includes("Failed to re-list prompts"),
+    );
+    expect(errorCall).toBeDefined();
+    if (errorCall) {
+      expect(String(errorCall[0])).toContain("test-server");
+    }
   });
 });

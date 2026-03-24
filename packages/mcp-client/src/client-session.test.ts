@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { MCPClientSession } from "./client-session.js";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { MCPClientSession, PAGINATION_REQUEST_TIMEOUT_MS } from "./client-session.js";
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { ILogger } from "./types.js";
 import {
@@ -26,6 +26,7 @@ describe("MCPClientSession", () => {
     mockClient = {
       listTools: vi.fn(),
       listResources: vi.fn(),
+      listResourceTemplates: vi.fn(),
       listPrompts: vi.fn(),
       close: vi.fn(),
       setNotificationHandler: vi.fn(),
@@ -384,11 +385,7 @@ describe("MCPClientSession", () => {
         ],
       };
 
-      vi.mocked(
-        mockClient as unknown as {
-          listResourceTemplates: ReturnType<typeof vi.fn>;
-        },
-      ).listResourceTemplates = vi.fn().mockResolvedValue(mockResponse);
+      vi.mocked(mockClient.listResourceTemplates).mockResolvedValue(mockResponse);
 
       const session = new MCPClientSession(
         mockClient,
@@ -413,12 +410,7 @@ describe("MCPClientSession", () => {
         ],
       };
 
-      const listResourceTemplatesFn = vi.fn().mockResolvedValue(mockResponse);
-      (
-        mockClient as unknown as {
-          listResourceTemplates: ReturnType<typeof vi.fn>;
-        }
-      ).listResourceTemplates = listResourceTemplatesFn;
+      vi.mocked(mockClient.listResourceTemplates).mockResolvedValue(mockResponse);
 
       const session = new MCPClientSession(
         mockClient,
@@ -429,11 +421,11 @@ describe("MCPClientSession", () => {
 
       // First call should fetch from client
       await session.listResourceTemplates();
-      expect(listResourceTemplatesFn).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(mockClient.listResourceTemplates)).toHaveBeenCalledTimes(1);
 
       // Second call should return cached result
       await session.listResourceTemplates();
-      expect(listResourceTemplatesFn).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(mockClient.listResourceTemplates)).toHaveBeenCalledTimes(1);
 
       expect(logger.debug).toHaveBeenCalledWith(
         `Server '${serverName}': Returning cached resource template list`,
@@ -951,6 +943,390 @@ describe("MCPClientSession", () => {
           logger: "[test-server] api",
           data: { error: "timeout" },
         });
+      });
+    });
+  });
+
+  describe("pagination timeout", () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    describe("timeout-hangs.AC4.1 - Multi-page pagination succeeds", () => {
+      it("should fetch and return all pages from multiple page responses", async () => {
+        // First page response with nextCursor
+        const firstPageResponse = {
+          resources: [
+            {
+              uri: "file:///first1.txt",
+              name: "First Page Item 1",
+              mimeType: "text/plain",
+            },
+            {
+              uri: "file:///first2.txt",
+              name: "First Page Item 2",
+              mimeType: "text/plain",
+            },
+          ],
+          nextCursor: "cursor-for-page-2",
+        };
+
+        // Second page response without nextCursor
+        const secondPageResponse = {
+          resources: [
+            {
+              uri: "file:///second1.txt",
+              name: "Second Page Item 1",
+              mimeType: "text/plain",
+            },
+          ],
+          nextCursor: undefined,
+        };
+
+        vi.mocked(mockClient.listResources)
+          .mockResolvedValueOnce(firstPageResponse)
+          .mockResolvedValueOnce(secondPageResponse);
+
+        const session = new MCPClientSession(
+          mockClient,
+          serverName,
+          undefined,
+          logger,
+        );
+
+        const resultPromise = session.listResources();
+        await vi.advanceTimersByTimeAsync(0);
+
+        const result = await resultPromise;
+
+        // Both pages should be present
+        expect(result).toHaveLength(3);
+        expect(result[0]?.uri).toBe("file:///first1.txt");
+        expect(result[1]?.uri).toBe("file:///first2.txt");
+        expect(result[2]?.uri).toBe("file:///second1.txt");
+
+        // listResources should have been called twice (for each page)
+        expect(mockClient.listResources).toHaveBeenCalledTimes(2);
+      });
+    });
+
+    describe("timeout-hangs.AC4.2 - Stalled page fetch rejects with TimeoutError", () => {
+      it("should reject with timeout error when a page fetch never resolves", async () => {
+        // First page resolves normally
+        const firstPageResponse = {
+          resources: [
+            {
+              uri: "file:///page1.txt",
+              name: "Page 1",
+              mimeType: "text/plain",
+            },
+          ],
+          nextCursor: "cursor-for-page-2",
+        };
+
+        // Second page never resolves - use a promise that will outlive the timeout
+        const neverResolvingPromise = new Promise<typeof firstPageResponse>(
+          () => {},
+        );
+
+        vi.mocked(mockClient.listResources)
+          .mockResolvedValueOnce(firstPageResponse)
+          .mockReturnValueOnce(neverResolvingPromise);
+
+        const session = new MCPClientSession(
+          mockClient,
+          serverName,
+          undefined,
+          logger,
+        );
+
+        // Create the promise but don't await it yet
+        const listResourcesPromise = session.listResources();
+
+        // Attach error handler to the promise to prevent unhandled rejection
+        let rejectionError: Error | undefined;
+        listResourcesPromise.catch((err) => {
+          rejectionError = err;
+        });
+
+        // Advance timers past the timeout
+        await vi.advanceTimersByTimeAsync(PAGINATION_REQUEST_TIMEOUT_MS + 1);
+
+        // Wait for the promise to settle
+        await expect(listResourcesPromise).rejects.toThrow("timed out");
+
+        // Verify the error was caught
+        expect(rejectionError).toBeDefined();
+        expect(rejectionError?.message).toContain("timed out");
+      });
+    });
+
+    describe("timeout-hangs.AC4.3 - Partial results not cached on timeout", () => {
+      it("should not cache partial results when pagination fails with timeout", async () => {
+        // First page resolves normally
+        const firstPageResponse = {
+          resources: [
+            {
+              uri: "file:///page1.txt",
+              name: "Page 1",
+              mimeType: "text/plain",
+            },
+          ],
+          nextCursor: "cursor-for-page-2",
+        };
+
+        // Second page never resolves
+        const neverResolvingPromise = new Promise<typeof firstPageResponse>(
+          () => {},
+        );
+
+        vi.mocked(mockClient.listResources)
+          .mockResolvedValueOnce(firstPageResponse)
+          .mockReturnValueOnce(neverResolvingPromise);
+
+        const session = new MCPClientSession(
+          mockClient,
+          serverName,
+          undefined,
+          logger,
+        );
+
+        // Start the pagination
+        const listResourcesPromise = session.listResources();
+
+        // Attach error handler to prevent unhandled rejection
+        listResourcesPromise.catch(() => {
+          // Rejection is expected
+        });
+
+        // Advance timers past the timeout
+        await vi.advanceTimersByTimeAsync(PAGINATION_REQUEST_TIMEOUT_MS + 1);
+
+        // Should timeout with a timeout error
+        await expect(listResourcesPromise).rejects.toThrow("timed out");
+
+        // Reset the mock to return fresh data for a second attempt
+        vi.mocked(mockClient.listResources).mockClear();
+
+        const freshFirstPage = {
+          resources: [
+            {
+              uri: "file:///fresh1.txt",
+              name: "Fresh Item 1",
+              mimeType: "text/plain",
+            },
+            {
+              uri: "file:///fresh2.txt",
+              name: "Fresh Item 2",
+              mimeType: "text/plain",
+            },
+          ],
+          nextCursor: "fresh-cursor-2",
+        };
+
+        const freshSecondPage = {
+          resources: [
+            {
+              uri: "file:///fresh3.txt",
+              name: "Fresh Item 3",
+              mimeType: "text/plain",
+            },
+          ],
+          nextCursor: undefined,
+        };
+
+        vi.mocked(mockClient.listResources)
+          .mockResolvedValueOnce(freshFirstPage)
+          .mockResolvedValueOnce(freshSecondPage);
+
+        // Second call should fetch fresh data, not return cached partial results
+        const resultPromise = session.listResources();
+        await vi.advanceTimersByTimeAsync(0);
+
+        const result = await resultPromise;
+
+        expect(result).toHaveLength(3);
+        expect(result[0]?.uri).toBe("file:///fresh1.txt");
+        expect(result[2]?.uri).toBe("file:///fresh3.txt");
+
+        // Verify we made 2 new calls to listResources (the failed attempt + fresh attempt)
+        expect(mockClient.listResources).toHaveBeenCalledTimes(2);
+      });
+    });
+
+    describe("listResourceTemplates pagination timeout", () => {
+      it("should handle multi-page listResourceTemplates requests", async () => {
+        const mockResponse1 = {
+          resourceTemplates: [
+            {
+              uriTemplate: "deployment://{region}/{service}",
+              name: "deployment",
+            },
+          ],
+          nextCursor: "cursor-2",
+        };
+
+        const mockResponse2 = {
+          resourceTemplates: [
+            {
+              uriTemplate: "log://{date}",
+              name: "log",
+            },
+          ],
+          nextCursor: undefined,
+        };
+
+        vi.mocked(mockClient.listResourceTemplates)
+          .mockResolvedValueOnce(mockResponse1)
+          .mockResolvedValueOnce(mockResponse2);
+
+        const session = new MCPClientSession(
+          mockClient,
+          serverName,
+          undefined,
+          logger,
+        );
+
+        const resultPromise = session.listResourceTemplates();
+        await vi.advanceTimersByTimeAsync(0);
+
+        const result = await resultPromise;
+
+        expect(result).toHaveLength(2);
+        expect(result[0]?.uriTemplate).toBe("deployment://{region}/{service}");
+        expect(result[1]?.uriTemplate).toBe("log://{date}");
+        expect(vi.mocked(mockClient.listResourceTemplates)).toHaveBeenCalledTimes(2);
+      });
+
+      it("should timeout on stalled listResourceTemplates page fetch", async () => {
+        const firstPageTemplates = {
+          resourceTemplates: [
+            {
+              uriTemplate: "cached://{id}",
+              name: "cached",
+            },
+          ],
+          nextCursor: "cursor-2",
+        };
+
+        const neverResolvingPromise = new Promise<typeof firstPageTemplates>(
+          () => {},
+        );
+
+        vi.mocked(mockClient.listResourceTemplates)
+          .mockResolvedValueOnce(firstPageTemplates)
+          .mockReturnValueOnce(neverResolvingPromise);
+
+        const session = new MCPClientSession(
+          mockClient,
+          serverName,
+          undefined,
+          logger,
+        );
+
+        // Start the pagination
+        const listTemplatesPromise = session.listResourceTemplates();
+
+        // Attach error handler to prevent unhandled rejection
+        listTemplatesPromise.catch(() => {
+          // Rejection is expected
+        });
+
+        // Advance timers past the timeout
+        await vi.advanceTimersByTimeAsync(PAGINATION_REQUEST_TIMEOUT_MS + 1);
+
+        // Should timeout with a timeout error
+        await expect(listTemplatesPromise).rejects.toThrow("timed out");
+      });
+    });
+
+    describe("listPrompts pagination timeout", () => {
+      it("should handle multi-page listPrompts requests", async () => {
+        const firstPagePrompts = {
+          prompts: [
+            {
+              name: "code-review",
+              description: "Review code for best practices",
+            },
+          ],
+          nextCursor: "cursor-2",
+        };
+
+        const secondPagePrompts = {
+          prompts: [
+            {
+              name: "summarize",
+              description: "Create a summary of text",
+            },
+          ],
+          nextCursor: undefined,
+        };
+
+        vi.mocked(mockClient.listPrompts)
+          .mockResolvedValueOnce(firstPagePrompts)
+          .mockResolvedValueOnce(secondPagePrompts);
+
+        const session = new MCPClientSession(
+          mockClient,
+          serverName,
+          undefined,
+          logger,
+        );
+
+        const resultPromise = session.listPrompts();
+        await vi.advanceTimersByTimeAsync(0);
+
+        const result = await resultPromise;
+
+        expect(result).toHaveLength(2);
+        expect(result[0]?.name).toBe("code-review");
+        expect(result[1]?.name).toBe("summarize");
+        expect(mockClient.listPrompts).toHaveBeenCalledTimes(2);
+      });
+
+      it("should timeout on stalled listPrompts page fetch", async () => {
+        const firstPagePrompts = {
+          prompts: [
+            {
+              name: "cached-prompt",
+              description: "Cached prompt",
+            },
+          ],
+          nextCursor: "cursor-2",
+        };
+
+        const neverResolvingPromise = new Promise<typeof firstPagePrompts>(
+          () => {},
+        );
+
+        vi.mocked(mockClient.listPrompts)
+          .mockResolvedValueOnce(firstPagePrompts)
+          .mockReturnValueOnce(neverResolvingPromise);
+
+        const session = new MCPClientSession(
+          mockClient,
+          serverName,
+          undefined,
+          logger,
+        );
+
+        // Start the pagination
+        const listPromptsPromise = session.listPrompts();
+
+        // Attach error handler to prevent unhandled rejection
+        listPromptsPromise.catch(() => {
+          // Rejection is expected
+        });
+
+        // Advance timers past the timeout
+        await vi.advanceTimersByTimeAsync(PAGINATION_REQUEST_TIMEOUT_MS + 1);
+
+        // Should timeout with a timeout error
+        await expect(listPromptsPromise).rejects.toThrow("timed out");
       });
     });
   });

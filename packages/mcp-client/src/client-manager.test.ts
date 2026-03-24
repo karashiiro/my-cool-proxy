@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { MCPClientManager } from "./client-manager.js";
+import {
+  MCPClientManager,
+  CLIENT_CONNECT_TIMEOUT_MS,
+} from "./client-manager.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
@@ -76,6 +79,60 @@ describe("MCPClientManager", () => {
       });
       expect(res.success).toBe(true);
       expect(mockSdkClient.connect).toHaveBeenCalledWith(mockTransport);
+    });
+
+    it("times out when upstream does not respond within CLIENT_CONNECT_TIMEOUT_MS", async () => {
+      vi.useFakeTimers();
+      try {
+        // Create a promise that never resolves
+        const neverResolvingPromise = new Promise<void>(() => {});
+        mockSdkClient.connect = vi.fn(() => neverResolvingPromise);
+
+        // Call addHttpClient (will hang without timeout)
+        const resultPromise = clientManager.addHttpClient(
+          "hanging-server",
+          "http://slow-server.test",
+          "session-timeout",
+        );
+
+        // Advance timers by the timeout duration (30 seconds)
+        await vi.advanceTimersByTimeAsync(CLIENT_CONNECT_TIMEOUT_MS);
+
+        const res = await resultPromise;
+
+        expect(res.success).toBe(false);
+        expect(res.error).toContain("timed out");
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("records timed-out server in failedServers", async () => {
+      vi.useFakeTimers();
+      try {
+        // Create a promise that never resolves
+        const neverResolvingPromise = new Promise<void>(() => {});
+        mockSdkClient.connect = vi.fn(() => neverResolvingPromise);
+
+        // Call addHttpClient
+        const resultPromise = clientManager.addHttpClient(
+          "slow-server",
+          "http://slow.test",
+          "session-slow",
+        );
+
+        // Advance timers by the timeout duration
+        await vi.advanceTimersByTimeAsync(CLIENT_CONNECT_TIMEOUT_MS);
+
+        await resultPromise;
+
+        // Check failedServers contains the timed-out server
+        const failedServers = clientManager.getFailedServers("session-slow");
+        expect(failedServers.has("slow-server")).toBe(true);
+        expect(failedServers.get("slow-server")).toContain("timed out");
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 
