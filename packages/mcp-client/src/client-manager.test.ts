@@ -89,11 +89,11 @@ describe("MCPClientManager", () => {
         mockSdkClient.connect = vi.fn(() => neverResolvingPromise);
 
         // Call addHttpClient (will hang without timeout)
-        const resultPromise = clientManager.addHttpClient(
-          "hanging-server",
-          "http://slow-server.test",
-          "session-timeout",
-        );
+        const resultPromise = clientManager.addHttpClient({
+          name: "hanging-server",
+          endpoint: "http://slow-server.test",
+          sessionId: "session-timeout",
+        });
 
         // Advance timers by the timeout duration (30 seconds)
         await vi.advanceTimersByTimeAsync(CLIENT_CONNECT_TIMEOUT_MS);
@@ -115,11 +115,11 @@ describe("MCPClientManager", () => {
         mockSdkClient.connect = vi.fn(() => neverResolvingPromise);
 
         // Call addHttpClient
-        const resultPromise = clientManager.addHttpClient(
-          "slow-server",
-          "http://slow.test",
-          "session-slow",
-        );
+        const resultPromise = clientManager.addHttpClient({
+          name: "slow-server",
+          endpoint: "http://slow.test",
+          sessionId: "session-slow",
+        });
 
         // Advance timers by the timeout duration
         await vi.advanceTimersByTimeAsync(CLIENT_CONNECT_TIMEOUT_MS);
