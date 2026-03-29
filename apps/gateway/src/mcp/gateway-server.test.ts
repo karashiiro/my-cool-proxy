@@ -3725,7 +3725,7 @@ describe("MCPGatewayServer - notification handler timeout", () => {
     } as unknown as PromptAggregationService;
 
     new MCPGatewayServer(
-      new ToolRegistry(),
+      new ToolRegistry(logger),
       mockClientManager,
       logger,
       mockResourceAggregation,
@@ -3778,7 +3778,7 @@ describe("MCPGatewayServer - notification handler timeout", () => {
     } as unknown as PromptAggregationService;
 
     new MCPGatewayServer(
-      new ToolRegistry(),
+      new ToolRegistry(logger),
       mockClientManager,
       logger,
       mockResourceAggregation,
@@ -3840,7 +3840,7 @@ describe("MCPGatewayServer - notification handler timeout", () => {
     } as unknown as ResourceAggregationService;
 
     new MCPGatewayServer(
-      new ToolRegistry(),
+      new ToolRegistry(logger),
       mockClientManager,
       logger,
       mockResourceAggregation,
@@ -3892,7 +3892,7 @@ describe("MCPGatewayServer - notification handler timeout", () => {
     } as unknown as ResourceAggregationService;
 
     new MCPGatewayServer(
-      new ToolRegistry(),
+      new ToolRegistry(logger),
       mockClientManager,
       logger,
       mockResourceAggregation,
