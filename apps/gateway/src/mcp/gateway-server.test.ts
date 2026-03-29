@@ -3707,7 +3707,7 @@ describe("MCPGatewayServer - notification handler timeout", () => {
     vi.useRealTimers();
   });
 
-  it("AC5.1: Resource list changed handler completes successfully when re-listing succeeds", async () => {
+  it("Resource list changed handler completes successfully when re-listing succeeds", async () => {
     const mockClientManager = createMockClientManager(new Map());
 
     const resourceRoutingService = new ResourceRoutingService(logger);
@@ -3762,7 +3762,7 @@ describe("MCPGatewayServer - notification handler timeout", () => {
     expect(logger.error).not.toHaveBeenCalled();
   });
 
-  it("AC5.2 + AC5.3: Resource list changed handler still processes when re-listing times out and logs error", async () => {
+  it("Resource list changed handler still processes when re-listing times out and logs error", async () => {
     const neverResolvingPromise = new Promise<never>(() => {});
     const mockClientManager = createMockClientManager(new Map());
 
@@ -3804,7 +3804,7 @@ describe("MCPGatewayServer - notification handler timeout", () => {
     // Advance timers past the timeout
     await vi.advanceTimersByTimeAsync(NOTIFICATION_TIMEOUT_MS + 100);
 
-    // Verify that handleResourceListChanged was called (AC5.1: fire-and-forget handler was invoked)
+    // Verify that handleResourceListChanged was called (fire-and-forget handler was invoked)
     expect(
       mockResourceAggregation.handleResourceListChanged,
     ).toHaveBeenCalledWith("test-server", "default");
@@ -3812,7 +3812,7 @@ describe("MCPGatewayServer - notification handler timeout", () => {
     expect(mockResourceAggregation.listResources).toHaveBeenCalled();
     expect(mockResourceAggregation.listResourceTemplates).toHaveBeenCalled();
 
-    // Verify that logger.error was called with timeout error (AC5.3)
+    // Verify that logger.error was called with timeout error
     expect(logger.error).toHaveBeenCalled();
     const loggerErrorMock = logger.error as unknown as {
       mock: { calls: Array<unknown[]> };
@@ -3826,7 +3826,7 @@ describe("MCPGatewayServer - notification handler timeout", () => {
     }
   });
 
-  it("AC5.1: Prompt list changed handler completes successfully when re-listing succeeds", async () => {
+  it("Prompt list changed handler completes successfully when re-listing succeeds", async () => {
     const mockClientManager = createMockClientManager(new Map());
 
     const resourceRoutingService = new ResourceRoutingService(logger);
@@ -3877,7 +3877,7 @@ describe("MCPGatewayServer - notification handler timeout", () => {
     expect(logger.error).not.toHaveBeenCalled();
   });
 
-  it("AC5.2 + AC5.3: Prompt list changed handler still processes when re-listing times out and logs error", async () => {
+  it("Prompt list changed handler still processes when re-listing times out and logs error", async () => {
     const neverResolvingPromise = new Promise<never>(() => {});
     const mockClientManager = createMockClientManager(new Map());
 
@@ -3918,7 +3918,7 @@ describe("MCPGatewayServer - notification handler timeout", () => {
     // Advance timers past the timeout
     await vi.advanceTimersByTimeAsync(NOTIFICATION_TIMEOUT_MS + 100);
 
-    // Verify that handlePromptListChanged was called (AC5.1: fire-and-forget handler was invoked)
+    // Verify that handlePromptListChanged was called (fire-and-forget handler was invoked)
     expect(mockPromptAggregation.handlePromptListChanged).toHaveBeenCalledWith(
       "test-server",
       "default",
@@ -3926,7 +3926,7 @@ describe("MCPGatewayServer - notification handler timeout", () => {
     // Verify that re-listing was attempted
     expect(mockPromptAggregation.listPrompts).toHaveBeenCalled();
 
-    // Verify that logger.error was called with timeout error (AC5.3)
+    // Verify that logger.error was called with timeout error
     expect(logger.error).toHaveBeenCalled();
     const loggerErrorMock = logger.error as unknown as {
       mock: { calls: Array<unknown[]> };
