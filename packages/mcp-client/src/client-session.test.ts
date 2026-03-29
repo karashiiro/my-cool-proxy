@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { MCPClientSession, PAGINATION_REQUEST_TIMEOUT_MS } from "./client-session.js";
+import {
+  MCPClientSession,
+  PAGINATION_REQUEST_TIMEOUT_MS,
+} from "./client-session.js";
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { ILogger } from "./types.js";
 import {
@@ -385,7 +388,9 @@ describe("MCPClientSession", () => {
         ],
       };
 
-      vi.mocked(mockClient.listResourceTemplates).mockResolvedValue(mockResponse);
+      vi.mocked(mockClient.listResourceTemplates).mockResolvedValue(
+        mockResponse,
+      );
 
       const session = new MCPClientSession(
         mockClient,
@@ -410,7 +415,9 @@ describe("MCPClientSession", () => {
         ],
       };
 
-      vi.mocked(mockClient.listResourceTemplates).mockResolvedValue(mockResponse);
+      vi.mocked(mockClient.listResourceTemplates).mockResolvedValue(
+        mockResponse,
+      );
 
       const session = new MCPClientSession(
         mockClient,
@@ -421,11 +428,15 @@ describe("MCPClientSession", () => {
 
       // First call should fetch from client
       await session.listResourceTemplates();
-      expect(vi.mocked(mockClient.listResourceTemplates)).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(mockClient.listResourceTemplates)).toHaveBeenCalledTimes(
+        1,
+      );
 
       // Second call should return cached result
       await session.listResourceTemplates();
-      expect(vi.mocked(mockClient.listResourceTemplates)).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(mockClient.listResourceTemplates)).toHaveBeenCalledTimes(
+        1,
+      );
 
       expect(logger.debug).toHaveBeenCalledWith(
         `Server '${serverName}': Returning cached resource template list`,
@@ -1199,7 +1210,9 @@ describe("MCPClientSession", () => {
         expect(result).toHaveLength(2);
         expect(result[0]?.uriTemplate).toBe("deployment://{region}/{service}");
         expect(result[1]?.uriTemplate).toBe("log://{date}");
-        expect(vi.mocked(mockClient.listResourceTemplates)).toHaveBeenCalledTimes(2);
+        expect(
+          vi.mocked(mockClient.listResourceTemplates),
+        ).toHaveBeenCalledTimes(2);
       });
 
       it("should timeout on stalled listResourceTemplates page fetch", async () => {
