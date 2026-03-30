@@ -1,6 +1,6 @@
 {
   "name": "@karashiiro/my-cool-proxy",
-  "version": "1.5.4",
+  "version": "1.6.0",
   "description": "Use as many MCP servers as you want while minimizing context usage. A code mode MCP server gateway driven with Lua 🌙",
   "main": "dist/index.js",
   "mcpName": "io.github.karashiiro/my-cool-proxy",
