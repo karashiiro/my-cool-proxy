@@ -1,6 +1,9 @@
 // Error utilities
 export { getErrorMessage } from "./error-utils.js";
 
+// Timeout utilities
+export { TimeoutError, withTimeout } from "./timeout-utils.js";
+
 // Lua identifier utilities
 export { sanitizeLuaIdentifier } from "./lua-identifier.js";
 
