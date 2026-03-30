@@ -1,5 +1,5 @@
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { getErrorMessage } from "@my-cool-proxy/mcp-utilities";
+import { getErrorMessage, withTimeout } from "@my-cool-proxy/mcp-utilities";
 import type { ILogger, ICacheService } from "./types.js";
 import {
   ToolListChangedNotificationSchema,
@@ -22,6 +22,17 @@ import {
   type CompleteRequest,
   type CompleteResult,
 } from "@modelcontextprotocol/sdk/types.js";
+import type { RequestHandlerExtra } from "@modelcontextprotocol/sdk/shared/protocol.js";
+import type {
+  AnyObjectSchema,
+  SchemaOutput,
+} from "@modelcontextprotocol/sdk/server/zod-compat.js";
+import type {
+  ClientRequest,
+  ClientNotification,
+  ClientResult,
+} from "@modelcontextprotocol/sdk/types.js";
+import { createCache } from "./cache-service.js";
 
 /**
  * Maps MCP logging levels (RFC 5424 syslog) to pino levels.
@@ -39,17 +50,12 @@ const MCP_TO_PINO_LEVEL: Record<LoggingLevel, PinoLogLevel> = {
   alert: "fatal", // Requires immediate action
   emergency: "fatal", // System is unusable
 };
-import type { RequestHandlerExtra } from "@modelcontextprotocol/sdk/shared/protocol.js";
-import type {
-  AnyObjectSchema,
-  SchemaOutput,
-} from "@modelcontextprotocol/sdk/server/zod-compat.js";
-import type {
-  ClientRequest,
-  ClientNotification,
-  ClientResult,
-} from "@modelcontextprotocol/sdk/types.js";
-import { createCache } from "./cache-service.js";
+
+/**
+ * Maximum time to wait for a single pagination page fetch (ms).
+ * Each page is a separate network request; individual pages should complete quickly.
+ */
+export const PAGINATION_REQUEST_TIMEOUT_MS = 10_000; // 10 seconds
 
 export class MCPClientSession {
   private client: Client;
@@ -68,6 +74,7 @@ export class MCPClientSession {
     params: LoggingMessageNotification["params"],
   ) => void;
 
+  // eslint-disable-next-line @typescript-eslint/max-params
   constructor(
     client: Client,
     serverName: string,
@@ -99,6 +106,7 @@ export class MCPClientSession {
     this.setupNotificationHandlers();
   }
 
+  // eslint-disable-next-line max-lines-per-function
   private setupNotificationHandlers(): void {
     // Handle tools/list_changed notifications
     this.client.setNotificationHandler(
@@ -335,8 +343,12 @@ export class MCPClientSession {
 
     do {
       // Fetch current page
-      response = await this.client.listResources(
-        nextCursor ? { cursor: nextCursor } : undefined,
+      response = await withTimeout(
+        this.client.listResources(
+          nextCursor ? { cursor: nextCursor } : undefined,
+        ),
+        PAGINATION_REQUEST_TIMEOUT_MS,
+        `${this.serverName} listResources page`,
       );
 
       // Accumulate resources from this page
@@ -370,8 +382,12 @@ export class MCPClientSession {
 
     do {
       // Fetch current page
-      response = await this.client.listResourceTemplates(
-        nextCursor ? { cursor: nextCursor } : undefined,
+      response = await withTimeout(
+        this.client.listResourceTemplates(
+          nextCursor ? { cursor: nextCursor } : undefined,
+        ),
+        PAGINATION_REQUEST_TIMEOUT_MS,
+        `${this.serverName} listResourceTemplates page`,
       );
 
       // Accumulate templates from this page
@@ -405,8 +421,12 @@ export class MCPClientSession {
 
     do {
       // Fetch current page
-      response = await this.client.listPrompts(
-        nextCursor ? { cursor: nextCursor } : undefined,
+      response = await withTimeout(
+        this.client.listPrompts(
+          nextCursor ? { cursor: nextCursor } : undefined,
+        ),
+        PAGINATION_REQUEST_TIMEOUT_MS,
+        `${this.serverName} listPrompts page`,
       );
 
       // Accumulate prompts from this page

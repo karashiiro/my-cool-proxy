@@ -84,15 +84,17 @@ describe("Stdio Mode E2E", () => {
       });
 
       expect(result.content).toHaveLength(1);
-      const content = (
+      const content0 = (
         result.content as Array<TextContent | ImageContent | EmbeddedResource>
-      )[0]!;
-      expect(content.type).toBe("text");
+      )[0];
+      if (!content0)
+        throw new Error("expected result.content[0] to be defined");
+      expect(content0.type).toBe("text");
 
-      if (content.type === "text") {
+      if (content0.type === "text") {
         // The tool returns formatted text, not JSON
-        expect(content.text).toContain("calculator");
-        expect(content.text).toContain("data-server");
+        expect(content0.text).toContain("calculator");
+        expect(content0.text).toContain("data-server");
       }
     });
 
@@ -108,15 +110,17 @@ describe("Stdio Mode E2E", () => {
       });
 
       expect(executeResult.content).toHaveLength(1);
-      const content = (
+      const content1 = (
         executeResult.content as Array<
           TextContent | ImageContent | EmbeddedResource
         >
-      )[0]!;
-      expect(content.type).toBe("text");
+      )[0];
+      if (!content1)
+        throw new Error("expected executeResult.content[0] to be defined");
+      expect(content1.type).toBe("text");
 
-      if (content.type === "text") {
-        expect(content.text).toContain("15 + 25 = 40");
+      if (content1.type === "text") {
+        expect(content1.text).toContain("15 + 25 = 40");
       }
     });
 
@@ -127,17 +131,19 @@ describe("Stdio Mode E2E", () => {
       });
 
       expect(result.content).toHaveLength(1);
-      const content = (
+      const content2 = (
         result.content as Array<TextContent | ImageContent | EmbeddedResource>
-      )[0]!;
-      expect(content.type).toBe("text");
+      )[0];
+      if (!content2)
+        throw new Error("expected result.content[0] to be defined");
+      expect(content2.type).toBe("text");
 
-      if (content.type === "text") {
+      if (content2.type === "text") {
         // The tool returns formatted text, not JSON
-        expect(content.text).toContain("add");
-        expect(content.text).toContain("multiply");
-        expect(content.text).toContain("subtract");
-        expect(content.text).toContain("divide");
+        expect(content2.text).toContain("add");
+        expect(content2.text).toContain("multiply");
+        expect(content2.text).toContain("subtract");
+        expect(content2.text).toContain("divide");
       }
     });
   });
@@ -158,15 +164,17 @@ describe("Stdio Mode E2E", () => {
       });
 
       expect(executeResult.content).toHaveLength(1);
-      const content = (
+      const content3 = (
         executeResult.content as Array<
           TextContent | ImageContent | EmbeddedResource
         >
-      )[0]!;
-      expect(content.type).toBe("text");
+      )[0];
+      if (!content3)
+        throw new Error("expected executeResult.content[0] to be defined");
+      expect(content3.type).toBe("text");
 
-      if (content.type === "text") {
-        expect(content.text).toContain("7 * 8 = 56");
+      if (content3.type === "text") {
+        expect(content3.text).toContain("7 * 8 = 56");
       }
     });
 
@@ -183,15 +191,17 @@ describe("Stdio Mode E2E", () => {
       });
 
       expect(executeResult.content).toHaveLength(1);
-      const content = (
+      const content4 = (
         executeResult.content as Array<
           TextContent | ImageContent | EmbeddedResource
         >
-      )[0]!;
-      expect(content.type).toBe("text");
+      )[0];
+      if (!content4)
+        throw new Error("expected executeResult.content[0] to be defined");
+      expect(content4.type).toBe("text");
 
-      if (content.type === "text") {
-        expect(content.text).toContain("file://");
+      if (content4.type === "text") {
+        expect(content4.text).toContain("file://");
       }
     });
 
@@ -224,13 +234,14 @@ describe("Stdio Mode E2E", () => {
       });
 
       expect(executeResult.content).toHaveLength(1);
-      expect(
-        (
-          executeResult.content as Array<
-            TextContent | ImageContent | EmbeddedResource
-          >
-        )[0]!.type,
-      ).toMatch(/text|resource/);
+      const content5 = (
+        executeResult.content as Array<
+          TextContent | ImageContent | EmbeddedResource
+        >
+      )[0];
+      if (!content5)
+        throw new Error("expected executeResult.content[0] to be defined");
+      expect(content5.type).toMatch(/text|resource/);
     });
   });
 });

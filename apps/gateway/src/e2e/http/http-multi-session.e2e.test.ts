@@ -111,7 +111,11 @@ describe("HTTP Multi-Session E2E", () => {
       const session2Match = text2.match(/Session: ([\w-]+)/);
       expect(session1Match).not.toBeNull();
       expect(session2Match).not.toBeNull();
-      expect(session1Match![1]).not.toBe(session2Match![1]);
+      if (!session1Match)
+        throw new Error("expected session1Match to be defined");
+      if (!session2Match)
+        throw new Error("expected session2Match to be defined");
+      expect(session1Match[1]).not.toBe(session2Match[1]);
     });
 
     it("should execute Lua scripts independently in each session", async () => {

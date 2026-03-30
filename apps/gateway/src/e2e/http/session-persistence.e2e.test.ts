@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { SQLiteDatabase } from "../../stores/sqlite-database.js";
 import { SQLiteEventStore } from "../../stores/sqlite-event-store.js";
 import { SQLiteCapabilityStore } from "../../stores/sqlite-capability-store.js";
+import { SQLiteToolInspectionStore } from "../../stores/sqlite-tool-inspection-store.js";
 import type { ILogger, ClientCapabilities } from "../../types/interfaces.js";
 import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
 
@@ -16,6 +17,15 @@ const createMockLogger = (): ILogger => ({
   debug: () => {},
   fatal: () => {},
 });
+
+/** Insert a parent session row so FK constraints are satisfied. */
+function ensureSession(db: SQLiteDatabase, id: string): void {
+  db.getDatabase()
+    .prepare(
+      `INSERT OR IGNORE INTO sessions (session_id, created_at, last_activity) VALUES (?, ?, ?)`,
+    )
+    .run(id, Date.now(), Date.now());
+}
 
 describe("Session Persistence E2E", () => {
   let testDbPath: string;
@@ -102,6 +112,7 @@ describe("Session Persistence E2E", () => {
       // Phase 1: Store events
       {
         const db = new SQLiteDatabase(testDbPath);
+        ensureSession(db, sessionId);
         const eventStore = new SQLiteEventStore(db, sessionId);
 
         eventIds = [];
@@ -124,7 +135,10 @@ describe("Session Persistence E2E", () => {
 
         // Replay from first event - should get events 2 and 3
         const replayedEvents: JSONRPCMessage[] = [];
-        const streamId = await eventStore.replayEventsAfter(eventIds[0]!, {
+        const firstEventId = eventIds[0];
+        if (!firstEventId)
+          throw new Error("expected eventIds[0] to be defined");
+        const streamId = await eventStore.replayEventsAfter(firstEventId, {
           send: async (_, message) => {
             replayedEvents.push(message);
           },
@@ -137,6 +151,88 @@ describe("Session Persistence E2E", () => {
 
         db.close();
       }
+    });
+  });
+
+  describe("Tool Inspection Persistence", () => {
+    it("should persist tool inspection state across database close/reopen", () => {
+      const sessionId = "inspection-persist-session";
+
+      // Phase 1: Create database, mark tools as inspected, close
+      {
+        const db = new SQLiteDatabase(testDbPath);
+        ensureSession(db, sessionId);
+        const inspectionStore = new SQLiteToolInspectionStore(db);
+
+        inspectionStore.markInspected(sessionId, "github", "search_issues");
+        inspectionStore.markInspected(sessionId, "slack", "send_message");
+
+        // Verify data is stored
+        expect(
+          inspectionStore.isInspected(sessionId, "github", "search_issues"),
+        ).toBe(true);
+        expect(
+          inspectionStore.isInspected(sessionId, "slack", "send_message"),
+        ).toBe(true);
+        expect(
+          inspectionStore.isInspected(sessionId, "github", "create_pr"),
+        ).toBe(false);
+
+        db.close();
+      }
+
+      // Phase 2: Reopen database, verify inspection state persisted
+      {
+        const db = new SQLiteDatabase(testDbPath);
+        const inspectionStore = new SQLiteToolInspectionStore(db);
+
+        // Data should still be there!
+        expect(
+          inspectionStore.isInspected(sessionId, "github", "search_issues"),
+        ).toBe(true);
+        expect(
+          inspectionStore.isInspected(sessionId, "slack", "send_message"),
+        ).toBe(true);
+        expect(
+          inspectionStore.isInspected(sessionId, "github", "create_pr"),
+        ).toBe(false);
+
+        db.close();
+      }
+    });
+
+    it("should isolate tool inspections between sessions across restarts", () => {
+      const db = new SQLiteDatabase(testDbPath);
+      ensureSession(db, "session-1");
+      ensureSession(db, "session-2");
+      const inspectionStore = new SQLiteToolInspectionStore(db);
+
+      inspectionStore.markInspected("session-1", "github", "search_issues");
+      inspectionStore.markInspected("session-2", "slack", "send_message");
+
+      expect(
+        inspectionStore.isInspected("session-1", "github", "search_issues"),
+      ).toBe(true);
+      expect(
+        inspectionStore.isInspected("session-1", "slack", "send_message"),
+      ).toBe(false);
+      expect(
+        inspectionStore.isInspected("session-2", "slack", "send_message"),
+      ).toBe(true);
+      expect(
+        inspectionStore.isInspected("session-2", "github", "search_issues"),
+      ).toBe(false);
+
+      // Delete session-1, session-2 should be unaffected
+      inspectionStore.deleteSession("session-1");
+      expect(
+        inspectionStore.isInspected("session-1", "github", "search_issues"),
+      ).toBe(false);
+      expect(
+        inspectionStore.isInspected("session-2", "slack", "send_message"),
+      ).toBe(true);
+
+      db.close();
     });
   });
 
@@ -164,6 +260,8 @@ describe("Session Persistence E2E", () => {
 
     it("should isolate events between sessions", async () => {
       const db = new SQLiteDatabase(testDbPath);
+      ensureSession(db, "session-1");
+      ensureSession(db, "session-2");
 
       const session1Store = new SQLiteEventStore(db, "session-1");
       const session2Store = new SQLiteEventStore(db, "session-2");
@@ -211,6 +309,9 @@ describe("Session Persistence E2E", () => {
   describe("Concurrent Access", () => {
     it("should handle concurrent writes from multiple event stores", async () => {
       const db = new SQLiteDatabase(testDbPath);
+      ensureSession(db, "concurrent-1");
+      ensureSession(db, "concurrent-2");
+      ensureSession(db, "concurrent-3");
 
       // Create multiple stores writing concurrently
       const stores = [
@@ -254,7 +355,9 @@ describe("Session Persistence E2E", () => {
       const result = database.pragma("journal_mode") as Array<{
         journal_mode: string;
       }>;
-      expect(result[0]!.journal_mode).toBe("wal");
+      const journalRow = result[0];
+      if (!journalRow) throw new Error("expected result[0] to be defined");
+      expect(journalRow.journal_mode).toBe("wal");
 
       db.close();
     });
@@ -268,6 +371,8 @@ describe("Session Persistence E2E", () => {
       const eventStoreFactory = (sessionId: string) =>
         new SQLiteEventStore(db, sessionId);
 
+      ensureSession(db, "factory-session-1");
+      ensureSession(db, "factory-session-2");
       const store1 = eventStoreFactory("factory-session-1");
       const store2 = eventStoreFactory("factory-session-2");
 
@@ -298,6 +403,93 @@ describe("Session Persistence E2E", () => {
         )
         .get("factory-session-2") as { count: number };
       expect(s2Count.count).toBe(1);
+
+      db.close();
+    });
+  });
+
+  describe("Session Data Preservation on Close", () => {
+    it("should preserve session_init_requests when deleteCapabilities is NOT called (fixed shutdown behavior)", async () => {
+      const sessionId = "restore-test-session";
+      const initRequest: JSONRPCMessage = {
+        jsonrpc: "2.0",
+        method: "initialize",
+        id: 1,
+        params: {
+          protocolVersion: "2025-03-26",
+          capabilities: { sampling: {} },
+          clientInfo: { name: "test-client", version: "1.0.0" },
+        },
+      };
+      const caps: ClientCapabilities = { sampling: { context: {} } };
+
+      // Phase 1: Create session, store init request, simulate shutdown WITHOUT deleteCapabilities
+      {
+        const db = new SQLiteDatabase(testDbPath);
+        const capStore = new SQLiteCapabilityStore(db, createMockLogger());
+        const eventStore = new SQLiteEventStore(db, sessionId);
+
+        capStore.setCapabilities(sessionId, caps);
+        await eventStore.storeInitializeRequest(sessionId, initRequest);
+
+        // Verify data exists before "shutdown"
+        expect(await eventStore.hasSession(sessionId)).toBe(true);
+        expect(await eventStore.getInitializeRequest(sessionId)).toEqual(
+          initRequest,
+        );
+
+        // Simulate fixed shutdown: close upstream connections, clean up in-memory
+        // state, but do NOT call deleteCapabilities — session data stays in SQLite
+        db.close();
+      }
+
+      // Phase 2: Reopen database (simulating restart), verify restoration data survived
+      {
+        const db = new SQLiteDatabase(testDbPath);
+        const eventStore = new SQLiteEventStore(db, sessionId);
+
+        // hasSession should return true — restoration can proceed
+        expect(await eventStore.hasSession(sessionId)).toBe(true);
+
+        // The stored init request should be retrievable for replay
+        const storedRequest = await eventStore.getInitializeRequest(sessionId);
+        expect(storedRequest).toEqual(initRequest);
+
+        db.close();
+      }
+    });
+
+    it("should CASCADE-delete session_init_requests when deleteCapabilities IS called (old broken behavior)", async () => {
+      const sessionId = "cascade-test-session";
+      const initRequest: JSONRPCMessage = {
+        jsonrpc: "2.0",
+        method: "initialize",
+        id: 1,
+        params: {
+          protocolVersion: "2025-03-26",
+          capabilities: {},
+          clientInfo: { name: "test-client", version: "1.0.0" },
+        },
+      };
+      const caps: ClientCapabilities = { sampling: { context: {} } };
+
+      const db = new SQLiteDatabase(testDbPath);
+      const capStore = new SQLiteCapabilityStore(db, createMockLogger());
+      const eventStore = new SQLiteEventStore(db, sessionId);
+
+      capStore.setCapabilities(sessionId, caps);
+      await eventStore.storeInitializeRequest(sessionId, initRequest);
+
+      // Verify data exists
+      expect(await eventStore.hasSession(sessionId)).toBe(true);
+
+      // Call deleteCapabilities — this deletes the sessions row, which
+      // CASCADE-deletes session_init_requests and mcp_events
+      capStore.deleteCapabilities(sessionId);
+
+      // Init request is gone — session restoration is impossible
+      expect(await eventStore.hasSession(sessionId)).toBe(false);
+      expect(await eventStore.getInitializeRequest(sessionId)).toBeUndefined();
 
       db.close();
     });

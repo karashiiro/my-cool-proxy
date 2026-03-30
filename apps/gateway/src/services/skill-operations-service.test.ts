@@ -7,9 +7,15 @@ import {
   vi,
   type Mock,
 } from "vitest";
-import { mkdirSync, rmSync, existsSync, writeFileSync, readFileSync } from "fs";
-import { resolve } from "path";
-import { tmpdir } from "os";
+import {
+  mkdirSync,
+  rmSync,
+  existsSync,
+  writeFileSync,
+  readFileSync,
+} from "node:fs";
+import { resolve } from "node:path";
+import { tmpdir } from "node:os";
 import { SkillOperationsService } from "./skill-operations-service.js";
 import type { ILogger, ISkillDiscoveryService } from "../types/interfaces.js";
 

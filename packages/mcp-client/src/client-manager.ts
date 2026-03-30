@@ -1,8 +1,8 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { createWriteStream, type WriteStream } from "fs";
-import { getErrorMessage } from "@my-cool-proxy/mcp-utilities";
+import { createWriteStream, type WriteStream } from "node:fs";
+import { getErrorMessage, withTimeout } from "@my-cool-proxy/mcp-utilities";
 import type {
   ClientConnectionResult,
   ILogger,
@@ -11,6 +11,12 @@ import type {
 } from "./types.js";
 import type { LoggingMessageNotification } from "@modelcontextprotocol/sdk/types.js";
 import { MCPClientSession } from "./client-session.js";
+
+/**
+ * Maximum time to wait for an HTTP upstream server to complete connection and
+ * MCP protocol handshake (ms). Covers network connection + protocol init.
+ */
+export const CLIENT_CONNECT_TIMEOUT_MS = 30_000; // 30 seconds
 
 export class MCPClientManager implements IMCPClientManager {
   private clients = new Map<string, MCPClientSession>();
@@ -57,15 +63,25 @@ export class MCPClientManager implements IMCPClientManager {
     this.onLoggingMessage = handler;
   }
 
-  async addHttpClient(
-    name: string,
-    endpoint: string,
-    sessionId: string,
-    headers?: Record<string, string>,
-    allowedTools?: string[],
-    clientCapabilities?: ClientCapabilities,
-    dangerouslyEnableSampling?: boolean,
-  ): Promise<ClientConnectionResult> {
+  // eslint-disable-next-line max-lines-per-function, sonarjs/cognitive-complexity
+  async addHttpClient(options: {
+    name: string;
+    endpoint: string;
+    sessionId: string;
+    headers?: Record<string, string>;
+    allowedTools?: string[];
+    clientCapabilities?: ClientCapabilities;
+    dangerouslyEnableSampling?: boolean;
+  }): Promise<ClientConnectionResult> {
+    const {
+      name,
+      endpoint,
+      sessionId,
+      headers,
+      allowedTools,
+      clientCapabilities,
+      dangerouslyEnableSampling,
+    } = options;
     const key = `${name}-${sessionId}`;
     if (this.clients.has(key)) {
       this.logger.debug(
@@ -109,7 +125,17 @@ export class MCPClientManager implements IMCPClientManager {
             ? { headers: allHeaders }
             : undefined,
       });
-      await sdkClient.connect(transport);
+      await withTimeout(
+        sdkClient.connect(transport),
+        CLIENT_CONNECT_TIMEOUT_MS,
+        `connect to ${name} at ${endpoint}`,
+      );
+
+      // Capture callbacks before creating session to allow TypeScript narrowing
+      const onResourceListChanged = this.onResourceListChanged;
+      const onPromptListChanged = this.onPromptListChanged;
+      const onToolListChanged = this.onToolListChanged;
+      const onLoggingMessage = this.onLoggingMessage;
 
       // Wrap in MCPClientSession
       const wrappedClient = new MCPClientSession(
@@ -117,18 +143,18 @@ export class MCPClientManager implements IMCPClientManager {
         name,
         allowedTools,
         this.logger,
-        this.onResourceListChanged
-          ? (serverName) => this.onResourceListChanged!(serverName, sessionId)
+        onResourceListChanged
+          ? (serverName) => onResourceListChanged(serverName, sessionId)
           : undefined,
-        this.onPromptListChanged
-          ? (serverName) => this.onPromptListChanged!(serverName, sessionId)
+        onPromptListChanged
+          ? (serverName) => onPromptListChanged(serverName, sessionId)
           : undefined,
-        this.onToolListChanged
-          ? (serverName) => this.onToolListChanged!(serverName, sessionId)
+        onToolListChanged
+          ? (serverName) => onToolListChanged(serverName, sessionId)
           : undefined,
         dangerouslyEnableSampling,
-        this.onLoggingMessage
-          ? (params) => this.onLoggingMessage!(params, sessionId)
+        onLoggingMessage
+          ? (params) => onLoggingMessage(params, sessionId)
           : undefined,
       );
 
@@ -163,17 +189,31 @@ export class MCPClientManager implements IMCPClientManager {
     }
   }
 
-  async addStdioClient(
-    name: string,
-    command: string,
-    sessionId: string,
-    args?: string[],
-    env?: Record<string, string>,
-    allowedTools?: string[],
-    clientCapabilities?: ClientCapabilities,
-    stderrLogPath?: string,
-    dangerouslyEnableSampling?: boolean,
-  ): Promise<ClientConnectionResult> {
+  // eslint-disable-next-line max-lines-per-function, sonarjs/cognitive-complexity, complexity
+  async addStdioClient(options: {
+    name: string;
+    command: string;
+    sessionId: string;
+    args?: string[];
+    env?: Record<string, string>;
+    allowedTools?: string[];
+    clientCapabilities?: ClientCapabilities;
+    stderrLogPath?: string;
+    dangerouslyEnableSampling?: boolean;
+    cwd?: string;
+  }): Promise<ClientConnectionResult> {
+    const {
+      name,
+      command,
+      sessionId,
+      args,
+      env,
+      allowedTools,
+      clientCapabilities,
+      stderrLogPath,
+      dangerouslyEnableSampling,
+      cwd,
+    } = options;
     const key = `${name}-${sessionId}`;
     if (this.clients.has(key)) {
       this.logger.debug(
@@ -213,6 +253,7 @@ export class MCPClientManager implements IMCPClientManager {
         args,
         env,
         stderr: stderrLogPath ? "pipe" : "inherit",
+        cwd,
       });
 
       await sdkClient.connect(transport);
@@ -226,24 +267,30 @@ export class MCPClientManager implements IMCPClientManager {
         );
       }
 
+      // Capture callbacks before creating session to allow TypeScript narrowing
+      const onResourceListChangedStdio = this.onResourceListChanged;
+      const onPromptListChangedStdio = this.onPromptListChanged;
+      const onToolListChangedStdio = this.onToolListChanged;
+      const onLoggingMessageStdio = this.onLoggingMessage;
+
       // Wrap in MCPClientSession
       const wrappedClient = new MCPClientSession(
         sdkClient,
         name,
         allowedTools,
         this.logger,
-        this.onResourceListChanged
-          ? (serverName) => this.onResourceListChanged!(serverName, sessionId)
+        onResourceListChangedStdio
+          ? (serverName) => onResourceListChangedStdio(serverName, sessionId)
           : undefined,
-        this.onPromptListChanged
-          ? (serverName) => this.onPromptListChanged!(serverName, sessionId)
+        onPromptListChangedStdio
+          ? (serverName) => onPromptListChangedStdio(serverName, sessionId)
           : undefined,
-        this.onToolListChanged
-          ? (serverName) => this.onToolListChanged!(serverName, sessionId)
+        onToolListChangedStdio
+          ? (serverName) => onToolListChangedStdio(serverName, sessionId)
           : undefined,
         dangerouslyEnableSampling,
-        this.onLoggingMessage
-          ? (params) => this.onLoggingMessage!(params, sessionId)
+        onLoggingMessageStdio
+          ? (params) => onLoggingMessageStdio(params, sessionId)
           : undefined,
       );
 

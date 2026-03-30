@@ -74,6 +74,10 @@ export class NotifyingExecutionLog implements IExecutionLog {
     this.inner.markToolCallError(callId, error);
   }
 
+  getExecutionResult(executionId: string): string | undefined {
+    return this.inner.getExecutionResult(executionId);
+  }
+
   getExecution(executionId: string): LuaExecution | undefined {
     return this.inner.getExecution(executionId);
   }

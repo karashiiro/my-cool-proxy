@@ -1,8 +1,8 @@
 import type { ILogger, LoggerConfig, LogLevel } from "./types.js";
 import pino from "pino";
-import { mkdirSync } from "fs";
-import { dirname } from "path";
-import { createWriteStream } from "fs";
+import { mkdirSync } from "node:fs";
+import { dirname } from "node:path";
+import { createWriteStream } from "node:fs";
 import pretty from "pino-pretty";
 
 /** Numeric log levels in pino - lower is more verbose */
@@ -83,7 +83,10 @@ export class ConsoleLogger implements ILogger {
   private createMultiStreamLogger(config: LoggerConfig): pino.Logger {
     const consoleLevel = config.console?.level ?? "info";
     const fileLevel = config.file?.level ?? "trace";
-    const filePath = config.file!.path;
+    if (!config.file) {
+      throw new Error("createMultiStreamLogger called without file config");
+    }
+    const filePath = config.file.path;
 
     // Ensure parent directory exists for log file
     const dir = dirname(filePath);
@@ -121,7 +124,7 @@ export class ConsoleLogger implements ILogger {
     if (typeof msgOrObj === "string") {
       this.logger.info(msgOrObj);
     } else {
-      this.logger.info(msgOrObj, message!);
+      this.logger.info(msgOrObj, message ?? "");
     }
   }
 
@@ -129,7 +132,7 @@ export class ConsoleLogger implements ILogger {
     if (typeof msgOrObj === "string") {
       this.logger.warn(msgOrObj);
     } else {
-      this.logger.warn(msgOrObj, message!);
+      this.logger.warn(msgOrObj, message ?? "");
     }
   }
 
@@ -157,7 +160,7 @@ export class ConsoleLogger implements ILogger {
     if (typeof msgOrObj === "string") {
       this.logger.debug(msgOrObj);
     } else {
-      this.logger.debug(msgOrObj, message!);
+      this.logger.debug(msgOrObj, message ?? "");
     }
   }
 
@@ -165,7 +168,7 @@ export class ConsoleLogger implements ILogger {
     if (typeof msgOrObj === "string") {
       this.logger.fatal(msgOrObj);
     } else {
-      this.logger.fatal(msgOrObj, message!);
+      this.logger.fatal(msgOrObj, message ?? "");
     }
   }
 }

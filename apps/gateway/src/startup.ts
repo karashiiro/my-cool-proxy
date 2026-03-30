@@ -11,6 +11,7 @@ import type {
   ISamplingShim,
   IServerInfoPreloader,
   ISkillDiscoveryService,
+  IToolInspectionStore,
   ServerConfig,
 } from "./types/interfaces.js";
 import type { IToolRegistry } from "./tools/tool-registry.js";
@@ -21,12 +22,18 @@ import type {
 } from "@my-cool-proxy/mcp-aggregation";
 import { MCPGatewayServer } from "./mcp/gateway-server.js";
 import { registerProxyHandlers } from "./handlers/proxy-handlers.js";
-import { createSessionTempDir, initializeSamplingShim } from "./utils/index.js";
+import {
+  createSessionTempDir,
+  initializeSamplingShim,
+  withTimeout,
+} from "./utils/index.js";
+import { findValidLocalRoot } from "./utils/root-utils.js";
 import { ensureServerLogDir, getServerLogPath } from "./utils/log-paths.js";
 import { getDbPath, ensureDbDirectory } from "./utils/db-paths.js";
 import { SQLiteDatabase } from "./stores/sqlite-database.js";
 import { SQLiteCapabilityStore } from "./stores/sqlite-capability-store.js";
 import { SQLiteExecutionLog } from "./stores/sqlite-execution-log.js";
+import { SQLiteToolInspectionStore } from "./stores/sqlite-tool-inspection-store.js";
 
 /**
  * Common services resolved from the DI container.
@@ -79,6 +86,7 @@ export function initializeSqlite(
     purged.luaToolCalls +
     purged.luaExecutions +
     purged.mcpEvents +
+    purged.toolInspections +
     purged.sessionInitRequests +
     purged.sessions;
   if (totalPurged > 0) {
@@ -102,6 +110,13 @@ export function initializeSqlite(
       .bind<ICapabilityStore>(TYPES.CapabilityStore)
       .toConstantValue(capabilityStore);
   }
+
+  // Rebind tool inspection store to SQLite-backed implementation
+  // so tool-details state survives restarts (both HTTP and stdio modes)
+  container.unbind(TYPES.ToolInspectionStore);
+  container
+    .bind<IToolInspectionStore>(TYPES.ToolInspectionStore)
+    .toConstantValue(new SQLiteToolInspectionStore(sqliteDb));
 
   return { sqliteDb };
 }
@@ -187,6 +202,7 @@ export async function initializeClientsForSession(
   config: ServerConfig,
   clientManager: IMCPClientManager,
   clientCapabilities?: ClientCapabilities,
+  cwd?: string,
 ): Promise<InitializationResult> {
   // Ensure server log directory exists for stdio server stderr redirection
   ensureServerLogDir();
@@ -194,29 +210,30 @@ export async function initializeClientsForSession(
   const connectionPromises = Object.entries(config.mcpClients).map(
     async ([name, clientConfig]): Promise<ClientConnectionResult> => {
       if (clientConfig.type === "http") {
-        return clientManager.addHttpClient(
+        return clientManager.addHttpClient({
           name,
-          clientConfig.url,
+          endpoint: clientConfig.url,
           sessionId,
-          clientConfig.headers,
-          clientConfig.allowedTools,
+          headers: clientConfig.headers,
+          allowedTools: clientConfig.allowedTools,
           clientCapabilities,
-          clientConfig.dangerouslyEnableSampling,
-        );
+          dangerouslyEnableSampling: clientConfig.dangerouslyEnableSampling,
+        });
       } else if (clientConfig.type === "stdio") {
         // Generate log path for stdio server stderr
         const stderrLogPath = getServerLogPath(name, sessionId);
-        return clientManager.addStdioClient(
+        return clientManager.addStdioClient({
           name,
-          clientConfig.command,
+          command: clientConfig.command,
           sessionId,
-          clientConfig.args,
-          clientConfig.env,
-          clientConfig.allowedTools,
+          args: clientConfig.args,
+          env: clientConfig.env,
+          allowedTools: clientConfig.allowedTools,
           clientCapabilities,
           stderrLogPath,
-          clientConfig.dangerouslyEnableSampling,
-        );
+          dangerouslyEnableSampling: clientConfig.dangerouslyEnableSampling,
+          cwd,
+        });
       } else {
         // Exhaustiveness check - TypeScript will error if a new type is added
         // but not handled above
@@ -267,6 +284,7 @@ export async function initializeClientsForSession(
  * create a working directory, initialize the sampling shim, connect to
  * upstream servers, and register proxy handlers.
  */
+// eslint-disable-next-line max-lines-per-function
 export async function handleDownstreamInitialized(
   sessionId: string,
   capabilities: ClientCapabilities,
@@ -313,12 +331,41 @@ export async function handleDownstreamInitialized(
     );
   }
 
+  // Resolve client roots to a local filesystem path for use as stdio server cwd.
+  // This ensures stdio servers (e.g. Playwright) use the client's project directory
+  // instead of the gateway's working directory.
+  let stdioCwd: string | undefined;
+  if (capabilities.roots) {
+    try {
+      const rootsResult = await withTimeout(
+        gatewayServer.forwardListRootsRequest(),
+        5000,
+        "Roots request timed out",
+      );
+      stdioCwd = findValidLocalRoot(rootsResult.roots);
+      if (stdioCwd) {
+        logger.info(
+          `Session ${sessionId}: Resolved client root as stdio cwd: ${stdioCwd}`,
+        );
+      } else {
+        logger.debug(
+          `Session ${sessionId}: No valid local root found, stdio servers will use default cwd`,
+        );
+      }
+    } catch (error) {
+      logger.warn(
+        `Session ${sessionId}: Failed to resolve client roots for stdio cwd: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
   // Now initialize upstream MCP clients with the (possibly augmented) capabilities
   const initResult = await initializeClientsForSession(
     sessionId,
     config,
     clientManager,
     upstreamCapabilities,
+    stdioCwd,
   );
 
   if (initResult.failed.length > 0) {

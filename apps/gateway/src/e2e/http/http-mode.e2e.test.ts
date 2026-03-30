@@ -211,12 +211,16 @@ describe("HTTP Mode E2E", () => {
         r.uri.includes("test-data.json"),
       );
       expect(testDataResource).toBeDefined();
+      if (!testDataResource)
+        throw new Error("expected testDataResource to be defined");
 
-      const uri = testDataResource!.uri;
+      const uri = testDataResource.uri;
       const result = await gatewayClient.readResource({ uri });
 
       expect(result.contents).toHaveLength(1);
-      const content = result.contents[0]!;
+      const content = result.contents[0];
+      if (!content)
+        throw new Error("expected result.contents[0] to be defined");
 
       expect(content.uri).toBe(uri);
       if ("text" in content && content.text !== undefined) {

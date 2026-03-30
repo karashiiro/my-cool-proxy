@@ -1,6 +1,9 @@
 // Error utilities
 export { getErrorMessage } from "./error-utils.js";
 
+// Timeout utilities
+export { TimeoutError, withTimeout } from "./timeout-utils.js";
+
 // Lua identifier utilities
 export { sanitizeLuaIdentifier } from "./lua-identifier.js";
 
@@ -22,3 +25,6 @@ export {
 
 // Schema formatter utilities
 export { formatSchema, getSchemaType } from "./schema-formatter.js";
+
+// Schema inferrer utilities
+export { inferSchema } from "./schema-inferrer.js";

@@ -23,6 +23,7 @@ function makeInner(): IExecutionLog {
     getAllExecutions: vi.fn().mockReturnValue([]),
     countExecutions: vi.fn().mockReturnValue(0),
     getDistinctTools: vi.fn().mockReturnValue([]),
+    getExecutionResult: vi.fn().mockReturnValue(undefined),
   };
 }
 
@@ -50,7 +51,10 @@ describe("NotifyingExecutionLog", () => {
       const after = Date.now();
 
       expect(onEvent).toHaveBeenCalledOnce();
-      const event = onEvent.mock.calls[0]![0] as Extract<
+      const call0 = onEvent.mock.calls[0];
+      if (!call0)
+        throw new Error("expected onEvent.mock.calls[0] to be defined");
+      const event = call0[0] as Extract<
         DashboardEvent,
         { type: "execution:new" }
       >;
@@ -75,7 +79,10 @@ describe("NotifyingExecutionLog", () => {
       log.markExecutionResult("exec-123", "null");
 
       expect(onEvent).toHaveBeenCalledOnce();
-      const event = onEvent.mock.calls[0]![0] as Extract<
+      const call0 = onEvent.mock.calls[0];
+      if (!call0)
+        throw new Error("expected onEvent.mock.calls[0] to be defined");
+      const event = call0[0] as Extract<
         DashboardEvent,
         { type: "execution:completed" }
       >;
@@ -98,7 +105,10 @@ describe("NotifyingExecutionLog", () => {
       log.markExecutionError("exec-123", "something broke");
 
       expect(onEvent).toHaveBeenCalledOnce();
-      const event = onEvent.mock.calls[0]![0] as Extract<
+      const call0 = onEvent.mock.calls[0];
+      if (!call0)
+        throw new Error("expected onEvent.mock.calls[0] to be defined");
+      const event = call0[0] as Extract<
         DashboardEvent,
         { type: "execution:completed" }
       >;

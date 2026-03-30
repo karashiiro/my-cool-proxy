@@ -121,6 +121,7 @@ function openButton(tc: LuaToolCall): string {
  * are converted to their Lua identifier form ("stderr_server") before matching
  * against the source code.
  */
+// eslint-disable-next-line max-lines-per-function, sonarjs/cognitive-complexity, complexity
 export async function highlightLua(
   code: string,
   toolCalls: LuaToolCall[],
@@ -144,7 +145,8 @@ export async function highlightLua(
     isNewline?: boolean;
   }[] = [];
   for (let lineIdx = 0; lineIdx < tokens.length; lineIdx++) {
-    const line = tokens[lineIdx]!;
+    const line = tokens[lineIdx];
+    if (!line) continue;
     for (const token of line) {
       allTokens.push({
         content: token.content,
@@ -205,6 +207,7 @@ export async function highlightLua(
           nextRange.start < tokenEnd
         ) {
           // Emit text before the range start
+          // eslint-disable-next-line max-depth
           if (nextRange.start > cursor) {
             html += renderSpan(
               token.content.slice(
@@ -227,6 +230,7 @@ export async function highlightLua(
           );
           cursor = sliceEnd;
 
+          // eslint-disable-next-line max-depth
           if (cursor >= nextRange.end) {
             html += "</button>";
             insideButton = false;
@@ -257,6 +261,7 @@ export async function highlightLua(
       } else {
         // Range hasn't started yet - emit text before it
         if (currentRange.start >= cursor && currentRange.start < tokenEnd) {
+          // eslint-disable-next-line max-depth
           if (currentRange.start > cursor) {
             html += renderSpan(
               token.content.slice(
@@ -277,6 +282,7 @@ export async function highlightLua(
           );
           cursor = sliceEnd;
 
+          // eslint-disable-next-line max-depth
           if (cursor >= currentRange.end) {
             html += "</button>";
             insideButton = false;

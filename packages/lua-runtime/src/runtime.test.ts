@@ -1767,8 +1767,12 @@ describe("WasmoonRuntime", () => {
         expect.any(String),
       );
       // The result should be valid JSON
-      const resultArg = (toolCallLog.onToolCallEnd as ReturnType<typeof vi.fn>)
-        .mock.calls[0]![1];
+      const endCalls = (toolCallLog.onToolCallEnd as ReturnType<typeof vi.fn>)
+        .mock.calls;
+      const firstEndCall = endCalls[0];
+      if (!firstEndCall)
+        throw new Error("Expected onToolCallEnd to have been called");
+      const resultArg = firstEndCall[1];
       const parsed = JSON.parse(resultArg as string);
       expect(parsed).toHaveProperty("content");
     });
@@ -1870,8 +1874,13 @@ describe("WasmoonRuntime", () => {
         toolCallLog,
       );
 
-      const args = (toolCallLog.onToolCallStart as ReturnType<typeof vi.fn>)
-        .mock.calls[0]![2];
+      const startCalls = (
+        toolCallLog.onToolCallStart as ReturnType<typeof vi.fn>
+      ).mock.calls;
+      const firstStartCall = startCalls[0];
+      if (!firstStartCall)
+        throw new Error("Expected onToolCallStart to have been called");
+      const args = firstStartCall[2];
       const parsed = JSON.parse(args as string);
       expect(parsed).toEqual({ query: "test", limit: 10 });
     });

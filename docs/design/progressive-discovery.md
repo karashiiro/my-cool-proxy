@@ -51,13 +51,7 @@ sequenceDiagram
     Agent->>Gateway: tool-details("calculator", "add")
     Gateway-->>Agent: Full schema, parameters, examples
 
-    Note over Agent,Upstream: Step 4 (Optional): Inspect Response
-    Agent->>Gateway: inspect-tool-response("calculator", "add", {a:1, b:2})
-    Gateway->>Upstream: Actually call tool
-    Upstream-->>Gateway: Real response
-    Gateway-->>Agent: Response structure
-
-    Note over Agent,Upstream: Step 5: Execute
+    Note over Agent,Upstream: Step 4: Execute
     Agent->>Gateway: execute("result(calculator.add({a=5,b=3}):await())")
     Gateway->>Upstream: Call tool
     Upstream-->>Gateway: Result
@@ -194,6 +188,15 @@ Executes a Lua script with access to all MCP servers.
 - Text content (always present)
 - Structured content (if result is an object)
 
+**Notes:**
+
+- Tool calls return promises — use `:await()` to unwrap them
+- Call `result()` to return a value from your script
+- Filter tool result objects down to only what you need
+- Calling many tools in one script is more efficient than calling `execute` many times
+
+**Large Result Offloading:** When a result's JSON exceeds `resultSizeThreshold` (default 50KB), the gateway returns a schema summary with an execution ID instead of the full payload. Use `_gateway.get_result({ id = "..." })` in a follow-up `execute` call to retrieve and filter the full result. Set `resultSizeThreshold` to `0` in config to disable offloading.
+
 **Example:**
 
 ```lua
@@ -274,7 +277,23 @@ local prompt = _gateway.get_prompt({
 result(prompt)
 ```
 
-### 11. `_gateway.complete()` (Lua Builtin)
+### 11. `_gateway.get_result()` (Lua Builtin)
+
+Retrieves a previously-offloaded execution result by its execution ID. When a result exceeds `resultSizeThreshold`, the `execute` tool returns a schema summary and an execution ID instead of the full data. Use this builtin to fetch the full result and filter it within Lua.
+
+**Usage:**
+
+```lua
+local full = _gateway.get_result({ id = "abc-123" }):await()
+-- Filter to just the fields you need
+local names = {}
+for _, item in ipairs(full.items) do
+    table.insert(names, item.name)
+end
+result(names)
+```
+
+### 12. `_gateway.complete()` (Lua Builtin)
 
 Gets completions for a resource template variable or prompt argument.
 

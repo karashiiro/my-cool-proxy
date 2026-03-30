@@ -1,9 +1,8 @@
-import envPaths from "env-paths";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
+import { appPaths } from "./app-paths.js";
 
-// Disable the default "-nodejs" suffix to keep paths clean
-const paths = envPaths("my-cool-proxy", { suffix: "" });
+const paths = appPaths;
 
 /**
  * Get the fixed database path for session persistence.

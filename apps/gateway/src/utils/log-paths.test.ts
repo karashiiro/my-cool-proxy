@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from "vitest";
-import { resolve } from "path";
+import { resolve } from "node:path";
 import {
   createLogPaths,
   sanitizeFilename,

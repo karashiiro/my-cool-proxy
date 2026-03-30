@@ -1,5 +1,5 @@
-import { normalize, resolve, dirname, isAbsolute, sep } from "path";
-import { realpath, access, constants } from "fs/promises";
+import { normalize, resolve, dirname, isAbsolute, sep } from "node:path";
+import { realpath, access, constants } from "node:fs/promises";
 
 /**
  * Error thrown when a path operation violates sandbox constraints.

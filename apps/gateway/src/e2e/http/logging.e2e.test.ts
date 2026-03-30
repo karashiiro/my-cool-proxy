@@ -163,8 +163,9 @@ describe("Logging Notification Proxy E2E (HTTP Mode)", () => {
       );
 
       expect(ourLog).toBeDefined();
+      if (!ourLog) throw new Error("expected ourLog to be defined");
       // Logger should be prefixed with server name
-      expect(ourLog!.logger).toBe("[logging-test-server] my-logger");
+      expect(ourLog.logger).toBe("[logging-test-server] my-logger");
     });
 
     it("should use server name as logger when no logger provided", async () => {
@@ -199,8 +200,9 @@ describe("Logging Notification Proxy E2E (HTTP Mode)", () => {
       );
 
       expect(ourLog).toBeDefined();
+      if (!ourLog) throw new Error("expected ourLog to be defined");
       // Logger should be just the server name in brackets
-      expect(ourLog!.logger).toBe("[logging-test-server]");
+      expect(ourLog.logger).toBe("[logging-test-server]");
     });
 
     it("should forward multiple logs in sequence", async () => {
@@ -270,9 +272,10 @@ describe("Logging Notification Proxy E2E (HTTP Mode)", () => {
       );
 
       expect(ourLog).toBeDefined();
-      expect(typeof ourLog!.data).toBe("object");
+      if (!ourLog) throw new Error("expected ourLog to be defined");
+      expect(typeof ourLog.data).toBe("object");
 
-      const data = ourLog!.data as { message: string; timestamp: string };
+      const data = ourLog.data as { message: string; timestamp: string };
       expect(data.message).toBe("Structured data test");
       expect(data.timestamp).toBeDefined();
       // Verify timestamp is a valid ISO string

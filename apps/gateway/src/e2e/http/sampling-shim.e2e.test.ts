@@ -1,4 +1,4 @@
-import { resolve } from "path";
+import { resolve } from "node:path";
 import { describe, it, beforeAll, afterAll, expect } from "vitest";
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { allocatePort } from "../helpers/port-manager.js";

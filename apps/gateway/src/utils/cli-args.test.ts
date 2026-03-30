@@ -7,7 +7,14 @@ describe("cli-args", () => {
       const result = parseArgs([]);
 
       expect(result.showConfigPath).toBe(false);
+      expect(result.showPaths).toBe(false);
       expect(result.help).toBe(false);
+    });
+
+    it("should detect --paths flag", () => {
+      const result = parseArgs(["--paths"]);
+
+      expect(result.showPaths).toBe(true);
     });
 
     it("should detect --config-path flag", () => {
@@ -45,6 +52,7 @@ describe("cli-args", () => {
       const result = parseArgs(["--unknown", "-x", "random"]);
 
       expect(result.showConfigPath).toBe(false);
+      expect(result.showPaths).toBe(false);
       expect(result.help).toBe(false);
     });
 

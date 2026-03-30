@@ -1,8 +1,6 @@
-import envPaths from "env-paths";
-import { existsSync, mkdirSync } from "fs";
-import { resolve } from "path";
-
-const APP_NAME = "my-cool-proxy";
+import { existsSync, mkdirSync } from "node:fs";
+import { resolve } from "node:path";
+import { appPaths } from "./app-paths.js";
 
 /**
  * Characters that are invalid in filenames on Windows.
@@ -44,18 +42,18 @@ export interface LogPathsService {
   /**
    * Get the platform-specific log directory.
    */
-  getLogDir(): string;
+  getLogDir: () => string;
 
   /**
    * Get the directory for server stderr log files.
    */
-  getServerLogDir(): string;
+  getServerLogDir: () => string;
 
   /**
    * Ensure the server log directory exists.
    * Creates the directory (and any parent directories) if it doesn't exist.
    */
-  ensureServerLogDir(): string;
+  ensureServerLogDir: () => string;
 
   /**
    * Get the log file path for a specific MCP server.
@@ -63,7 +61,7 @@ export interface LogPathsService {
    * @param serverName - The name of the server
    * @param sessionId - Optional session ID (used in HTTP mode for multi-session)
    */
-  getServerLogPath(serverName: string, sessionId?: string): string;
+  getServerLogPath: (serverName: string, sessionId?: string) => string;
 }
 
 /**
@@ -118,9 +116,8 @@ export function createLogPaths(deps: LogPathsDeps): LogPathsService {
 }
 
 // Create default instance with real dependencies for production use
-const defaultPaths = envPaths(APP_NAME, { suffix: "" });
 const defaultLogPaths = createLogPaths({
-  basePath: defaultPaths.log,
+  basePath: appPaths.log,
   fs: { existsSync, mkdirSync },
 });
 

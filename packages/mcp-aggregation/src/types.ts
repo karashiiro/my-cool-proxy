@@ -15,11 +15,11 @@ export type { ILogger } from "@my-cool-proxy/logger";
  * Cache service interface
  */
 export interface ICacheService<T> {
-  get(key: string): T | undefined;
-  set(key: string, value: T): void;
-  delete(key: string): void;
-  has(key: string): boolean;
-  clear(): void;
+  get: (key: string) => T | undefined;
+  set: (key: string, value: T) => void;
+  delete: (key: string) => void;
+  has: (key: string) => boolean;
+  clear: () => void;
 }
 
 /**
@@ -28,36 +28,36 @@ export interface ICacheService<T> {
  */
 export interface IMCPClientSession {
   /** List available tools from the MCP server */
-  listTools(): Promise<Tool[]>;
+  listTools: () => Promise<Tool[]>;
 
   /** List available resources from the MCP server */
-  listResources(): Promise<Resource[]>;
+  listResources: () => Promise<Resource[]>;
 
   /** Read a specific resource */
-  readResource(params: { uri: string }): Promise<ReadResourceResult>;
+  readResource: (params: { uri: string }) => Promise<ReadResourceResult>;
 
   /** List available prompts from the MCP server */
-  listPrompts(): Promise<Prompt[]>;
+  listPrompts: () => Promise<Prompt[]>;
 
   /** Get a specific prompt */
-  getPrompt(params: {
+  getPrompt: (params: {
     name: string;
     arguments?: Record<string, string>;
-  }): Promise<GetPromptResult>;
+  }) => Promise<GetPromptResult>;
 
   /** List available resource templates from the MCP server */
-  listResourceTemplates(): Promise<ResourceTemplateType[]>;
+  listResourceTemplates: () => Promise<ResourceTemplateType[]>;
 
   /** Request completion suggestions for a prompt argument or resource template variable */
-  complete(params: CompleteRequest["params"]): Promise<CompleteResult>;
+  complete: (params: CompleteRequest["params"]) => Promise<CompleteResult>;
 
   /** Get server version info */
-  getServerVersion():
+  getServerVersion: () =>
     | { name?: string; version?: string; description?: string }
     | undefined;
 
   /** Get server instructions */
-  getInstructions(): string | undefined;
+  getInstructions: () => string | undefined;
 }
 
 /**
@@ -65,10 +65,10 @@ export interface IMCPClientSession {
  */
 export interface IMCPClientManager {
   /** Get all clients for a session */
-  getClientsBySession(sessionId: string): Map<string, IMCPClientSession>;
+  getClientsBySession: (sessionId: string) => Map<string, IMCPClientSession>;
 
   /** Get all failed servers for a session */
-  getFailedServers(sessionId: string): Map<string, string>;
+  getFailedServers: (sessionId: string) => Map<string, string>;
 }
 
 /**
@@ -76,21 +76,21 @@ export interface IMCPClientManager {
  * These are functions injected into the _gateway global table.
  */
 export interface IGatewayBuiltins {
-  listResources(): Promise<unknown>;
-  listResourceTemplates(): Promise<unknown>;
-  readResource(uri: string): Promise<unknown>;
-  summaryStats(): Promise<unknown>;
-  invokeSkillScript?(
+  listResources: () => Promise<unknown>;
+  listResourceTemplates: () => Promise<unknown>;
+  readResource: (uri: string) => Promise<unknown>;
+  summaryStats: () => Promise<unknown>;
+  invokeSkillScript?: (
     skillName: string,
     script: string,
     args?: string[],
-  ): Promise<unknown>;
-  writeSkill?(
+  ) => Promise<unknown>;
+  writeSkill?: (
     skillName: string,
     content?: string,
     files?: Array<{ path: string; content: string }>,
-  ): Promise<unknown>;
-  registerResourceUri?(uri: string, serverName: string): void;
+  ) => Promise<unknown>;
+  registerResourceUri?: (uri: string, serverName: string) => void;
 }
 
 /**
@@ -98,11 +98,11 @@ export interface IGatewayBuiltins {
  */
 export interface ILuaRuntime {
   /** Execute a Lua script with injected MCP servers and gateway builtins */
-  executeScript(
+  executeScript: (
     script: string,
     mcpServers: Map<string, IMCPClientSession>,
     gatewayBuiltins: IGatewayBuiltins,
-  ): Promise<unknown>;
+  ) => Promise<unknown>;
 }
 
 /**
@@ -144,7 +144,7 @@ export interface IResourceProvider {
    * List all resources from this provider.
    * Called during resource aggregation alongside MCP server resources.
    */
-  listResources(): Promise<Resource[]>;
+  listResources: () => Promise<Resource[]>;
 
   /**
    * Read a resource by URI.
@@ -154,7 +154,7 @@ export interface IResourceProvider {
    * @returns The resource content, or null if not found
    * @throws Error if the resource exists but cannot be read
    */
-  readResource(uri: string): Promise<ReadResourceResult | null>;
+  readResource: (uri: string) => Promise<ReadResourceResult | null>;
 
   /**
    * Check if this provider handles the given URI scheme.
@@ -163,5 +163,5 @@ export interface IResourceProvider {
    * @param uri - The resource URI to check
    * @returns true if this provider should handle the URI
    */
-  handlesUri(uri: string): boolean;
+  handlesUri: (uri: string) => boolean;
 }

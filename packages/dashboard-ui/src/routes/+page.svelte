@@ -178,6 +178,7 @@
 			{loadError}
 			<button
 				class="ml-1 rounded p-0.5 opacity-60 transition-opacity hover:opacity-100"
+				aria-label="Dismiss error"
 				onclick={() => (loadError = null)}
 			>
 				<svg class="size-3" viewBox="0 0 16 16" fill="currentColor">
@@ -260,55 +261,4 @@
 		);
 	}
 
-	/* Vertical resizer */
-	.resizer-v {
-		background: oklch(0.2 0.012 260);
-	}
-
-	.resizer-v::after {
-		content: "";
-		position: absolute;
-		top: 50%;
-		left: 50%;
-		transform: translate(-50%, -50%);
-		width: 2px;
-		height: 24px;
-		border-radius: 1px;
-		background: oklch(0.35 0.015 260);
-		transition: background 150ms;
-	}
-
-	.resizer-v:hover {
-		background: oklch(0.25 0.02 260);
-	}
-
-	.resizer-v:hover::after {
-		background: oklch(0.78 0.145 70);
-	}
-
-	/* Horizontal resizer */
-	.resizer-h {
-		background: oklch(0.2 0.012 260);
-	}
-
-	.resizer-h::after {
-		content: "";
-		position: absolute;
-		top: 50%;
-		left: 50%;
-		transform: translate(-50%, -50%);
-		height: 2px;
-		width: 24px;
-		border-radius: 1px;
-		background: oklch(0.35 0.015 260);
-		transition: background 150ms;
-	}
-
-	.resizer-h:hover {
-		background: oklch(0.25 0.02 260);
-	}
-
-	.resizer-h:hover::after {
-		background: oklch(0.78 0.145 70);
-	}
 </style>

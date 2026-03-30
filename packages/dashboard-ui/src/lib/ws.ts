@@ -25,13 +25,13 @@ export interface ExecutionCompletedEvent {
 export interface DashboardWsClient {
   readonly connected: boolean;
   readonly pendingExecutions: number;
-  onExecutionNew(cb: (event: ExecutionNewEvent) => void): () => void;
-  onExecutionCompleted(
+  onExecutionNew: (cb: (event: ExecutionNewEvent) => void) => () => void;
+  onExecutionCompleted: (
     cb: (event: ExecutionCompletedEvent) => void,
-  ): () => void;
-  onSessionChanged(cb: () => void): () => void;
-  clearPending(): void;
-  close(): void;
+  ) => () => void;
+  onSessionChanged: (cb: () => void) => () => void;
+  clearPending: () => void;
+  close: () => void;
 }
 
 const MIN_DELAY_MS = 1_000;
@@ -41,6 +41,7 @@ const MAX_DELAY_MS = 30_000;
  * Create a dashboard WebSocket client that connects to `/ws` and auto-reconnects
  * with exponential backoff. Returns a client object with reactive getters.
  */
+// eslint-disable-next-line max-lines-per-function
 export function createDashboardWs(): DashboardWsClient {
   // Internal mutable state
   let _connected = false;

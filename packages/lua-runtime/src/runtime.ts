@@ -1,4 +1,4 @@
-import { LuaFactory, LuaEngine } from "wasmoon";
+import { LuaFactory, type LuaEngine } from "wasmoon";
 import type {
   ILuaRuntime,
   ILogger,
@@ -32,7 +32,7 @@ export class WasmoonRuntime implements ILuaRuntime {
 
   async executeScript(
     script: string,
-    mcpServers: Map<string, IMCPClientSession>,
+    mcpServers: ReadonlyMap<string, IMCPClientSession>,
     gatewayBuiltins: IGatewayBuiltins,
     onProgress?: (progress: number, total?: number, message?: string) => void,
     toolCallLog?: IToolCallLog,
@@ -156,7 +156,7 @@ Common issues:
 
   private async injectMCPServers(
     engine: LuaEngine,
-    mcpServers: Map<string, IMCPClientSession>,
+    mcpServers: ReadonlyMap<string, IMCPClientSession>,
     gatewayBuiltins: IGatewayBuiltins,
     aggregator?: ProgressAggregator,
     toolCallLog?: IToolCallLog,
@@ -445,6 +445,17 @@ Common issues:
           args?.new_string,
           args?.replace_all,
         );
+      };
+    }
+
+    // Conditional builtin: get_result (only when result offloading is enabled)
+    if (builtins.getResult) {
+      const getResult = builtins.getResult;
+      gatewayTable["get_result"] = async (args: { id: string }) => {
+        this.logger.debug(
+          `Calling _gateway.get_result({ id = "${args?.id}" })`,
+        );
+        return getResult(args?.id);
       };
     }
 

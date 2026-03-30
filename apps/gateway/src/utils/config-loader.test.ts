@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { writeFileSync, unlinkSync, existsSync, rmSync } from "fs";
-import { resolve } from "path";
-import { tmpdir } from "os";
+import { writeFileSync, unlinkSync, existsSync, rmSync } from "node:fs";
+import { resolve } from "node:path";
+import { tmpdir } from "node:os";
 import { loadConfig, mergeEnvConfig, DEFAULT_CONFIG } from "./config-loader.js";
 import type { ServerConfig } from "../types/interfaces.js";
 

@@ -1,6 +1,15 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { ToolRegistry } from "./tool-registry.js";
 import type { ITool } from "./base-tool.js";
+import type { ILogger } from "../types/interfaces.js";
+
+const mockLogger: ILogger = {
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+  debug: vi.fn(),
+  child: vi.fn(),
+} as unknown as ILogger;
 
 // Mock tool factory for testing
 const createMockTool = (name: string): ITool => ({
@@ -14,7 +23,8 @@ describe("ToolRegistry", () => {
   let registry: ToolRegistry;
 
   beforeEach(() => {
-    registry = new ToolRegistry();
+    vi.clearAllMocks();
+    registry = new ToolRegistry(mockLogger);
   });
 
   describe("register", () => {

@@ -156,14 +156,14 @@ flowchart TB
 
 ### Component Responsibilities
 
-| Component             | Purpose                                           |
-| --------------------- | ------------------------------------------------- |
-| `SamplingShim`        | Thin orchestrator; lifecycle management           |
-| `mapMcpToAcpPrompt()` | Convert MCP sampling params to ACP content blocks |
-| `mapAcpToMcpResult()` | Convert ACP response to MCP CreateMessageResult   |
-| `CapabilityStore`     | Track working directories per session (fallback)  |
-| `ACPClient`           | Long-lived connection to agent process            |
-| `ACPClientSession`    | Short-lived session per sampling request          |
+| Component             | Purpose                                                                                                            |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `SamplingShim`        | Thin orchestrator; lifecycle management                                                                            |
+| `mapMcpToAcpPrompt()` | Convert MCP sampling params to ACP content blocks                                                                  |
+| `mapAcpToMcpResult()` | Convert ACP response to MCP CreateMessageResult                                                                    |
+| `CapabilityStore`     | Track downstream client capabilities and working directories per session; provides session tempdir as fallback cwd |
+| `ACPClient`           | Long-lived connection to agent process                                                                             |
+| `ACPClientSession`    | Short-lived session per sampling request                                                                           |
 
 ### Request Flow
 
@@ -224,6 +224,11 @@ stateDiagram-v2
 - **One ACPClient per gateway session** - Long-lived agent process
 - **One ACPClientSession per sampling request** - Short-lived, isolated
 - **Working directory** - Resolved lazily per request via `roots/list` on the downstream client. If the client advertises roots, the first valid local root is used as cwd (giving the agent access to the real project directory). Falls back to a session tempdir if roots/list fails, times out (5s), or returns no valid local paths.
+
+> **Note:** `roots/list` is consumed at two distinct points in the session lifecycle:
+>
+> 1. **Session initialization** — sets the `cwd` for stdio upstream servers (via `startup.ts`)
+> 2. **Sampling request time** — ACP working directory resolution (via `SamplingShim`)
 
 ## MCP ↔ ACP Mapping
 
@@ -301,8 +306,8 @@ Instead of executing tools when the agent calls them, the gateway **captures** t
 flowchart TB
     subgraph Gateway["MCP Gateway"]
         Shim["SamplingShim"]
-        Handler["ACPClientHandler<br/>(1st capture point)"]
-        Callback["ToolCallbackServer<br/>(2nd capture point)"]
+        Handler["ACPClientHandler<br/>(permission approver)"]
+        Callback["ToolCallbackServer<br/>(capture point)"]
     end
 
     subgraph Sidecar["MCP Sampling Sidecar"]
@@ -320,7 +325,7 @@ flowchart TB
     Server -->|"1. createMessage with tools"| Shim
     Shim -->|"2. spawn sidecar"| SidecarProc
     AgentProc -->|"3. permission request"| Handler
-    Handler -->|"4. capture & deny"| AgentProc
+    Handler -->|"4. approve"| AgentProc
     Shim -->|"5. return tool_use"| Server
     Server -->|"6. execute tool"| Server
     Server -->|"7. follow-up with tool_result"| Shim
@@ -348,22 +353,22 @@ sequenceDiagram
     Gateway-->>Server: {stopReason: "endTurn", content: text}
 ```
 
-### Defense in Depth: Two Capture Points
+### Tool Capture Flow
 
-Tool calls are captured at two points to ensure spec compliance:
+Tool calls are captured to ensure spec compliance:
 
-1. **Permission Handler (primary)**: Most ACP agents request permission before calling tools. The handler captures the call details and denies execution.
+1. **Permission Handler**: Most ACP agents request permission before calling tools. The handler **approves** the permission request so the agent proceeds to call the sidecar.
 
-2. **Callback Server (fallback)**: If an agent bypasses the permission system and calls the sidecar directly, the callback server captures the call instead of executing it.
+2. **Callback Server (sole capture point)**: The sidecar POSTs the tool call — including full arguments — to the callback server. The callback server captures the call and returns an error to halt execution. The captured call is then returned to the upstream server as a `tool_use` response.
 
 ### Component Details
 
-| Component              | Purpose                                     | Lifecycle            |
-| ---------------------- | ------------------------------------------- | -------------------- |
-| `ACPClientHandler`     | Captures tool calls via permission requests | Per-gateway-session  |
-| `ToolCallbackServer`   | Fallback capture for permissive agents      | Per-sampling-request |
-| `mcp-sampling-sidecar` | Exposes tools to agent via MCP              | Per-sampling-request |
-| Tool tag               | UUID suffix for identifying sidecar tools   | Per-sampling-request |
+| Component              | Purpose                                   | Lifecycle            |
+| ---------------------- | ----------------------------------------- | -------------------- |
+| `ACPClientHandler`     | Approves sidecar tool permission requests | Per-gateway-session  |
+| `ToolCallbackServer`   | Captures tool calls with full arguments   | Per-sampling-request |
+| `mcp-sampling-sidecar` | Exposes tools to agent via MCP            | Per-sampling-request |
+| Tool tag               | UUID suffix for identifying sidecar tools | Per-sampling-request |
 
 ### Tool Name Tagging
 

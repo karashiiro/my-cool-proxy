@@ -9,6 +9,10 @@ export interface SkillMetadata {
   description: string;
   /** Full path to the skill directory */
   path: string;
+  /** Size of the SKILL.md content in bytes */
+  size?: number;
+  /** ISO 8601 timestamp of when the SKILL.md was last modified */
+  lastModified?: string;
 }
 
 /**
@@ -20,14 +24,14 @@ export interface ISkillDiscoveryService {
    * Parses YAML frontmatter from each SKILL.md to extract metadata.
    * @returns Array of skill metadata, or empty array if no skills found
    */
-  discoverSkills(): Promise<SkillMetadata[]>;
+  discoverSkills: () => Promise<SkillMetadata[]>;
 
   /**
    * Get the full content of a skill's SKILL.md by name.
    * @param skillName - The name of the skill to load
    * @returns Full SKILL.md content, or null if skill not found
    */
-  getSkillContent(skillName: string): Promise<string | null>;
+  getSkillContent: (skillName: string) => Promise<string | null>;
 
   /**
    * Get the content of a resource file within a skill directory.
@@ -37,15 +41,15 @@ export interface ISkillDiscoveryService {
    * @returns File content, or null if skill or file not found
    * @throws Error if path traversal is detected
    */
-  getSkillResource(
+  getSkillResource: (
     skillName: string,
     relativePath: string,
-  ): Promise<string | null>;
+  ) => Promise<string | null>;
 
   /**
    * Ensure the skills directory exists.
    * Creates the directory if it doesn't exist.
    * Should be called once at startup for convenience.
    */
-  ensureSkillsDirectory(): void;
+  ensureSkillsDirectory: () => void;
 }

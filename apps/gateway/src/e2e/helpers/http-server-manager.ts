@@ -24,6 +24,7 @@ import {
   cleanupSessionTempDir,
   initializeSamplingShim,
 } from "../../utils/index.js";
+import { initializeSqlite } from "../../startup.js";
 
 export class HttpServerManager {
   private serverHandle: ServerHandle | null = null;
@@ -48,6 +49,11 @@ export class HttpServerManager {
     const container = createContainer(config);
 
     const logger = container.get<ILogger>(TYPES.Logger);
+
+    // Initialize SQLite persistence (same as production startup)
+    initializeSqlite(container, config, logger, {
+      rebindCapabilityStore: true,
+    });
 
     // Store client manager for cleanup
     this.clientManager = container.get<IMCPClientManager>(
@@ -160,7 +166,13 @@ export class HttpServerManager {
                 cleanupSessionTempDir(workingDir);
               }
 
-              capabilityStore.deleteCapabilities(sessionId);
+              // NOTE: Session data (capabilities, init requests, events) is intentionally
+              // NOT deleted from SQLite here. The SDK preserves event stores across transport
+              // close and shutdown to enable session restoration after restart. Deleting the
+              // sessions row would cascade-delete session_init_requests and mcp_events,
+              // breaking restoration. Stale sessions are cleaned by purgeOldData (retention
+              // policy). Explicit DELETE requests are handled by the SDK via eventStore.clear().
+
               if (samplingShim) {
                 await samplingShim.close(sessionId);
               }
@@ -282,26 +294,25 @@ async function initializeSingleClient(
   capabilities?: ClientCapabilities,
 ): Promise<void> {
   if (clientConfig.type === "http") {
-    await clientManager.addHttpClient(
+    await clientManager.addHttpClient({
       name,
-      clientConfig.url,
+      endpoint: clientConfig.url,
       sessionId,
-      clientConfig.headers,
-      clientConfig.allowedTools,
-      capabilities,
-      clientConfig.dangerouslyEnableSampling,
-    );
+      headers: clientConfig.headers,
+      allowedTools: clientConfig.allowedTools,
+      clientCapabilities: capabilities,
+      dangerouslyEnableSampling: clientConfig.dangerouslyEnableSampling,
+    });
   } else if (clientConfig.type === "stdio") {
-    await clientManager.addStdioClient(
+    await clientManager.addStdioClient({
       name,
-      clientConfig.command,
+      command: clientConfig.command,
       sessionId,
-      clientConfig.args,
-      clientConfig.env,
-      clientConfig.allowedTools,
-      capabilities,
-      undefined, // stderrLogPath - not used in e2e tests
-      clientConfig.dangerouslyEnableSampling,
-    );
+      args: clientConfig.args,
+      env: clientConfig.env,
+      allowedTools: clientConfig.allowedTools,
+      clientCapabilities: capabilities,
+      dangerouslyEnableSampling: clientConfig.dangerouslyEnableSampling,
+    });
   }
 }

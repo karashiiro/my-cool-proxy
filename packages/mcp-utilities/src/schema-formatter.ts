@@ -5,6 +5,7 @@
  * @param schema - The JSON Schema object to format
  * @returns Array of formatted lines
  */
+// eslint-disable-next-line sonarjs/cognitive-complexity
 export function formatSchema(schema: unknown, indent: number = 1): string[] {
   const lines: string[] = [];
 
@@ -82,11 +83,14 @@ export function getSchemaType(schema: unknown): string {
   };
 
   // Normalize type — JSON Schema allows type to be an array (e.g. ["null", "object"])
-  const types = Array.isArray(schemaObj.type)
-    ? schemaObj.type
-    : schemaObj.type
-      ? [schemaObj.type]
-      : [];
+  let types: string[];
+  if (Array.isArray(schemaObj.type)) {
+    types = schemaObj.type;
+  } else if (schemaObj.type) {
+    types = [schemaObj.type];
+  } else {
+    types = [];
+  }
   const nonNullTypes = types.filter((t) => t !== "null");
   const isNullable = types.includes("null");
   const primaryType = nonNullTypes[0];

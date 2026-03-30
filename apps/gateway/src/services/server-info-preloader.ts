@@ -32,20 +32,20 @@ export class ServerInfoPreloader implements IServerInfoPreloader {
     const connectionPromises = Object.entries(config.mcpClients).map(
       ([name, clientConfig]) => {
         if (clientConfig.type === "http") {
-          return this.clientManager.addHttpClient(
+          return this.clientManager.addHttpClient({
             name,
-            clientConfig.url,
-            PROBE_SESSION_ID,
-            clientConfig.headers,
-          );
+            endpoint: clientConfig.url,
+            sessionId: PROBE_SESSION_ID,
+            headers: clientConfig.headers,
+          });
         } else {
-          return this.clientManager.addStdioClient(
+          return this.clientManager.addStdioClient({
             name,
-            clientConfig.command,
-            PROBE_SESSION_ID,
-            clientConfig.args,
-            clientConfig.env,
-          );
+            command: clientConfig.command,
+            sessionId: PROBE_SESSION_ID,
+            args: clientConfig.args,
+            env: clientConfig.env,
+          });
         }
       },
     );
@@ -136,51 +136,7 @@ export class ServerInfoPreloader implements IServerInfoPreloader {
     ];
 
     for (const server of servers) {
-      lines.push("");
-      lines.push(`## ${server.name}`);
-
-      if (server.serverName && server.serverName !== server.name) {
-        lines.push(`Server name: ${server.serverName}`);
-      }
-
-      if (server.description) {
-        lines.push(`Description: ${server.description}`);
-      }
-
-      if (server.toolNames && server.toolNames.length > 0) {
-        const toolsLine = this.formatToolNames(
-          server.toolNames,
-          MAX_TOOLS_IN_INSTRUCTIONS,
-        );
-        lines.push(`Tools: ${toolsLine}`);
-      }
-
-      if (server.resourceNames && server.resourceNames.length > 0) {
-        const resourcesLine = this.formatToolNames(
-          server.resourceNames,
-          MAX_RESOURCES_IN_INSTRUCTIONS,
-        );
-        lines.push(`Resources: ${resourcesLine}`);
-      }
-
-      if (
-        server.resourceTemplateNames &&
-        server.resourceTemplateNames.length > 0
-      ) {
-        const templatesLine = this.formatToolNames(
-          server.resourceTemplateNames,
-          MAX_RESOURCE_TEMPLATES_IN_INSTRUCTIONS,
-        );
-        lines.push(`Resource templates: ${templatesLine}`);
-      }
-
-      if (server.instructions) {
-        const excerpt = this.truncateInstructions(
-          server.instructions,
-          MAX_INSTRUCTION_EXCERPT_LENGTH,
-        );
-        lines.push(`Instructions: ${excerpt}`);
-      }
+      this.appendServerInstructions(lines, server);
     }
 
     lines.push("");
@@ -192,6 +148,57 @@ export class ServerInfoPreloader implements IServerInfoPreloader {
     );
 
     return lines.join("\n");
+  }
+
+  private appendServerInstructions(
+    lines: string[],
+    server: PreloadedServerInfo,
+  ): void {
+    lines.push("");
+    lines.push(`## ${server.name}`);
+
+    if (server.serverName && server.serverName !== server.name) {
+      lines.push(`Server name: ${server.serverName}`);
+    }
+
+    if (server.description) {
+      lines.push(`Description: ${server.description}`);
+    }
+
+    if (server.toolNames && server.toolNames.length > 0) {
+      const toolsLine = this.formatToolNames(
+        server.toolNames,
+        MAX_TOOLS_IN_INSTRUCTIONS,
+      );
+      lines.push(`Tools: ${toolsLine}`);
+    }
+
+    if (server.resourceNames && server.resourceNames.length > 0) {
+      const resourcesLine = this.formatToolNames(
+        server.resourceNames,
+        MAX_RESOURCES_IN_INSTRUCTIONS,
+      );
+      lines.push(`Resources: ${resourcesLine}`);
+    }
+
+    if (
+      server.resourceTemplateNames &&
+      server.resourceTemplateNames.length > 0
+    ) {
+      const templatesLine = this.formatToolNames(
+        server.resourceTemplateNames,
+        MAX_RESOURCE_TEMPLATES_IN_INSTRUCTIONS,
+      );
+      lines.push(`Resource templates: ${templatesLine}`);
+    }
+
+    if (server.instructions) {
+      const excerpt = this.truncateInstructions(
+        server.instructions,
+        MAX_INSTRUCTION_EXCERPT_LENGTH,
+      );
+      lines.push(`Instructions: ${excerpt}`);
+    }
   }
 
   /**

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdirSync, writeFileSync, rmSync, existsSync } from "fs";
-import { resolve } from "path";
-import { tmpdir } from "os";
+import { mkdirSync, writeFileSync, rmSync, existsSync } from "node:fs";
+import { resolve } from "node:path";
+import { tmpdir } from "node:os";
 import {
   getConfigPaths,
   getActiveConfigPath,
@@ -41,9 +41,11 @@ describe("config-paths", () => {
       const paths = getConfigPaths();
 
       expect(paths).toHaveLength(1);
-      expect(paths[0]!.source).toBe("platform");
-      expect(paths[0]!.path).toContain("my-cool-proxy");
-      expect(paths[0]!.path).toContain("config.json");
+      const path0 = paths[0];
+      if (!path0) throw new Error("expected paths[0] to be defined");
+      expect(path0.source).toBe("platform");
+      expect(path0.path).toContain("my-cool-proxy");
+      expect(path0.path).toContain("config.json");
     });
 
     it("should return CONFIG_PATH first when set", () => {
@@ -53,9 +55,13 @@ describe("config-paths", () => {
       const paths = getConfigPaths();
 
       expect(paths).toHaveLength(2);
-      expect(paths[0]!.source).toBe("env");
-      expect(paths[0]!.path).toBe(customPath);
-      expect(paths[1]!.source).toBe("platform");
+      const path0 = paths[0];
+      const path1 = paths[1];
+      if (!path0) throw new Error("expected paths[0] to be defined");
+      if (!path1) throw new Error("expected paths[1] to be defined");
+      expect(path0.source).toBe("env");
+      expect(path0.path).toBe(customPath);
+      expect(path1.source).toBe("platform");
     });
 
     it("should mark existing paths correctly", () => {
@@ -65,8 +71,10 @@ describe("config-paths", () => {
 
       const paths = getConfigPaths();
 
-      expect(paths[0]!.exists).toBe(true);
-      expect(paths[0]!.path).toBe(customPath);
+      const path0 = paths[0];
+      if (!path0) throw new Error("expected paths[0] to be defined");
+      expect(path0.exists).toBe(true);
+      expect(path0.path).toBe(customPath);
     });
 
     it("should mark non-existing paths correctly", () => {
@@ -74,7 +82,9 @@ describe("config-paths", () => {
 
       const paths = getConfigPaths();
 
-      expect(paths[0]!.exists).toBe(false);
+      const path0 = paths[0];
+      if (!path0) throw new Error("expected paths[0] to be defined");
+      expect(path0.exists).toBe(false);
     });
   });
 
@@ -108,9 +118,10 @@ describe("config-paths", () => {
       const result = getActiveConfigPath();
 
       expect(result).not.toBeNull();
-      expect(result!.path).toBe(customPath);
-      expect(result!.source).toBe("env");
-      expect(result!.exists).toBe(true);
+      if (!result) throw new Error("expected result to be defined");
+      expect(result.path).toBe(customPath);
+      expect(result.source).toBe("env");
+      expect(result.exists).toBe(true);
     });
 
     it("should skip CONFIG_PATH and return platform path when CONFIG_PATH does not exist but platform does", () => {
@@ -135,7 +146,8 @@ describe("config-paths", () => {
       const result = getActiveConfigPath();
 
       expect(result).not.toBeNull();
-      expect(result!.source).toBe("env");
+      if (!result) throw new Error("expected result to be defined");
+      expect(result.source).toBe("env");
     });
   });
 

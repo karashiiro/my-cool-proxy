@@ -42,7 +42,8 @@ describe("ProgressAggregator", () => {
     aggregator.update(call2, { progress: 50, total: 200 });
 
     // Last update should be the aggregate of both calls
-    const last = updates[updates.length - 1]!;
+    const last = updates[updates.length - 1];
+    if (!last) throw new Error("Expected at least one update");
     expect(last.progress).toBe(75); // 25 + 50
     expect(last.total).toBe(300); // 100 + 200
   });
@@ -64,7 +65,8 @@ describe("ProgressAggregator", () => {
     aggregator.update(call1, { progress: 50, total: 100 });
     aggregator.update(call2, { progress: 10 }); // no total
 
-    const last = updates[updates.length - 1]!;
+    const last = updates[updates.length - 1];
+    if (!last) throw new Error("Expected at least one update");
     expect(last.progress).toBe(60); // 50 + 10
     expect(last.total).toBeUndefined(); // one call has no total
   });
@@ -87,7 +89,8 @@ describe("ProgressAggregator", () => {
     aggregator.update(call2, { progress: 20, total: 100, message: "from B" });
 
     // Latest message should be from the most recent update
-    const last = updates[updates.length - 1]!;
+    const last = updates[updates.length - 1];
+    if (!last) throw new Error("Expected at least one update");
     expect(last.message).toBe("from B");
   });
 
@@ -133,7 +136,8 @@ describe("ProgressAggregator", () => {
     aggregator.update(call1, { progress: 50, total: 100 });
 
     // Only call1 should be included — call2 hasn't reported yet
-    const last = updates[updates.length - 1]!;
+    const last = updates[updates.length - 1];
+    if (!last) throw new Error("Expected at least one update");
     expect(last.progress).toBe(50);
     expect(last.total).toBe(100); // NOT undefined — call2 doesn't taint it
   });

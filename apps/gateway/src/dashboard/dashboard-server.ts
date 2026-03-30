@@ -42,6 +42,7 @@ function clamp(value: number, min: number, max: number): number {
  * @param db - SQLite database for session timestamps
  * @param staticDir - Absolute path to the directory containing static dashboard files
  */
+// eslint-disable-next-line max-lines-per-function
 export function createDashboardApp(
   executionLog: IExecutionLog,
   clientManager: IMCPClientManager,
@@ -182,15 +183,29 @@ export function createDashboardApp(
  *
  * @returns A handle with close() and broadcast() methods for lifecycle management
  */
+export interface StartDashboardServerOptions {
+  executionLog: IExecutionLog;
+  clientManager: IMCPClientManager;
+  capabilityStore: ICapabilityStore;
+  db: SQLiteDatabase;
+  config: DashboardConfig;
+  staticDir: string;
+  logger: ILogger;
+}
+
+// eslint-disable-next-line max-lines-per-function
 export async function startDashboardServer(
-  executionLog: IExecutionLog,
-  clientManager: IMCPClientManager,
-  capabilityStore: ICapabilityStore,
-  db: SQLiteDatabase,
-  config: DashboardConfig,
-  staticDir: string,
-  logger: ILogger,
+  options: StartDashboardServerOptions,
 ): Promise<DashboardHandle> {
+  const {
+    executionLog,
+    clientManager,
+    capabilityStore,
+    db,
+    config,
+    staticDir,
+    logger,
+  } = options;
   const port = config.port ?? 3100;
   const host = config.host ?? "localhost";
   const app = createDashboardApp(
@@ -279,6 +294,7 @@ export async function startDashboardServer(
           if ("closeAllConnections" in server) {
             server.closeAllConnections();
           }
+          // eslint-disable-next-line sonarjs/no-nested-functions
           server.close((err) => {
             clearTimeout(timeout);
             if (err) reject(err);

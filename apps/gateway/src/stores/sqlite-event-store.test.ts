@@ -8,8 +8,18 @@ describe("SQLiteEventStore", () => {
   let store: SQLiteEventStore;
   const sessionId = "test-session";
 
+  /** Insert a parent session row so FK constraints are satisfied. */
+  function ensureSession(id: string): void {
+    db.getDatabase()
+      .prepare(
+        `INSERT OR IGNORE INTO sessions (session_id, created_at, last_activity) VALUES (?, ?, ?)`,
+      )
+      .run(id, Date.now(), Date.now());
+  }
+
   beforeEach(() => {
     db = new SQLiteDatabase(":memory:");
+    ensureSession(sessionId);
     store = new SQLiteEventStore(db, sessionId);
   });
 
@@ -89,6 +99,7 @@ describe("SQLiteEventStore", () => {
       const eventId = await store.storeEvent("my-stream", message);
 
       // Create store for different session
+      ensureSession("other-session");
       const otherStore = new SQLiteEventStore(db, "other-session");
       const streamId = await otherStore.getStreamIdForEventId(eventId);
 
@@ -115,7 +126,9 @@ describe("SQLiteEventStore", () => {
         eventId: string;
         message: JSONRPCMessage;
       }> = [];
-      const streamId = await store.replayEventsAfter(eventIds[0]!, {
+      const firstEventId = eventIds[0];
+      if (!firstEventId) throw new Error("expected eventIds[0] to be defined");
+      const streamId = await store.replayEventsAfter(firstEventId, {
         send: async (eventId, message) => {
           replayedEvents.push({ eventId, message });
         },
@@ -123,8 +136,14 @@ describe("SQLiteEventStore", () => {
 
       expect(streamId).toBe("stream-1");
       expect(replayedEvents).toHaveLength(2);
-      expect(replayedEvents[0]!.message).toEqual(messages[1]);
-      expect(replayedEvents[1]!.message).toEqual(messages[2]);
+      const replayed0 = replayedEvents[0];
+      const replayed1 = replayedEvents[1];
+      if (!replayed0)
+        throw new Error("expected replayedEvents[0] to be defined");
+      if (!replayed1)
+        throw new Error("expected replayedEvents[1] to be defined");
+      expect(replayed0.message).toEqual(messages[1]);
+      expect(replayed1.message).toEqual(messages[2]);
     });
 
     it("should return empty string for non-existent event", async () => {
@@ -164,7 +183,10 @@ describe("SQLiteEventStore", () => {
 
       // Should only get the stream-a event, not stream-b
       expect(replayedEvents).toHaveLength(1);
-      const replayedMsg = replayedEvents[0]!.message;
+      const replayedEvent0 = replayedEvents[0];
+      if (!replayedEvent0)
+        throw new Error("expected replayedEvents[0] to be defined");
+      const replayedMsg = replayedEvent0.message;
       expect("method" in replayedMsg && replayedMsg.method).toBe(
         "stream1-again",
       );
@@ -183,6 +205,7 @@ describe("SQLiteEventStore", () => {
       });
 
       // Create store for different session and try to replay
+      ensureSession("other-session");
       const otherStore = new SQLiteEventStore(db, "other-session");
       const replayedEvents: JSONRPCMessage[] = [];
       const streamId = await otherStore.replayEventsAfter(eventId, {
@@ -222,6 +245,7 @@ describe("SQLiteEventStore", () => {
       await store.storeEvent("stream-1", message);
 
       // Store event in other session
+      ensureSession("other-session");
       const otherStore = new SQLiteEventStore(db, "other-session");
       await otherStore.storeEvent("stream-1", message);
 

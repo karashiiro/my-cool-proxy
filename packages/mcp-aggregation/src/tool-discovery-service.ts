@@ -44,7 +44,7 @@ export class ToolDiscoveryService {
     }
 
     const pairs = Object.entries(obj).map(([key, value]) => {
-      const luaKey = /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(key) ? key : `["${key}"]`;
+      const luaKey = /^[a-zA-Z_]\w*$/.test(key) ? key : `["${key}"]`;
       const luaValue =
         typeof value === "object" && value !== null
           ? this.jsonToLuaTable(value as Record<string, unknown>)

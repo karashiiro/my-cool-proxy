@@ -1,5 +1,6 @@
 export interface CLIArgs {
   showConfigPath: boolean;
+  showPaths: boolean;
   help: boolean;
 }
 
@@ -12,6 +13,7 @@ export interface CLIArgs {
 export function parseArgs(argv: string[]): CLIArgs {
   return {
     showConfigPath: argv.includes("--config-path") || argv.includes("-c"),
+    showPaths: argv.includes("--paths"),
     help: argv.includes("--help") || argv.includes("-h"),
   };
 }

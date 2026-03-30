@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { mkdirSync, writeFileSync, rmSync, existsSync } from "fs";
-import { resolve } from "path";
-import { tmpdir } from "os";
+import { mkdirSync, writeFileSync, rmSync, existsSync } from "node:fs";
+import { resolve } from "node:path";
+import { tmpdir } from "node:os";
 import { SkillDiscoveryService } from "./skill-discovery-service.js";
 import type { ILogger, ServerConfig } from "../types/interfaces.js";
 
@@ -108,11 +108,28 @@ Some content here...
       const skills = await service.discoverSkills();
 
       expect(skills).toHaveLength(1);
-      expect(skills[0]).toEqual({
+      expect(skills[0]).toMatchObject({
         name: "My Awesome Skill",
         description: "Does really cool things",
         path: skillDir,
       });
+      const skill0 = skills[0];
+      if (!skill0) throw new Error("expected skills[0] to be defined");
+      expect(skill0.size).toBeGreaterThan(0);
+      expect(skill0.lastModified).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    });
+
+    it("should include built-in skill with size but no lastModified when mutable", async () => {
+      mockConfig.skills = { enabled: true, mutable: true };
+      service = new SkillDiscoveryService(mockLogger, mockConfig);
+
+      const skills = await service.discoverSkills();
+
+      const builtin = skills.find((s) => s.name === "writing-gateway-skills");
+      expect(builtin).toBeDefined();
+      if (!builtin) throw new Error("expected builtin to be defined");
+      expect(builtin.size).toBeGreaterThan(0);
+      expect(builtin.lastModified).toBeUndefined();
     });
 
     it("should skip directories without SKILL.md", async () => {
@@ -136,7 +153,9 @@ Content`,
       const skills = await service.discoverSkills();
 
       expect(skills).toHaveLength(1);
-      expect(skills[0]!.name).toBe("Valid Skill");
+      const skill0 = skills[0];
+      if (!skill0) throw new Error("expected skills[0] to be defined");
+      expect(skill0.name).toBe("Valid Skill");
       expect(mockLogger.debug).toHaveBeenCalledWith(
         expect.stringContaining("Skipping directory without SKILL.md"),
       );
@@ -184,8 +203,10 @@ Content`,
       const skills = await service.discoverSkills();
 
       expect(skills).toHaveLength(1);
-      expect(skills[0]!.name).toBe("fallback-name-skill");
-      expect(skills[0]!.description).toBe("A skill without a name field");
+      const skill0 = skills[0];
+      if (!skill0) throw new Error("expected skills[0] to be defined");
+      expect(skill0.name).toBe("fallback-name-skill");
+      expect(skill0.description).toBe("A skill without a name field");
     });
 
     it("should handle quoted values in frontmatter", async () => {
@@ -203,8 +224,10 @@ Content`,
       const skills = await service.discoverSkills();
 
       expect(skills).toHaveLength(1);
-      expect(skills[0]!.name).toBe("Quoted Skill Name");
-      expect(skills[0]!.description).toBe("Single quoted description");
+      const skill0 = skills[0];
+      if (!skill0) throw new Error("expected skills[0] to be defined");
+      expect(skill0.name).toBe("Quoted Skill Name");
+      expect(skill0.description).toBe("Single quoted description");
     });
 
     it("should handle quotes inside values with opposite quote type", async () => {
@@ -222,8 +245,10 @@ Content`,
       const skills = await service.discoverSkills();
 
       expect(skills).toHaveLength(1);
-      expect(skills[0]!.name).toBe("Skill with 'apostrophes' inside");
-      expect(skills[0]!.description).toBe('Description with "quotes" inside');
+      const skill0 = skills[0];
+      if (!skill0) throw new Error("expected skills[0] to be defined");
+      expect(skill0.name).toBe("Skill with 'apostrophes' inside");
+      expect(skill0.description).toBe('Description with "quotes" inside');
     });
 
     it("should handle multiline YAML descriptions", async () => {
@@ -244,9 +269,11 @@ Content`,
       const skills = await service.discoverSkills();
 
       expect(skills).toHaveLength(1);
-      expect(skills[0]!.name).toBe("Multiline Skill");
-      expect(skills[0]!.description).toContain("This is a long description");
-      expect(skills[0]!.description).toContain("spans multiple lines");
+      const skill0 = skills[0];
+      if (!skill0) throw new Error("expected skills[0] to be defined");
+      expect(skill0.name).toBe("Multiline Skill");
+      expect(skill0.description).toContain("This is a long description");
+      expect(skill0.description).toContain("spans multiple lines");
     });
 
     it("should skip skills with invalid YAML frontmatter", async () => {
@@ -288,7 +315,9 @@ Content`,
       const skills = await service.discoverSkills();
 
       expect(skills).toHaveLength(1);
-      expect(skills[0]!.name).toBe("Real Skill");
+      const skill0 = skills[0];
+      if (!skill0) throw new Error("expected skills[0] to be defined");
+      expect(skill0.name).toBe("Real Skill");
     });
 
     it("should warn but skip skills without frontmatter", async () => {
@@ -306,7 +335,7 @@ Just some markdown without YAML frontmatter.
 
       expect(skills).toHaveLength(0);
       expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.stringContaining("No frontmatter found"),
+        expect.stringContaining("Invalid or missing frontmatter"),
       );
     });
 
@@ -324,7 +353,9 @@ Content`,
       const skills = await service.discoverSkills();
 
       expect(skills).toHaveLength(1);
-      expect(skills[0]!.description).toBe("");
+      const skill0 = skills[0];
+      if (!skill0) throw new Error("expected skills[0] to be defined");
+      expect(skill0.description).toBe("");
       expect(mockLogger.warn).toHaveBeenCalledWith(
         expect.stringContaining("has no description"),
       );

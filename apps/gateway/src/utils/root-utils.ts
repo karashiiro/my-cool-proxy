@@ -1,5 +1,5 @@
-import { fileURLToPath } from "url";
-import { existsSync } from "fs";
+import { fileURLToPath } from "node:url";
+import { existsSync } from "node:fs";
 import type { Root } from "@modelcontextprotocol/sdk/types.js";
 
 /**

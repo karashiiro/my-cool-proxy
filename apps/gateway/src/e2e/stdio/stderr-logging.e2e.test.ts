@@ -86,13 +86,15 @@ describe("Stderr Logging E2E", () => {
       });
 
       expect(result.content).toHaveLength(1);
-      const content = (
+      const content0 = (
         result.content as Array<TextContent | ImageContent | EmbeddedResource>
-      )[0]!;
-      expect(content.type).toBe("text");
+      )[0];
+      if (!content0)
+        throw new Error("expected result.content[0] to be defined");
+      expect(content0.type).toBe("text");
 
-      if (content.type === "text") {
-        expect(content.text).toContain("stderr_server");
+      if (content0.type === "text") {
+        expect(content0.text).toContain("stderr_server");
       }
     });
 
@@ -108,15 +110,17 @@ describe("Stderr Logging E2E", () => {
       });
 
       expect(executeResult.content).toHaveLength(1);
-      const content = (
+      const content1 = (
         executeResult.content as Array<
           TextContent | ImageContent | EmbeddedResource
         >
-      )[0]!;
-      expect(content.type).toBe("text");
+      )[0];
+      if (!content1)
+        throw new Error("expected executeResult.content[0] to be defined");
+      expect(content1.type).toBe("text");
 
-      if (content.type === "text") {
-        expect(content.text).toContain("hello from e2e test");
+      if (content1.type === "text") {
+        expect(content1.text).toContain("hello from e2e test");
       }
     });
 
@@ -132,15 +136,17 @@ describe("Stderr Logging E2E", () => {
       });
 
       expect(executeResult.content).toHaveLength(1);
-      const content = (
+      const content2 = (
         executeResult.content as Array<
           TextContent | ImageContent | EmbeddedResource
         >
-      )[0]!;
-      expect(content.type).toBe("text");
+      )[0];
+      if (!content2)
+        throw new Error("expected executeResult.content[0] to be defined");
+      expect(content2.type).toBe("text");
 
-      if (content.type === "text") {
-        expect(content.text).toContain(
+      if (content2.type === "text") {
+        expect(content2.text).toContain(
           "Wrote to stderr: test message from lua",
         );
       }

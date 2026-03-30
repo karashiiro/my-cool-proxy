@@ -267,12 +267,23 @@ The native resource protocol handlers exist for clients that _do_ support resour
 
 ### Key Components
 
-| Component                | File                                                    | Purpose                                         |
-| ------------------------ | ------------------------------------------------------- | ----------------------------------------------- |
-| `SkillDiscoveryService`  | `apps/gateway/src/services/skill-discovery-service.ts`  | Scans skill directories, resolves skill content |
-| `SkillOperationsService` | `apps/gateway/src/services/skill-operations-service.ts` | Creates, modifies, and updates skills           |
-| `SkillResourceProvider`  | `apps/gateway/src/services/skill-resource-provider.ts`  | Provides skills as MCP resources                |
-| `GatewayBuiltinsBuilder` | `apps/gateway/src/tools/gateway-builtins-builder.ts`    | Constructs `_gateway.*` builtins for skill ops  |
+| Component                | File                                                    | Purpose                                                                          |
+| ------------------------ | ------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `SkillDiscoveryService`  | `apps/gateway/src/services/skill-discovery-service.ts`  | Scans skill directories, reads file stats (mtime, size) in parallel with content |
+| `SkillOperationsService` | `apps/gateway/src/services/skill-operations-service.ts` | Creates, modifies, and updates skills                                            |
+| `SkillResourceProvider`  | `apps/gateway/src/services/skill-resource-provider.ts`  | Provides skills as MCP resources                                                 |
+| `GatewayBuiltinsBuilder` | `apps/gateway/src/tools/gateway-builtins-builder.ts`    | Constructs `_gateway.*` builtins for skill ops                                   |
+
+### MCP Resource Annotations
+
+Each skill resource includes MCP annotations to aid client display and prioritization:
+
+| Field                      | Value                                         | Notes                                                  |
+| -------------------------- | --------------------------------------------- | ------------------------------------------------------ |
+| `size`                     | Byte size of `SKILL.md`                       | Top-level field; absent for the built-in virtual skill |
+| `annotations.audience`     | `["assistant"]`                               | Signals the resource is intended for the AI assistant  |
+| `annotations.priority`     | `0.5`                                         | Display ranking hint for MCP clients                   |
+| `annotations.lastModified` | ISO 8601 timestamp from `SKILL.md` file mtime | Absent for the built-in virtual skill                  |
 
 ### Resource Integration
 

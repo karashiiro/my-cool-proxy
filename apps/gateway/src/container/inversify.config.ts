@@ -29,6 +29,7 @@ import {
   ResourceRoutingService,
   type IResourceProvider,
   type IResourceRoutingService,
+  type ILuaRuntime as IAggLuaRuntime,
 } from "@my-cool-proxy/mcp-aggregation";
 // Import logger from shared package
 import { ConsoleLogger, type LoggerConfig } from "@my-cool-proxy/logger";
@@ -52,6 +53,7 @@ import { InspectToolResponseTool } from "../tools/inspect-tool-response-tool.js"
 import type { IToolRegistry } from "../tools/tool-registry.js";
 import { ToolRegistry } from "../tools/tool-registry.js";
 
+// eslint-disable-next-line max-lines-per-function
 export function createContainer(
   config: ServerConfig,
 ): TypedContainer<ContainerBindingMap> {
@@ -127,7 +129,11 @@ export function createContainer(
       return new ToolDiscoveryService(
         clientManager,
         logger,
-        luaRuntime,
+        // Cast needed: gateway uses lua-runtime's ILuaRuntime (with ReadonlyMap +
+        // onProgress/toolCallLog params) while mcp-aggregation defines its own minimal
+        // ILuaRuntime with different IMCPClientSession members. Structurally compatible
+        // at runtime since ToolDiscoveryService only calls executeScript.
+        luaRuntime as unknown as IAggLuaRuntime,
         formatter,
       );
     })
@@ -218,6 +224,11 @@ export function createContainer(
 
   // Bind sampling shim conditionally when ACP agent is configured
   if (config.acp?.agent) {
+    // Capture narrowed values outside the closure so TypeScript retains the narrowing.
+    // Inside toDynamicValue, config.acp.agent would lose narrowing through the closure boundary.
+    const agentConfig = config.acp.agent;
+    const filesystem = config.acp.filesystem;
+    const allowOwnTools = config.acp.allowOwnTools;
     container
       .bind<ISamplingShim>(TYPES.SamplingShim)
       .toDynamicValue(() => {
@@ -226,11 +237,11 @@ export function createContainer(
           TYPES.CapabilityStore,
         );
         return new SamplingShim(
-          config.acp!.agent!,
+          agentConfig,
           logger,
           capabilityStore,
-          config.acp!.filesystem,
-          config.acp!.allowOwnTools,
+          filesystem,
+          allowOwnTools,
         );
       })
       .inSingletonScope();
@@ -240,7 +251,8 @@ export function createContainer(
   container
     .bind<IToolRegistry>(TYPES.ToolRegistry)
     .toDynamicValue(() => {
-      const registry = new ToolRegistry();
+      const logger = container.get<ILogger>(TYPES.Logger);
+      const registry = new ToolRegistry(logger);
       const tools = container.getAll<ITool>(TYPES.Tool);
 
       for (const tool of tools) {

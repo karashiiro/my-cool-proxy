@@ -1,5 +1,5 @@
-import { mkdirSync, readFileSync, writeFileSync } from "fs";
-import { dirname } from "path";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import type { ServerConfig, MCPClientConfig } from "../types/interfaces.js";
 import { getActiveConfigPath, getPlatformConfigPath } from "./config-paths.js";
 
@@ -86,6 +86,7 @@ function validateSkillsConfig(config: ServerConfig): void {
 /**
  * Validates ACP agent configuration if provided.
  */
+// eslint-disable-next-line sonarjs/cognitive-complexity
 function validateACPAgentConfig(
   agent: NonNullable<ServerConfig["acp"]>["agent"],
 ): void {
@@ -239,6 +240,7 @@ function validateDatabaseConfig(config: ServerConfig): void {
 /**
  * Validates the logging configuration if provided.
  */
+// eslint-disable-next-line sonarjs/cognitive-complexity
 function validateLoggingConfig(config: ServerConfig): void {
   if (config.logging === undefined) return;
 
@@ -315,8 +317,25 @@ function validateDashboardConfig(config: ServerConfig): void {
 }
 
 /**
+ * Validates the resultSizeThreshold configuration if provided.
+ */
+function validateResultSizeThreshold(config: ServerConfig): void {
+  if (config.resultSizeThreshold === undefined) return;
+
+  if (
+    typeof config.resultSizeThreshold !== "number" ||
+    config.resultSizeThreshold < 0
+  ) {
+    throw new Error(
+      "Config 'resultSizeThreshold' must be a non-negative number if specified",
+    );
+  }
+}
+
+/**
  * Validates a single MCP client configuration.
  */
+// eslint-disable-next-line sonarjs/cognitive-complexity
 function validateMcpClientConfig(
   name: string,
   clientConfig: MCPClientConfig,
@@ -444,8 +463,11 @@ export function loadConfig(): ServerConfig {
     const createdPath = createDefaultConfig();
 
     // Log to stderr (stdout may be used for MCP protocol in stdio mode)
+    // eslint-disable-next-line no-console
     console.error(`\n  Created default config at: ${createdPath}`);
+    // eslint-disable-next-line no-console
     console.error(`  Edit this file to add your MCP servers.`);
+    // eslint-disable-next-line no-console
     console.error(`  See docs/configuration.md for configuration options.\n`);
 
     // Return the default config directly (we know what we wrote)
@@ -466,6 +488,7 @@ export function loadConfig(): ServerConfig {
     validateLoggingConfig(config);
     validateDatabaseConfig(config);
     validateDashboardConfig(config);
+    validateResultSizeThreshold(config);
 
     return config;
   } catch (error) {

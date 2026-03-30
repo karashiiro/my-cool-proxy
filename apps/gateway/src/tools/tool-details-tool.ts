@@ -10,6 +10,7 @@ import { ToolDiscoveryService } from "@my-cool-proxy/mcp-aggregation";
 import type { IToolInspectionStore } from "../types/interfaces.js";
 import { getEffectiveSessionId } from "../utils/session.js";
 import { luaServerNameSchema, luaToolNameSchema } from "./schemas.js";
+import { validateToolArgs } from "./tool-validation.js";
 
 /**
  * Tool that provides detailed information about a specific tool on an MCP server.
@@ -49,21 +50,17 @@ export class ToolDetailsTool implements ITool {
     args: Record<string, unknown>,
     context: ToolExecutionContext,
   ): Promise<CallToolResult> {
-    const { luaServerName, luaToolName } = args;
+    const { luaServerName, luaToolName } = validateToolArgs(this.schema, args);
     const sessionId = getEffectiveSessionId(context.sessionId);
     const result = await this.toolDiscovery.getToolDetails(
-      luaServerName as string,
-      luaToolName as string,
+      luaServerName,
+      luaToolName,
       sessionId,
     );
 
     // Record successful inspection so the execute tool allows this tool call
     if (!result.isError) {
-      this.inspectionStore.markInspected(
-        sessionId,
-        luaServerName as string,
-        luaToolName as string,
-      );
+      this.inspectionStore.markInspected(sessionId, luaServerName, luaToolName);
     }
 
     return result;

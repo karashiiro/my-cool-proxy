@@ -2,6 +2,7 @@ import type {
   CallToolResult,
   ToolAnnotations,
 } from "@modelcontextprotocol/sdk/types.js";
+import type { z } from "zod";
 
 /**
  * Context provided to tool execution
@@ -14,6 +15,24 @@ export interface ToolExecutionContext {
    */
   sendProgress?: (progress: number, total?: number, message?: string) => void;
 }
+
+/**
+ * Schema definition for a tool's input parameters.
+ *
+ * Each key is a parameter name and each value is a Zod schema that describes
+ * the parameter's type and constraints. The MCP framework serializes these
+ * to JSON Schema for client-side validation, while `validateToolArgs` uses
+ * them for runtime validation on the server side.
+ *
+ * @example
+ * ```ts
+ * readonly schema: ToolInputSchema = {
+ *   luaServerName: z.string().describe("The Lua identifier of the MCP server"),
+ *   limit: z.number().optional().describe("Maximum results to return"),
+ * };
+ * ```
+ */
+export type ToolInputSchema = Record<string, z.ZodTypeAny>;
 
 /**
  * Base interface for all tools in the gateway server.
@@ -33,9 +52,14 @@ export interface ITool {
   readonly description: string;
 
   /**
-   * The JSON schema for the tool's input parameters
+   * The input parameter schema for this tool.
+   *
+   * A record mapping parameter names to Zod schemas. An empty object (`{}`)
+   * indicates the tool takes no parameters. The gateway serializes these to
+   * JSON Schema for MCP clients and uses them for runtime validation via
+   * `validateToolArgs`.
    */
-  readonly schema: Record<string, unknown>;
+  readonly schema: ToolInputSchema;
 
   /**
    * Optional annotations providing hints about the tool's behavior.
@@ -50,8 +74,8 @@ export interface ITool {
    * @param context - Execution context (e.g., sessionId)
    * @returns A CallToolResult containing the tool's output
    */
-  execute(
+  execute: (
     args: Record<string, unknown>,
     context: ToolExecutionContext,
-  ): Promise<CallToolResult>;
+  ) => Promise<CallToolResult>;
 }

@@ -38,7 +38,7 @@ import {
   PromptAggregationService,
   CompletionAggregationService,
 } from "@my-cool-proxy/mcp-aggregation";
-import { getErrorMessage } from "@my-cool-proxy/mcp-utilities";
+import { getErrorMessage, withTimeout } from "@my-cool-proxy/mcp-utilities";
 import type { IToolRegistry } from "../tools/tool-registry.js";
 import { getEffectiveSessionId } from "../utils/session.js";
 import { resolvePackageRoot } from "../utils/package-root.js";
@@ -55,6 +55,12 @@ const { name, version, description } = JSON.parse(
   version: string;
   description: string;
 };
+
+/**
+ * Maximum time to wait for upstream re-listing after a change notification (ms).
+ * Re-list operations after change notifications should complete in moderate time.
+ */
+export const NOTIFICATION_TIMEOUT_MS = 15_000; // 15 seconds
 
 /**
  * Gateway server that aggregates multiple MCP servers and provides unified access.
@@ -107,6 +113,7 @@ export class MCPGatewayServer {
    */
   private activeDownstreamRequestId?: string | number;
 
+  // eslint-disable-next-line @typescript-eslint/max-params, max-lines-per-function
   constructor(
     @$inject(TYPES.ToolRegistry) private toolRegistry: IToolRegistry,
     @$inject(TYPES.MCPClientManager) private clientPool: IMCPClientManager,
@@ -168,10 +175,14 @@ export class MCPGatewayServer {
 
         // Re-list resources and templates to repopulate routing table,
         // then notify downstream clients once fresh data is available.
-        Promise.all([
-          this.resourceAggregation.listResources(sessionId),
-          this.resourceAggregation.listResourceTemplates(sessionId),
-        ])
+        withTimeout(
+          Promise.all([
+            this.resourceAggregation.listResources(sessionId),
+            this.resourceAggregation.listResourceTemplates(sessionId),
+          ]),
+          NOTIFICATION_TIMEOUT_MS,
+          `re-list resources after change from '${serverName}'`,
+        )
           .then(() => {
             this.sendResourceListChangedSafe(serverName, sessionId);
           })
@@ -195,8 +206,11 @@ export class MCPGatewayServer {
 
         // Re-list prompts to repopulate cache,
         // then notify downstream clients once fresh data is available.
-        this.promptAggregation
-          .listPrompts(sessionId)
+        withTimeout(
+          this.promptAggregation.listPrompts(sessionId),
+          NOTIFICATION_TIMEOUT_MS,
+          `re-list prompts after change from '${serverName}'`,
+        )
           .then(() => {
             this.sendPromptListChangedSafe(serverName, sessionId);
           })
@@ -272,6 +286,7 @@ export class MCPGatewayServer {
     }
   }
 
+  // eslint-disable-next-line max-lines-per-function
   private setupTools(): void {
     // Register all tools with McpServer for tools/list support.
     // The actual tools/call dispatch is overridden below at the Protocol level
@@ -332,18 +347,17 @@ export class MCPGatewayServer {
               total?: number,
               message?: string,
             ) => {
-              const params: Record<string, unknown> = {
-                progressToken,
-                progress,
+              const progressNotification: ServerNotification = {
+                method: "notifications/progress" as const,
+                params: {
+                  progressToken,
+                  progress,
+                  ...(total !== undefined && { total }),
+                  ...(message !== undefined && { message }),
+                },
               };
-              if (total !== undefined) params.total = total;
-              if (message !== undefined) params.message = message;
-
               extra
-                .sendNotification({
-                  method: "notifications/progress" as const,
-                  params,
-                } as ServerNotification)
+                .sendNotification(progressNotification)
                 .catch((err: unknown) => {
                   this.logger.warn(
                     `Failed to send progress notification: ${err instanceof Error ? err.message : String(err)}`,

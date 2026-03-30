@@ -11,7 +11,6 @@ import type {
   ILogger,
   IMCPClientManager,
   IShutdownHandler,
-  IToolInspectionStore,
   ServerConfig,
 } from "./types/interfaces.js";
 import { serveHttp } from "@karashiiro/mcp/http";
@@ -21,6 +20,7 @@ import { MCPGatewayServer } from "./mcp/gateway-server.js";
 import type { IResourceRoutingService } from "@my-cool-proxy/mcp-aggregation";
 import { parseArgs } from "./utils/cli-args.js";
 import { getConfigPaths, getPlatformConfigDir } from "./utils/config-paths.js";
+import { appPaths } from "./utils/app-paths.js";
 import { cleanupSessionTempDir } from "./utils/index.js";
 import { SQLiteEventStore } from "./stores/sqlite-event-store.js";
 import {
@@ -29,6 +29,7 @@ import {
   preloadInstructions,
   handleDownstreamInitialized,
 } from "./startup.js";
+import { getErrorMessage, withTimeout } from "@my-cool-proxy/mcp-utilities";
 import { startDashboardServer } from "./dashboard/dashboard-server.js";
 import { NotifyingExecutionLog } from "./dashboard/notifying-execution-log.js";
 import type { DashboardHandle, DashboardEvent } from "./dashboard/types.js";
@@ -40,6 +41,12 @@ import { resolvePackageRoot } from "./utils/package-root.js";
  * Sessions expire after this duration of inactivity.
  */
 const SESSION_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * Maximum time to wait for upstream servers to initialize during session restoration (ms).
+ * Upstream server init can be slow on cold start.
+ */
+const SESSION_RESTORE_TIMEOUT_MS = 30_000; // 30 seconds
 
 /**
  * Resolve the dashboard static files directory.
@@ -94,17 +101,18 @@ async function maybeStartDashboard(
   const capabilityStore = container.get<ICapabilityStore>(
     TYPES.CapabilityStore,
   );
-  return startDashboardServer(
+  return startDashboardServer({
     executionLog,
     clientManager,
     capabilityStore,
-    sqliteDb,
-    config.dashboard,
-    DASHBOARD_STATIC_DIR,
+    db: sqliteDb,
+    config: config.dashboard,
+    staticDir: DASHBOARD_STATIC_DIR,
     logger,
-  );
+  });
 }
 
+// eslint-disable-next-line max-lines-per-function
 async function startHttpMode(
   container: TypedContainer<ContainerBindingMap>,
   config: ServerConfig,
@@ -146,10 +154,6 @@ async function startHttpMode(
   const routingService = container.get<IResourceRoutingService>(
     TYPES.ResourceRoutingService,
   );
-  const toolInspectionStore = container.get<IToolInspectionStore>(
-    TYPES.ToolInspectionStore,
-  );
-
   // Preload upstream server info (skills discovered per-session in HTTP mode)
   const baseInstructions = await preloadInstructions(
     config,
@@ -163,7 +167,11 @@ async function startHttpMode(
   // Each session has a promise that resolves when upstream servers are connected
   const sessionInitPromises = new Map<
     string,
-    { promise: Promise<void>; resolve: () => void }
+    {
+      promise: Promise<void>;
+      resolve: () => void;
+      reject: (reason?: unknown) => void;
+    }
   >();
 
   // Helper to get or create init promise for a session
@@ -171,18 +179,27 @@ async function startHttpMode(
     let entry = sessionInitPromises.get(sessionId);
     if (!entry) {
       let resolve: () => void = () => {};
-      const promise = new Promise<void>((r) => {
-        resolve = r;
+      let reject: (reason?: unknown) => void = () => {};
+      const promise = new Promise<void>((res, rej) => {
+        resolve = res;
+        reject = rej;
       });
-      entry = { promise, resolve };
+      entry = { promise, resolve, reject };
       sessionInitPromises.set(sessionId, entry);
     }
     return entry;
   };
 
+  // Graceful shutdown: reject new sessions once shutdown begins
+  let shuttingDown = false;
+
   // Start HTTP server with per-session factory
   const handle = await serveHttp(
     async (sessionId) => {
+      if (shuttingDown) {
+        throw new Error("Server is shutting down, rejecting new session");
+      }
+
       logger.info(`Creating gateway server for session ${sessionId}`);
 
       // Discover skills fresh per session so runtime changes are reflected
@@ -209,13 +226,22 @@ async function startHttpMode(
 
       // Set up callback to initialize upstream clients when downstream client connects
       gatewayServer.setOnDownstreamInitialized(async (capabilities) => {
-        await handleDownstreamInitialized(
-          sessionId,
-          capabilities,
-          config,
-          services,
-          gatewayServer,
-        );
+        try {
+          await handleDownstreamInitialized(
+            sessionId,
+            capabilities,
+            config,
+            services,
+            gatewayServer,
+          );
+        } catch (error) {
+          logger.error(
+            `Session ${sessionId}: handleDownstreamInitialized failed: ${getErrorMessage(error)}`,
+          );
+          // Reject the init promise so onSessionRestored doesn't hang
+          getSessionInitPromise(sessionId).reject(error);
+          return;
+        }
 
         // Signal that this session is fully initialized (upstream servers connected)
         // This allows restored sessions to wait for completion before accepting requests
@@ -232,8 +258,21 @@ async function startHttpMode(
         // Session expires after 5 minutes of inactivity (default is 30 minutes)
         sessionTtlMs: SESSION_TTL_MS,
         // SQLite-backed event store for SSE resumability across restarts
-        eventStoreFactory: (sessionId) =>
-          new SQLiteEventStore(sqliteDb, sessionId),
+        eventStoreFactory: (sessionId) => {
+          // Insert a placeholder sessions row eagerly so that child tables
+          // (mcp_events, session_init_requests) can write their FK-constrained
+          // rows before setCapabilities() is called by onSessionInitialized.
+          // setCapabilities() uses INSERT OR ... DO UPDATE, so it will simply
+          // update this placeholder when the real capabilities arrive.
+          sqliteDb
+            .getDatabase()
+            .prepare(
+              `INSERT OR IGNORE INTO sessions (session_id, created_at, last_activity)
+               VALUES (?, ?, ?)`,
+            )
+            .run(sessionId, Date.now(), Date.now());
+          return new SQLiteEventStore(sqliteDb, sessionId);
+        },
         // Clean up session-scoped state when sessions are closed
         onSessionClosed: async (sessionId) => {
           logger.info(`Session ${sessionId} closed, cleaning up...`);
@@ -252,13 +291,20 @@ async function startHttpMode(
               );
             }
 
-            services.capabilityStore.deleteCapabilities(sessionId);
+            // NOTE: Session data (capabilities, init requests, events) is intentionally
+            // NOT deleted from SQLite here. The SDK preserves event stores across transport
+            // close and shutdown to enable session restoration after restart. Deleting the
+            // sessions row would cascade-delete session_init_requests and mcp_events,
+            // breaking restoration. Stale sessions are cleaned by purgeOldData (retention
+            // policy). Explicit DELETE requests are handled by the SDK via eventStore.clear().
 
             // Clean up resource routing data
             routingService.deleteSession(sessionId);
 
-            // Clean up tool inspection tracking
-            toolInspectionStore.deleteSession(sessionId);
+            // NOTE: Tool inspection state is intentionally NOT cleaned up here.
+            // It is persisted in SQLite so that agents don't need to re-call
+            // tool-details after a gateway restart (issue #79). Stale records
+            // are cleaned up by purgeOldData based on retention policy.
 
             // Clean up sampling shim if active
             if (services.samplingShim) {
@@ -282,7 +328,11 @@ async function startHttpMode(
             `Session ${sessionId} restored, waiting for upstream servers...`,
           );
           const entry = getSessionInitPromise(sessionId);
-          await entry.promise;
+          await withTimeout(
+            entry.promise,
+            SESSION_RESTORE_TIMEOUT_MS,
+            `session ${sessionId} restoration`,
+          );
           logger.info(
             `Session ${sessionId} restoration complete, upstream servers ready`,
           );
@@ -309,7 +359,6 @@ async function startHttpMode(
   }
 
   // Graceful shutdown with double-shutdown guard
-  let shuttingDown = false;
   const shutdown = async () => {
     if (shuttingDown) return;
     shuttingDown = true;
@@ -328,7 +377,16 @@ async function startHttpMode(
     }
 
     try {
-      await handle.close();
+      const SHUTDOWN_TIMEOUT_MS = 5_000;
+      await Promise.race([
+        handle.close(),
+        new Promise<void>((resolve) =>
+          setTimeout(() => {
+            logger.warn("HTTP server shutdown timed out, forcing close");
+            resolve();
+          }, SHUTDOWN_TIMEOUT_MS),
+        ),
+      ]);
     } catch (err) {
       logger.error(
         "Error closing HTTP server",
@@ -360,6 +418,7 @@ async function startHttpMode(
   process.on("SIGTERM", shutdown);
 }
 
+// eslint-disable-next-line max-lines-per-function
 async function startStdioMode(
   container: TypedContainer<ContainerBindingMap>,
   config: ServerConfig,
@@ -368,6 +427,20 @@ async function startStdioMode(
 
   // Initialize SQLite for execution logging (no capability store rebind for stdio)
   const { sqliteDb } = initializeSqlite(container, config, logger);
+
+  // Fixed session ID for stdio (single session mode)
+  const STDIO_SESSION_ID = "default";
+
+  // Insert a placeholder sessions row so that lua_executions and tool_inspections
+  // (which have FK constraints on sessions.session_id) can write rows even though
+  // the in-memory capability store never inserts into the sessions table.
+  sqliteDb
+    .getDatabase()
+    .prepare(
+      `INSERT OR IGNORE INTO sessions (session_id, created_at, last_activity)
+       VALUES (?, ?, ?)`,
+    )
+    .run(STDIO_SESSION_ID, Date.now(), Date.now());
 
   // Install NotifyingExecutionLog for dashboard WebSocket broadcasts
   let broadcastFn: ((event: DashboardEvent) => void) | undefined;
@@ -386,9 +459,6 @@ async function startStdioMode(
 
   // Resolve shared services (after SQLite rebindings)
   const services = resolveCommonServices(container);
-
-  // Fixed session ID for stdio (single session mode)
-  const SESSION_ID = "default";
 
   // Preload upstream server info and discover skills eagerly (single session)
   const aggregatedInstructions = await preloadInstructions(
@@ -415,7 +485,7 @@ async function startStdioMode(
     // Set up callback to initialize upstream clients when downstream client connects
     gatewayServer.setOnDownstreamInitialized(async (capabilities) => {
       await handleDownstreamInitialized(
-        SESSION_ID,
+        STDIO_SESSION_ID,
         capabilities,
         config,
         services,
@@ -443,6 +513,7 @@ async function startStdioMode(
 
   // Graceful shutdown with double-shutdown guard
   let shuttingDown = false;
+  // eslint-disable-next-line sonarjs/cognitive-complexity, complexity
   const shutdown = async () => {
     if (shuttingDown) return;
     shuttingDown = true;
@@ -481,7 +552,7 @@ async function startStdioMode(
     // Clean up working directory if it's a tempdir
     try {
       const workingDir =
-        services.capabilityStore.getWorkingDirectory(SESSION_ID);
+        services.capabilityStore.getWorkingDirectory(STDIO_SESSION_ID);
       if (workingDir && workingDir.includes("mcp-gateway-")) {
         cleanupSessionTempDir(workingDir);
         logger.debug(`Cleaned up tempdir: ${workingDir}`);
@@ -537,6 +608,7 @@ function printHelp(): void {
   console.log("Usage: my-cool-proxy [options]\n");
   console.log("Options:");
   console.log("  -c, --config-path    Show config file search paths and exit");
+  console.log("      --paths          Show all platform directories and exit");
   console.log("  -h, --help           Show this help message and exit\n");
   console.log("Environment variables:");
   console.log("  CONFIG_PATH          Override config file location");
@@ -563,6 +635,19 @@ function printConfigPaths(): void {
   console.log(`Platform config directory: ${getPlatformConfigDir()}`);
 }
 
+/**
+ * Print all platform-specific directory paths and exit.
+ *
+ * Note: We use console.log here instead of the injected logger because
+ * these CLI utilities run before the DI container is created.
+ */
+function printPaths(): void {
+  console.log("Platform directories:\n");
+  console.log(`  Config:  ${appPaths.config}`);
+  console.log(`  Data:    ${appPaths.data}`);
+  console.log(`  Log:     ${appPaths.log}`);
+}
+
 async function main() {
   // Handle CLI arguments before loading config
   const args = parseArgs(process.argv.slice(2));
@@ -574,6 +659,11 @@ async function main() {
 
   if (args.showConfigPath) {
     printConfigPaths();
+    process.exit(0);
+  }
+
+  if (args.showPaths) {
+    printPaths();
     process.exit(0);
   }
 

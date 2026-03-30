@@ -89,7 +89,7 @@ function createLoggingServer(): McpServer {
       const levels = ["debug", "info", "warning", "error"] as const;
 
       for (let i = 0; i < count; i++) {
-        const level = levels[i % levels.length]!;
+        const level = levels[i % levels.length] ?? "info";
         server.sendLoggingMessage({
           level,
           logger: "batch-logger",

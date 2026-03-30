@@ -14,6 +14,7 @@ import type {
   ISkillOperationsService,
   IToolInspectionStore,
   IGatewayBuiltins,
+  IExecutionLog,
 } from "../types/interfaces.js";
 
 /**
@@ -24,6 +25,7 @@ import type {
  * closes over the provided `sessionId`.
  */
 export class GatewayBuiltinsBuilder {
+  // eslint-disable-next-line @typescript-eslint/max-params
   constructor(
     private resourceAggregation: ResourceAggregationService,
     private promptAggregation: PromptAggregationService,
@@ -35,8 +37,10 @@ export class GatewayBuiltinsBuilder {
     private config: ServerConfig,
     private logger: ILogger,
     private toolInspectionStore: IToolInspectionStore,
+    private executionLog: IExecutionLog,
   ) {}
 
+  // eslint-disable-next-line max-lines-per-function
   build(sessionId: string): IGatewayBuiltins {
     const builtins: IGatewayBuiltins = {
       listResources: async () => {
@@ -347,6 +351,25 @@ export class GatewayBuiltinsBuilder {
         };
       }
     }
+
+    // Add get_result builtin for retrieving offloaded execution results
+    const executionLog = this.executionLog;
+    builtins.getResult = async (id: string) => {
+      if (!id || typeof id !== "string") {
+        return { error: "Missing required parameter: id" };
+      }
+      const resultJson = executionLog.getExecutionResult(id);
+      if (resultJson === undefined) {
+        return {
+          error: `No result found for execution ID '${id}'. The execution may not exist or may not have produced a result.`,
+        };
+      }
+      try {
+        return JSON.parse(resultJson);
+      } catch {
+        return resultJson;
+      }
+    };
 
     return builtins;
   }

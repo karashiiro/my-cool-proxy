@@ -35,6 +35,15 @@ describe("Dashboard API", () => {
   let log: SQLiteExecutionLog;
   let app: ReturnType<typeof createDashboardApp>;
 
+  /** Insert a parent session row so FK constraints are satisfied. */
+  function ensureSession(id: string): void {
+    db.getDatabase()
+      .prepare(
+        `INSERT OR IGNORE INTO sessions (session_id, created_at, last_activity) VALUES (?, ?, ?)`,
+      )
+      .run(id, Date.now(), Date.now());
+  }
+
   beforeEach(() => {
     db = new SQLiteDatabase(":memory:");
     log = new SQLiteExecutionLog(db);
@@ -62,6 +71,8 @@ describe("Dashboard API", () => {
     });
 
     it("should return executions ordered by created_at DESC", async () => {
+      ensureSession("s1");
+      ensureSession("s2");
       log.logExecution("s1", "script1");
       // Small delay to ensure different timestamps
       await new Promise((resolve) => setTimeout(resolve, 5));
@@ -71,11 +82,16 @@ describe("Dashboard API", () => {
       const data = (await res.json()) as ExecutionsResponse;
       expect(data.executions).toHaveLength(2);
       expect(data.total).toBe(2);
-      expect(data.executions[0]!.script).toBe("script2");
-      expect(data.executions[1]!.script).toBe("script1");
+      const dexec0 = data.executions[0];
+      const dexec1 = data.executions[1];
+      if (!dexec0) throw new Error("expected data.executions[0] to be defined");
+      if (!dexec1) throw new Error("expected data.executions[1] to be defined");
+      expect(dexec0.script).toBe("script2");
+      expect(dexec1.script).toBe("script1");
     });
 
     it("should respect limit query param", async () => {
+      ensureSession("s");
       for (let i = 0; i < 10; i++) {
         log.logExecution("s", `s${i}`);
       }
@@ -90,6 +106,7 @@ describe("Dashboard API", () => {
       // Date.now() timestamp. The ORDER BY uses `created_at DESC, rowid DESC`
       // so rows are ordered by insertion order (highest rowid = most recent).
       // s9 is most recent, s0 is oldest. Offset 3 skips s9, s8, s7.
+      ensureSession("s");
       for (let i = 0; i < 10; i++) {
         log.logExecution("s", `s${i}`);
       }
@@ -97,10 +114,13 @@ describe("Dashboard API", () => {
       const data = (await res.json()) as ExecutionsResponse;
       expect(data.executions).toHaveLength(3);
       expect(data.total).toBe(10);
-      expect(data.executions[0]!.script).toBe("s6");
+      const dexec0 = data.executions[0];
+      if (!dexec0) throw new Error("expected data.executions[0] to be defined");
+      expect(dexec0.script).toBe("s6");
     });
 
     it("should clamp limit to valid range", async () => {
+      ensureSession("s");
       for (let i = 0; i < 5; i++) {
         log.logExecution("s", `s${i}`);
       }
@@ -116,6 +136,7 @@ describe("Dashboard API", () => {
     });
 
     it("should filter executions by tool query param", async () => {
+      ensureSession("s");
       const exec1 = log.logExecution("s", "script1");
       log.logToolCall(exec1, "github", "search_code");
       const exec2 = log.logExecution("s", "script2");
@@ -132,6 +153,7 @@ describe("Dashboard API", () => {
     });
 
     it("should return empty results for non-existent tool filter", async () => {
+      ensureSession("s");
       const exec1 = log.logExecution("s", "script1");
       log.logToolCall(exec1, "github", "search_code");
 
@@ -142,6 +164,9 @@ describe("Dashboard API", () => {
     });
 
     it("should return executions across all sessions", async () => {
+      ensureSession("session-a");
+      ensureSession("session-b");
+      ensureSession("session-c");
       log.logExecution("session-a", "script-a");
       log.logExecution("session-b", "script-b");
       log.logExecution("session-c", "script-c");
@@ -161,6 +186,7 @@ describe("Dashboard API", () => {
     });
 
     it("should return distinct tools ordered by count descending", async () => {
+      ensureSession("s");
       const exec1 = log.logExecution("s", "a");
       log.logToolCall(exec1, "github", "search_code");
       log.logToolCall(exec1, "github", "search_code");
@@ -186,6 +212,7 @@ describe("Dashboard API", () => {
     });
 
     it("should return execution details", async () => {
+      ensureSession("s1");
       const id = log.logExecution("s1", "result(42)");
       log.markExecutionResult(id, "42");
 
@@ -198,6 +225,7 @@ describe("Dashboard API", () => {
     });
 
     it("should return execution with error status", async () => {
+      ensureSession("s1");
       const id = log.logExecution("s1", "bad()");
       log.markExecutionError(id, "attempt to call a nil value");
 
@@ -211,6 +239,7 @@ describe("Dashboard API", () => {
 
   describe("GET /api/executions/:id/tool-calls", () => {
     it("should return tool calls for an execution", async () => {
+      ensureSession("s1");
       const execId = log.logExecution("s1", "server.tool():await()");
       const callId = log.logToolCall(execId, "server", "tool", '{"key":"val"}');
       log.markToolCallResult(callId, '{"content":[]}');
@@ -219,12 +248,15 @@ describe("Dashboard API", () => {
       expect(res.status).toBe(200);
       const data = (await res.json()) as LuaToolCall[];
       expect(data).toHaveLength(1);
-      expect(data[0]!.serverName).toBe("server");
-      expect(data[0]!.toolName).toBe("tool");
-      expect(data[0]!.arguments).toBe('{"key":"val"}');
+      const tcall0 = data[0];
+      if (!tcall0) throw new Error("expected data[0] to be defined");
+      expect(tcall0.serverName).toBe("server");
+      expect(tcall0.toolName).toBe("tool");
+      expect(tcall0.arguments).toBe('{"key":"val"}');
     });
 
     it("should return empty array for execution with no tool calls", async () => {
+      ensureSession("s1");
       const execId = log.logExecution("s1", "result(1)");
       const res = await app.request(`/api/executions/${execId}/tool-calls`);
       expect((await res.json()) as LuaToolCall[]).toEqual([]);
@@ -236,6 +268,7 @@ describe("Dashboard API", () => {
     });
 
     it("should return multiple tool calls in order", async () => {
+      ensureSession("s1");
       const execId = log.logExecution("s1", "multi-call script");
       log.logToolCall(execId, "server", "first-tool");
       await new Promise((resolve) => setTimeout(resolve, 5));
@@ -244,9 +277,12 @@ describe("Dashboard API", () => {
       const res = await app.request(`/api/executions/${execId}/tool-calls`);
       const data = (await res.json()) as LuaToolCall[];
       expect(data).toHaveLength(2);
+      const [dtcall0, dtcall1] = data;
+      if (!dtcall0) throw new Error("expected data[0] to be defined");
+      if (!dtcall1) throw new Error("expected data[1] to be defined");
       // Descending order
-      expect(data[0]!.toolName).toBe("second-tool");
-      expect(data[1]!.toolName).toBe("first-tool");
+      expect(dtcall0.toolName).toBe("second-tool");
+      expect(dtcall1.toolName).toBe("first-tool");
     });
   });
 
@@ -295,14 +331,16 @@ describe("Dashboard API", () => {
       const data = (await res.json()) as SessionInfo[];
 
       expect(data).toHaveLength(1);
-      expect(data[0]!.sessionId).toBe("session-1");
-      expect(data[0]!.connectedServers).toEqual(["github", "context7"]);
-      expect(data[0]!.capabilities.sampling).toBe(true);
-      expect(data[0]!.capabilities.roots).toBe(true);
-      expect(data[0]!.capabilities.elicitation).toBe(false);
-      expect(data[0]!.workingDirectory).toBe("/tmp/test");
-      expect(data[0]!.createdAt).toBe(1000);
-      expect(data[0]!.lastActivity).toBe(2000);
+      const session0 = data[0];
+      if (!session0) throw new Error("expected data[0] to be defined");
+      expect(session0.sessionId).toBe("session-1");
+      expect(session0.connectedServers).toEqual(["github", "context7"]);
+      expect(session0.capabilities.sampling).toBe(true);
+      expect(session0.capabilities.roots).toBe(true);
+      expect(session0.capabilities.elicitation).toBe(false);
+      expect(session0.workingDirectory).toBe("/tmp/test");
+      expect(session0.createdAt).toBe(1000);
+      expect(session0.lastActivity).toBe(2000);
     });
 
     it("should include failed servers", async () => {
@@ -328,7 +366,9 @@ describe("Dashboard API", () => {
       const res = await customApp.request("/api/sessions");
       const data = (await res.json()) as SessionInfo[];
 
-      expect(data[0]!.failedServers).toEqual([
+      const session0 = data[0];
+      if (!session0) throw new Error("expected data[0] to be defined");
+      expect(session0.failedServers).toEqual([
         { name: "broken-server", error: "Connection refused" },
       ]);
     });

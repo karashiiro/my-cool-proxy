@@ -61,6 +61,7 @@
 			{loadError}
 			<button
 				class="ml-1 rounded p-0.5 opacity-60 transition-opacity hover:opacity-100"
+				aria-label="Dismiss error"
 				onclick={() => (loadError = null)}
 			>
 				<svg class="size-3" viewBox="0 0 16 16" fill="currentColor">

@@ -1,5 +1,6 @@
 import { injectable } from "inversify";
 import type {
+  Annotations,
   Resource,
   ReadResourceResult,
 } from "@modelcontextprotocol/sdk/types.js";
@@ -34,12 +35,22 @@ export class SkillResourceProvider implements IResourceProvider {
   async listResources(): Promise<Resource[]> {
     const skills = await this.skillService.discoverSkills();
 
-    return skills.map((skill) => ({
-      uri: createSkillResourceUri(skill.name),
-      name: skill.name,
-      description: skill.description,
-      mimeType: "text/markdown",
-    }));
+    return skills.map((skill) => {
+      const annotations: Annotations = {
+        audience: ["assistant"],
+        priority: 0.5,
+        ...(skill.lastModified && { lastModified: skill.lastModified }),
+      };
+
+      return {
+        uri: createSkillResourceUri(skill.name),
+        name: skill.name,
+        description: skill.description,
+        mimeType: "text/markdown",
+        annotations,
+        ...(skill.size != null && { size: skill.size }),
+      };
+    });
   }
 
   /**
@@ -77,7 +88,7 @@ export class SkillResourceProvider implements IResourceProvider {
     }
 
     // Determine MIME type based on file extension
-    const mimeType = this.getMimeType(path);
+    const mimeType = getMimeType(path);
 
     return {
       contents: [
@@ -89,37 +100,37 @@ export class SkillResourceProvider implements IResourceProvider {
       ],
     };
   }
+}
 
-  /**
-   * Get MIME type based on file path extension.
-   * Defaults to text/markdown for SKILL.md files.
-   */
-  private getMimeType(path?: string): string {
-    if (!path) {
+/**
+ * Get MIME type based on file path extension.
+ * Defaults to text/markdown for SKILL.md files (no path).
+ */
+function getMimeType(path?: string): string {
+  if (!path) {
+    return "text/markdown";
+  }
+
+  const ext = path.split(".").pop()?.toLowerCase();
+  switch (ext) {
+    case "md":
       return "text/markdown";
-    }
-
-    const ext = path.split(".").pop()?.toLowerCase();
-    switch (ext) {
-      case "md":
-        return "text/markdown";
-      case "py":
-        return "text/x-python";
-      case "js":
-        return "application/javascript";
-      case "ts":
-        return "text/typescript";
-      case "json":
-        return "application/json";
-      case "yaml":
-      case "yml":
-        return "text/yaml";
-      case "sh":
-        return "application/x-sh";
-      case "txt":
-        return "text/plain";
-      default:
-        return "text/plain";
-    }
+    case "py":
+      return "text/x-python";
+    case "js":
+      return "application/javascript";
+    case "ts":
+      return "text/typescript";
+    case "json":
+      return "application/json";
+    case "yaml":
+    case "yml":
+      return "text/yaml";
+    case "sh":
+      return "application/x-sh";
+    case "txt":
+      return "text/plain";
+    default:
+      return "text/plain";
   }
 }
