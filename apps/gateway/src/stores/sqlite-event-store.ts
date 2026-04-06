@@ -187,11 +187,25 @@ export class SQLiteEventStore
     request: JSONRPCMessage,
   ): Promise<void> {
     safeExecute(() => {
-      this.database
-        .prepare(
-          `INSERT OR REPLACE INTO session_init_requests (session_id, request) VALUES (?, ?)`,
-        )
-        .run(sessionId, JSON.stringify(request));
+      // Use a transaction to ensure the parent sessions row exists before
+      // inserting into the FK-constrained session_init_requests table.
+      // This prevents SQLITE_CONSTRAINT_FOREIGNKEY errors when the
+      // eventStoreFactory's placeholder INSERT hasn't committed yet (WAL mode)
+      // or when storeInitializeRequest is called via a code path that bypasses
+      // the eventStoreFactory entirely (e.g. session restoration).
+      this.database.transaction(() => {
+        this.database
+          .prepare(
+            `INSERT OR IGNORE INTO sessions (session_id, created_at, last_activity)
+             VALUES (?, ?, ?)`,
+          )
+          .run(sessionId, Date.now(), Date.now());
+        this.database
+          .prepare(
+            `INSERT OR REPLACE INTO session_init_requests (session_id, request) VALUES (?, ?)`,
+          )
+          .run(sessionId, JSON.stringify(request));
+      })();
     }, "storeInitializeRequest");
   }
 

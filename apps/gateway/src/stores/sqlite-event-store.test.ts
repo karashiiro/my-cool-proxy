@@ -325,4 +325,36 @@ describe("SQLiteEventStore", () => {
       expect(messageIds).toContain(1004);
     });
   });
+
+  describe("storeInitializeRequest", () => {
+    it("should store and retrieve an init request", async () => {
+      const request: JSONRPCMessage = {
+        jsonrpc: "2.0",
+        method: "initialize",
+        id: 1,
+      };
+
+      await store.storeInitializeRequest(sessionId, request);
+      const retrieved = await store.getInitializeRequest(sessionId);
+
+      expect(retrieved).toEqual(request);
+    });
+
+    it("should not throw FK error when session row does not exist", async () => {
+      const orphanSessionId = "no-parent-row";
+      const request: JSONRPCMessage = {
+        jsonrpc: "2.0",
+        method: "initialize",
+        id: 1,
+      };
+
+      // This would throw SQLITE_CONSTRAINT_FOREIGNKEY before the fix
+      await expect(
+        store.storeInitializeRequest(orphanSessionId, request),
+      ).resolves.not.toThrow();
+
+      const retrieved = await store.getInitializeRequest(orphanSessionId);
+      expect(retrieved).toEqual(request);
+    });
+  });
 });
