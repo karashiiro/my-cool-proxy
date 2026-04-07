@@ -48,6 +48,35 @@ export interface IMCPClientSession {
 /**
  * Interface for gateway built-in functions that are injected into the Lua runtime.
  * These provide access to gateway functionality from within Lua scripts.
+ *
+ * IMPORTANT — implementation contract for this interface:
+ *
+ * 1. **Do not throw synchronously.** Validation failures should return
+ *    an `{ error: "..." }` object rather than throwing. Internal failures
+ *    should reject the returned promise rather than throwing before the
+ *    first `await`. The Lua runtime wraps every method on this interface
+ *    in a synchronous bridge function that exists specifically to convert
+ *    synchronous JS exceptions into immediate Lua errors at the call
+ *    site, but relying on that mechanism is a fallback, not the
+ *    intended path. The structured `{ error: ... }` shape is what Lua
+ *    scripts expect.
+ *
+ * 2. **The `toolCallGuard` method is the documented exception** to rule
+ *    1: it throws synchronously by design when a tool has not been
+ *    inspected, because the Lua runtime needs that throw to abort
+ *    script execution at the precise call site. The runtime knows to
+ *    handle this on the synchronous bridge stack.
+ *
+ * 3. Any promise this interface returns may be observed by Lua via
+ *    `:await()`, OR may be silently dropped if the Lua script binds it
+ *    to a local and aborts before awaiting. The runtime defends against
+ *    the latter by attaching no-op `.catch()` handlers to every
+ *    bridge-returned promise — implementations should NOT rely on the
+ *    process-level unhandledRejection handler as a backstop.
+ *
+ * Violations of these rules historically caused the gateway daemon to
+ * crash on a single misbehaving Lua script. See the regression tests
+ * in `runtime.test.ts` under "toolCallGuard rejection handling".
  */
 export interface IGatewayBuiltins {
   /**
