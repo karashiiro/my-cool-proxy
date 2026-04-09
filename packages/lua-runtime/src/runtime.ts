@@ -126,6 +126,31 @@ Common issues:
     }
   }
 
+  /**
+   * Attach a no-op `.catch()` to a promise being returned to wasmoon, so
+   * an unawaited rejection from the Lua bridge cannot become an
+   * unhandledRejection event that crashes the Node process.
+   *
+   * Multiple handlers can attach to the same promise — they fire
+   * independently. Lua's `:await()` (which attaches its own
+   * `.then(resolve, reject)`) still observes the rejection normally;
+   * the no-op catch only consumes Node's "this rejection has no
+   * handler" signal at the JS layer.
+   *
+   * Apply this to EVERY promise returned to wasmoon from the Lua
+   * bridge — both the per-server tool wrappers and every `_gateway`
+   * builtin. The process-level unhandledRejection handler in
+   * `apps/gateway/src/index.ts` is a backstop, not a substitute: with
+   * this guard in place, any rejection that reaches the process
+   * handler is genuinely a non-Lua-bridge bug.
+   */
+  private suppressOrphanRejection<T>(promise: Promise<T>): Promise<T> {
+    promise.catch(() => {
+      /* intentionally swallowed; Lua's :await() still sees the rejection */
+    });
+    return promise;
+  }
+
   private async createEngine(
     resultCallback: (result: unknown) => void,
   ): Promise<LuaEngine> {
@@ -177,28 +202,19 @@ Common issues:
           const originalToolName = tool.name;
           const sanitizedToolName = sanitizeLuaIdentifier(originalToolName);
 
-          // Capture original names in closure for MCP calls
-          serverTable[sanitizedToolName] = async (args: unknown) => {
-            // Log tool call start if logger is provided
-            const logCallId = toolCallLog?.onToolCallStart(
-              originalServerName,
-              originalToolName,
-              args ? JSON.stringify(args) : undefined,
-            );
-
+          // Async path: actually invokes the upstream tool. Kept as a
+          // separate function so the guard check above can run on the
+          // synchronous call stack — see the comment on the outer
+          // wrapper for why that matters.
+          const callTool = async (
+            args: unknown,
+            logCallId: string | undefined,
+          ): Promise<unknown> => {
             try {
               this.logger.debug(
                 `Calling ${originalServerName}.${originalToolName} ` +
                   `(Lua: ${sanitizedServerName}.${sanitizedToolName}) with args: ${inspect(args)}`,
               );
-
-              // Enforce tool inspection guard if configured
-              if (gatewayBuiltins.toolCallGuard) {
-                gatewayBuiltins.toolCallGuard(
-                  sanitizedServerName,
-                  sanitizedToolName,
-                );
-              }
 
               // Register with progress aggregator if available.
               // Registration happens at call time (not injection time) so
@@ -317,6 +333,60 @@ Common issues:
               throw error;
             }
           };
+
+          // Synchronous outer wrapper.
+          //
+          // CRITICAL: this MUST stay non-async. The toolCallGuard's throw
+          // has to propagate to wasmoon as a synchronous JS exception so
+          // wasmoon can convert it into an immediate Lua error at the
+          // call site. If this wrapper were `async`, the throw would be
+          // captured by the async function machinery and turned into a
+          // rejected promise — and Lua scripts that bind tool calls to
+          // locals without an immediate `:await()` (a perfectly normal
+          // pattern) would then have orphan rejected promises sitting in
+          // their stack with no handler attached. As soon as an earlier
+          // `:await()` aborts the chunk, those orphan rejections become
+          // unhandledRejection events, which Node terminates the process
+          // on by default. See the regression test in runtime.test.ts.
+          serverTable[sanitizedToolName] = (args: unknown) => {
+            // Log tool call start before the guard check, matching the
+            // historical behavior where guard rejections still produce a
+            // start/error pair in the tool call log.
+            const logCallId = toolCallLog?.onToolCallStart(
+              originalServerName,
+              originalToolName,
+              args ? JSON.stringify(args) : undefined,
+            );
+
+            // Enforce tool inspection guard if configured. Must be sync.
+            if (gatewayBuiltins.toolCallGuard) {
+              try {
+                gatewayBuiltins.toolCallGuard(
+                  sanitizedServerName,
+                  sanitizedToolName,
+                );
+              } catch (error) {
+                if (logCallId) {
+                  toolCallLog?.onToolCallError(
+                    logCallId,
+                    getErrorMessage(error),
+                  );
+                }
+                this.logger.error(
+                  `Error calling ${originalServerName}.${originalToolName}:`,
+                  error as Error,
+                );
+                throw error;
+              }
+            }
+
+            // Wrap the returned promise so any unawaited rejection from
+            // the upstream call (e.g. the script aborts on an earlier
+            // `:await()` error before reaching this one) cannot escape
+            // as an unhandledRejection. See suppressOrphanRejection for
+            // the full reasoning.
+            return this.suppressOrphanRejection(callTool(args, logCallId));
+          };
         }
 
         // Set the server table as a global in Lua using sanitized name
@@ -350,43 +420,73 @@ Common issues:
   ): void {
     const gatewayTable: Record<string, unknown> = {};
 
+    // CRITICAL: every entry on this table MUST be a synchronous function
+    // (no `async` keyword), and any promise it returns to wasmoon MUST
+    // be passed through `suppressOrphanRejection` first. Both rules
+    // exist to prevent the same class of unhandled-rejection crash that
+    // killed the gateway in the per-tool wrapper:
+    //
+    //   1. Sync wrapper: if an underlying builtin throws synchronously
+    //      (rather than returning `{ error: ... }` or rejecting its
+    //      promise), the throw propagates through the sync wrapper to
+    //      wasmoon as a sync JS exception, which wasmoon converts into
+    //      an immediate Lua error at the call site. An `async` wrapper
+    //      would instead capture the throw and convert it into a
+    //      rejected promise — which Lua scripts that bind the call to
+    //      a local without an immediate `:await()` would orphan.
+    //
+    //   2. suppressOrphanRejection: even legitimate async rejections
+    //      can be orphaned if the Lua script binds the call to a local
+    //      and aborts before awaiting it (e.g. an earlier `:await()`
+    //      errors first). Attaching a no-op `.catch()` to the returned
+    //      promise marks it as "handled" from Node's perspective, so
+    //      the unawaited rejection never reaches Node's
+    //      unhandledRejection event. Lua's `:await()` still observes
+    //      the rejection because multiple handlers can attach to the
+    //      same promise — they fire independently.
+    //
+    // See the regression tests in runtime.test.ts under "toolCallGuard
+    // rejection handling" for the failure modes this guards against.
+
     // Core builtins (always available)
-    gatewayTable["list_resources"] = async () => {
+    gatewayTable["list_resources"] = () => {
       this.logger.debug("Calling _gateway.list_resources()");
-      return builtins.listResources();
+      return this.suppressOrphanRejection(builtins.listResources());
     };
 
-    gatewayTable["list_resource_templates"] = async () => {
+    gatewayTable["list_resource_templates"] = () => {
       this.logger.debug("Calling _gateway.list_resource_templates()");
-      return builtins.listResourceTemplates();
+      return this.suppressOrphanRejection(builtins.listResourceTemplates());
     };
 
-    gatewayTable["read_resource"] = async (args: { uri: string }) => {
+    gatewayTable["read_resource"] = (args: { uri: string }) => {
       const uri = args?.uri;
       this.logger.debug(`Calling _gateway.read_resource({ uri = "${uri}" })`);
-      return builtins.readResource(uri);
+      return this.suppressOrphanRejection(builtins.readResource(uri));
     };
 
-    gatewayTable["summary_stats"] = async () => {
+    gatewayTable["summary_stats"] = () => {
       this.logger.debug("Calling _gateway.summary_stats()");
-      return builtins.summaryStats();
+      return this.suppressOrphanRejection(builtins.summaryStats());
     };
 
-    gatewayTable["list_prompts"] = async () => {
+    gatewayTable["list_prompts"] = () => {
       this.logger.debug("Calling _gateway.list_prompts()");
-      return builtins.listPrompts();
+      return this.suppressOrphanRejection(builtins.listPrompts());
     };
 
-    gatewayTable["get_prompt"] = async (args: {
+    gatewayTable["get_prompt"] = (args: {
       name: string;
       arguments?: Record<string, string>;
     }) => {
       const name = args?.name;
       this.logger.debug(`Calling _gateway.get_prompt({ name = "${name}" })`);
-      return builtins.getPrompt(name, args?.arguments);
+      return this.suppressOrphanRejection(
+        builtins.getPrompt(name, args?.arguments),
+      );
     };
 
-    gatewayTable["complete"] = async (args: {
+    gatewayTable["complete"] = (args: {
       ref: { type: string; uri?: string; name?: string };
       argument: { name: string; value: string };
       context?: { arguments?: Record<string, string> };
@@ -394,13 +494,13 @@ Common issues:
       this.logger.debug(
         `Calling _gateway.complete({ ref.type = "${args?.ref?.type}" })`,
       );
-      return builtins.complete(args);
+      return this.suppressOrphanRejection(builtins.complete(args));
     };
 
     // Conditional builtins (only when skills are enabled)
     if (builtins.invokeSkillScript) {
       const invokeSkillScript = builtins.invokeSkillScript;
-      gatewayTable["invoke_skill_script"] = async (args: {
+      gatewayTable["invoke_skill_script"] = (args: {
         skillName: string;
         script: string;
         args?: string[];
@@ -408,13 +508,15 @@ Common issues:
         this.logger.debug(
           `Calling _gateway.invoke_skill_script({ skillName = "${args?.skillName}", script = "${args?.script}" })`,
         );
-        return invokeSkillScript(args?.skillName, args?.script, args?.args);
+        return this.suppressOrphanRejection(
+          invokeSkillScript(args?.skillName, args?.script, args?.args),
+        );
       };
     }
 
     if (builtins.writeSkill) {
       const writeSkill = builtins.writeSkill;
-      gatewayTable["write_skill"] = async (args: {
+      gatewayTable["write_skill"] = (args: {
         skillName: string;
         content?: string;
         files?: Array<{ path: string; content: string }>;
@@ -422,13 +524,15 @@ Common issues:
         this.logger.debug(
           `Calling _gateway.write_skill({ skillName = "${args?.skillName}" })`,
         );
-        return writeSkill(args?.skillName, args?.content, args?.files);
+        return this.suppressOrphanRejection(
+          writeSkill(args?.skillName, args?.content, args?.files),
+        );
       };
     }
 
     if (builtins.updateSkill) {
       const updateSkill = builtins.updateSkill;
-      gatewayTable["update_skill"] = async (args: {
+      gatewayTable["update_skill"] = (args: {
         skillName: string;
         file?: string;
         old_string: string;
@@ -438,12 +542,14 @@ Common issues:
         this.logger.debug(
           `Calling _gateway.update_skill({ skillName = "${args?.skillName}", file = "${args?.file ?? "SKILL.md"}" })`,
         );
-        return updateSkill(
-          args?.skillName,
-          args?.file ?? "SKILL.md",
-          args?.old_string,
-          args?.new_string,
-          args?.replace_all,
+        return this.suppressOrphanRejection(
+          updateSkill(
+            args?.skillName,
+            args?.file ?? "SKILL.md",
+            args?.old_string,
+            args?.new_string,
+            args?.replace_all,
+          ),
         );
       };
     }
@@ -451,11 +557,11 @@ Common issues:
     // Conditional builtin: get_result (only when result offloading is enabled)
     if (builtins.getResult) {
       const getResult = builtins.getResult;
-      gatewayTable["get_result"] = async (args: { id: string }) => {
+      gatewayTable["get_result"] = (args: { id: string }) => {
         this.logger.debug(
           `Calling _gateway.get_result({ id = "${args?.id}" })`,
         );
-        return getResult(args?.id);
+        return this.suppressOrphanRejection(getResult(args?.id));
       };
     }
 
