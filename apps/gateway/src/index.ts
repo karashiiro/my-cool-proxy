@@ -680,4 +680,48 @@ async function main() {
   }
 }
 
+/**
+ * Last-resort safety net for unhandled promise rejections.
+ *
+ * Node terminates the process on unhandled rejections by default. For a
+ * long-running daemon proxying user-authored Lua scripts, that's a
+ * footgun: a single rejection that escapes any code path can take down
+ * the entire gateway and every connected client session. This handler
+ * keeps the daemon alive instead.
+ *
+ * Scope of what reaches this handler:
+ *
+ *   - **Lua-bridge rejections do NOT reach here.** The Lua runtime
+ *     attaches no-op `.catch()` handlers to every promise it hands to
+ *     wasmoon (see `WasmoonRuntime.suppressOrphanRejection` in
+ *     `packages/lua-runtime/src/runtime.ts`). Lua scripts that bind a
+ *     tool call to a local and never `:await()` it — historically the
+ *     #1 source of orphan rejections in this daemon — are handled
+ *     entirely at the bridge layer. Lua's `:await()` still observes
+ *     rejections normally; the no-op catch only consumes Node's
+ *     "this rejection has no handler" signal.
+ *
+ *   - **Anything that reaches this handler is therefore a genuine
+ *     non-Lua-bridge bug.** A failed database write, a leaked HTTP
+ *     promise in the proxy layer, an unhandled error in a background
+ *     task. The log message reflects that — if it fires, somebody
+ *     somewhere should fix the actual code path, not just rely on
+ *     this safety net.
+ *
+ * We use console.error rather than the structured logger because this
+ * handler is registered at module load time, before the DI container
+ * and logger exist. Stderr is captured by the launchctl/systemd log
+ * file in production deployments, so the rejection still ends up in
+ * the same place an operator would look.
+ */
+process.on("unhandledRejection", (reason: unknown) => {
+  console.error(
+    "[unhandledRejection] A promise rejection escaped without a handler " +
+      "outside the Lua bridge layer. This is a real bug in non-Lua code — " +
+      "please investigate and fix the originating code path. The gateway " +
+      "will continue running.",
+    reason,
+  );
+});
+
 main().catch(console.error);

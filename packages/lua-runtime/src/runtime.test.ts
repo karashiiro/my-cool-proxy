@@ -1885,4 +1885,193 @@ describe("WasmoonRuntime", () => {
       expect(parsed).toEqual({ query: "test", limit: 10 });
     });
   });
+
+  describe("toolCallGuard rejection handling", () => {
+    // Regression test for a bug where multiple un-inspected tool calls in a
+    // single Lua chunk crashed the gateway with an unhandledRejection.
+    //
+    // Reproduction:
+    //   local a = server.tool({}) -- guard fails, returns rejected promise
+    //   local b = server.tool({}) -- guard fails, returns rejected promise
+    //   a:await()                 -- surfaces error, aborts chunk
+    //   -- b's rejection is now orphaned: no handler, no `:await()`
+    //
+    // Before the fix the per-tool wrapper was `async`, so the guard's
+    // synchronous throw was captured by the async function machinery and
+    // turned into a rejected promise. Lua scripts that bound the call to a
+    // local without an immediate `:await()` therefore created promise
+    // instances that nothing observed. When an earlier `:await()` aborted
+    // the chunk, the unawaited rejected promises became unhandled
+    // rejections, which Node terminates the process on by default.
+    //
+    // The fix: do the guard check in a synchronous outer wrapper so the
+    // throw propagates to wasmoon as a sync JS exception, which wasmoon
+    // converts into an immediate Lua error at the call site. No promise
+    // is ever created.
+    it("should not produce unhandled promise rejections when multiple un-inspected tool calls are bound in a chunk", async () => {
+      const { server, client } = await createTestServer("home_assistant", [
+        {
+          name: "ha_search_entities",
+          description: "Search entities",
+          handler: async () => ({
+            content: [{ type: "text" as const, text: "[]" }],
+          }),
+        },
+      ]);
+
+      cleanupFns.push(async () => {
+        await client.close();
+        await server.close();
+      });
+
+      // Guard that always rejects, simulating an un-inspected tool.
+      const builtins: IGatewayBuiltins = {
+        ...createMockGatewayBuiltins(),
+        toolCallGuard: vi.fn().mockImplementation(() => {
+          throw new Error(
+            "Tool 'home_assistant.ha_search_entities' cannot be called without prior inspection.",
+          );
+        }),
+      };
+
+      // The user's actual reproduction: bind several tool calls to locals,
+      // then `:await()` them later. With the bug, only the first
+      // `:await()` is reached and the rest become orphan rejected promises.
+      const script = `
+        local a = home_assistant.ha_search_entities({ query = "elgato" })
+        local b = home_assistant.ha_search_entities({ query = "xiao" })
+        local c = home_assistant.ha_search_entities({ query = "seeed" })
+        result({
+          a = a:await(),
+          b = b:await(),
+          c = c:await(),
+        })
+      `;
+
+      // Capture any unhandled rejections that fire during this test.
+      const unhandled: unknown[] = [];
+      const onUnhandled = (reason: unknown) => {
+        unhandled.push(reason);
+      };
+      process.on("unhandledRejection", onUnhandled);
+
+      try {
+        // The script is expected to fail with the guard's error message.
+        await expect(
+          runtime.executeScript(
+            script,
+            new Map([["home_assistant", client]]),
+            builtins,
+          ),
+        ).rejects.toThrow(/cannot be called without prior inspection/);
+
+        // Give Node a chance to fire any pending unhandledRejection events.
+        // Rejections become "unhandled" on the next macrotask after the
+        // microtask queue drains, so two ticks is enough.
+        await new Promise((resolve) => setImmediate(resolve));
+        await new Promise((resolve) => setImmediate(resolve));
+
+        // The actual assertion: zero unhandled rejections.
+        expect(unhandled).toEqual([]);
+      } finally {
+        process.off("unhandledRejection", onUnhandled);
+      }
+    });
+
+    // Same class of bug, different surface: every entry on the `_gateway`
+    // table is also a JS function bridged into Lua via wasmoon. If any
+    // builtin implementation throws synchronously (rather than returning
+    // `{ error: ... }` or rejecting its promise), the orphan-rejection
+    // pattern reappears. The fix is to make every `_gateway` wrapper a
+    // synchronous outer function so the throw propagates to wasmoon as
+    // a sync JS exception → immediate Lua error at the call site.
+    it("should not produce unhandled promise rejections when a _gateway builtin throws synchronously and is bound to multiple locals", async () => {
+      const builtins: IGatewayBuiltins = {
+        ...createMockGatewayBuiltins(),
+        // Simulate a builtin that throws synchronously (e.g. a future
+        // change that "cleans up" validation by switching from early
+        // `return { error: ... }` to `throw new Error(...)`).
+        summaryStats: vi.fn().mockImplementation(() => {
+          throw new Error("simulated synchronous throw inside builtin");
+        }),
+      };
+
+      const script = `
+        local a = _gateway.summary_stats()
+        local b = _gateway.summary_stats()
+        local c = _gateway.summary_stats()
+        result({
+          a = a:await(),
+          b = b:await(),
+          c = c:await(),
+        })
+      `;
+
+      const unhandled: unknown[] = [];
+      const onUnhandled = (reason: unknown) => {
+        unhandled.push(reason);
+      };
+      process.on("unhandledRejection", onUnhandled);
+
+      try {
+        await expect(
+          runtime.executeScript(script, new Map(), builtins),
+        ).rejects.toThrow(/simulated synchronous throw/);
+
+        await new Promise((resolve) => setImmediate(resolve));
+        await new Promise((resolve) => setImmediate(resolve));
+
+        expect(unhandled).toEqual([]);
+      } finally {
+        process.off("unhandledRejection", onUnhandled);
+      }
+    });
+
+    // Even with both wrappers fixed for synchronous throws, async
+    // rejections from a Lua-bridged JS function can still go orphan
+    // if the script binds the call to a local and then aborts before
+    // awaiting it (e.g. an earlier `:await()` errors first). The fix
+    // is to attach a no-op `.catch()` to every promise the Lua bridge
+    // returns to wasmoon, which silently marks it as "handled" from
+    // Node's perspective. Lua's `:await()` still observes the
+    // rejection because multiple handlers can attach to the same
+    // promise — they fire independently.
+    it("should not produce unhandled promise rejections when an async _gateway builtin rejects and a sibling call is unawaited", async () => {
+      const builtins: IGatewayBuiltins = {
+        ...createMockGatewayBuiltins(),
+        // Async path: returns a rejected promise (no sync throw).
+        summaryStats: vi
+          .fn()
+          .mockRejectedValue(new Error("simulated async rejection")),
+      };
+
+      // Two calls bound to locals, only the first awaited. The second
+      // is structurally orphaned the moment the first `:await()` errors.
+      const script = `
+        local a = _gateway.summary_stats()
+        local b = _gateway.summary_stats()
+        a:await()
+        b:await()
+      `;
+
+      const unhandled: unknown[] = [];
+      const onUnhandled = (reason: unknown) => {
+        unhandled.push(reason);
+      };
+      process.on("unhandledRejection", onUnhandled);
+
+      try {
+        await expect(
+          runtime.executeScript(script, new Map(), builtins),
+        ).rejects.toThrow(/simulated async rejection/);
+
+        await new Promise((resolve) => setImmediate(resolve));
+        await new Promise((resolve) => setImmediate(resolve));
+
+        expect(unhandled).toEqual([]);
+      } finally {
+        process.off("unhandledRejection", onUnhandled);
+      }
+    });
+  });
 });
