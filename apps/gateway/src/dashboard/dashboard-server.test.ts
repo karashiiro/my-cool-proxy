@@ -1,13 +1,18 @@
 import { describe, it, expect, beforeEach, afterEach, afterAll } from "vitest";
 import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { createServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { createDashboardApp } from "./dashboard-server.js";
+import {
+  createDashboardApp,
+  startDashboardServer,
+} from "./dashboard-server.js";
 import { SQLiteDatabase } from "../stores/sqlite-database.js";
 import { SQLiteExecutionLog } from "../stores/sqlite-execution-log.js";
 import type { IMCPClientManager } from "@my-cool-proxy/mcp-client";
 import type {
   ICapabilityStore,
+  ILogger,
   LuaExecution,
   LuaToolCall,
   ToolUsage,
@@ -543,5 +548,46 @@ describe("Dashboard static file serving", () => {
     const body = await res.text();
     expect(body).toContain("<html>");
     expect(body).not.toContain("root:");
+  });
+});
+
+describe("startDashboardServer", () => {
+  it("should return undefined when port is already in use", async () => {
+    const blocker = createServer();
+    const port = await new Promise<number>((resolve) => {
+      blocker.listen(0, "localhost", () => {
+        resolve((blocker.address() as AddressInfo).port);
+      });
+    });
+
+    try {
+      const db = new SQLiteDatabase(":memory:");
+      const log = new SQLiteExecutionLog(db);
+      const warnings: string[] = [];
+
+      const result = await startDashboardServer({
+        executionLog: log,
+        clientManager: mockClientManager,
+        capabilityStore: mockCapabilityStore,
+        db,
+        config: { port, host: "localhost" },
+        staticDir: "/nonexistent",
+        logger: {
+          info: () => {},
+          warn: (_obj: unknown, msg?: string) => {
+            warnings.push(typeof _obj === "string" ? _obj : (msg ?? ""));
+          },
+          error: () => {},
+          debug: () => {},
+        } as unknown as ILogger,
+      });
+
+      expect(result).toBeUndefined();
+      expect(warnings.some((w) => w.includes("already in use"))).toBe(true);
+
+      db.close();
+    } finally {
+      blocker.close();
+    }
   });
 });

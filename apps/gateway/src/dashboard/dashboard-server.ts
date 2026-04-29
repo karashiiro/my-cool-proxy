@@ -196,7 +196,7 @@ export interface StartDashboardServerOptions {
 // eslint-disable-next-line max-lines-per-function
 export async function startDashboardServer(
   options: StartDashboardServerOptions,
-): Promise<DashboardHandle> {
+): Promise<DashboardHandle | undefined> {
   const {
     executionLog,
     clientManager,
@@ -220,6 +220,30 @@ export async function startDashboardServer(
     port,
     hostname: host,
   });
+
+  const bound = await new Promise<boolean>((resolve) => {
+    server.on("listening", () => resolve(true));
+    server.on("error", (err: NodeJS.ErrnoException) => {
+      if (err.code === "EADDRINUSE") {
+        logger.warn(
+          { port, host },
+          `Dashboard port ${port} is already in use — skipping dashboard. ` +
+            `Another gateway instance may be holding this port.`,
+        );
+      } else {
+        logger.warn(
+          { port, host, error: err.message },
+          `Dashboard failed to start: ${err.message}`,
+        );
+      }
+      resolve(false);
+    });
+  });
+
+  if (!bound) {
+    server.close();
+    return undefined;
+  }
 
   // WebSocket server
   const wss = new WebSocketServer({ noServer: true });
