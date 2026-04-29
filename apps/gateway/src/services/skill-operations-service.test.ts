@@ -289,6 +289,20 @@ describe("SkillOperationsService", () => {
       );
     });
 
+    it("should return error when files is a non-array object", async () => {
+      const result = await service.writeSkillFiles(
+        "my-skill",
+        undefined,
+        {} as unknown as Array<{ path: string; content: string }>,
+      );
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          error: expect.stringContaining("must be an array"),
+        }),
+      );
+    });
+
     it("should return error when files array is empty", async () => {
       const result = await service.writeSkillFiles("my-skill", undefined, []);
 

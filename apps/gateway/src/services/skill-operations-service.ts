@@ -118,6 +118,13 @@ export class SkillOperationsService {
     content?: string,
     files?: Array<{ path: string; content: string }>,
   ): Promise<unknown> {
+    // Validate that files is an array when provided (Lua tables may arrive as plain objects)
+    if (files != null && !Array.isArray(files)) {
+      return {
+        error: "'files' must be an array of { path, content } objects.",
+      };
+    }
+
     // Validate that at least one of content or files is provided
     if (!content && (!files || files.length === 0)) {
       return {
