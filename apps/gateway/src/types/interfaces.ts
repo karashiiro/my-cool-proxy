@@ -480,6 +480,36 @@ export interface IServerInfoPreloader {
    * Returns empty string if no skills are available.
    */
   buildSkillInstructions: (skills: SkillMetadata[]) => string;
+
+  /**
+   * Build a compact server summary for embedding in tool descriptions.
+   * Shorter than buildAggregatedInstructions — designed to fit alongside
+   * tool usage instructions without bloating the description.
+   */
+  buildServerSummaryForToolDescription: (
+    servers: PreloadedServerInfo[],
+  ) => string;
+
+  /**
+   * Build a compact skill summary for embedding in tool descriptions.
+   * Shorter than buildSkillInstructions — just skill names and descriptions.
+   */
+  buildSkillSummaryForToolDescription: (skills: SkillMetadata[]) => string;
+
+  /**
+   * Cache preloaded server info so other components (e.g. ExecuteLuaTool)
+   * can retrieve it later via getCachedServerSummary().
+   */
+  cacheServerSummary: (
+    servers: PreloadedServerInfo[],
+    skills?: SkillMetadata[],
+  ) => void;
+
+  /**
+   * Get the cached server+skill summary for tool descriptions.
+   * Returns empty string if nothing has been cached yet.
+   */
+  getCachedServerSummary: () => string;
 }
 
 /**

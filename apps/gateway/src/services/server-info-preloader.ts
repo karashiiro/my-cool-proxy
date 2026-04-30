@@ -19,6 +19,8 @@ const MAX_RESOURCE_TEMPLATES_IN_INSTRUCTIONS = 10;
 
 @injectable()
 export class ServerInfoPreloader implements IServerInfoPreloader {
+  private cachedSummary = "";
+
   constructor(
     @$inject(TYPES.Logger) private logger: ILogger,
     @$inject(TYPES.MCPClientManager)
@@ -241,6 +243,65 @@ Load these as MCP resources, not with dedicated skill tools. Within Lua scripts,
 STRONGLY consider if there are relevant skills that may assist you in the current task.
 </CRITICAL>
 `;
+  }
+
+  buildServerSummaryForToolDescription(servers: PreloadedServerInfo[]): string {
+    if (servers.length === 0) return "";
+
+    const lines: string[] = ["", "AVAILABLE SERVERS:"];
+
+    for (const server of servers) {
+      const parts: string[] = [server.name];
+      if (server.description) {
+        parts.push(`- ${server.description}`);
+      }
+      if (server.toolNames && server.toolNames.length > 0) {
+        const toolsLine = this.formatToolNames(
+          server.toolNames,
+          MAX_TOOLS_IN_INSTRUCTIONS,
+        );
+        parts.push(`(tools: ${toolsLine})`);
+      }
+      lines.push(`- ${parts.join(" ")}`);
+    }
+
+    return lines.join("\n");
+  }
+
+  buildSkillSummaryForToolDescription(skills: SkillMetadata[]): string {
+    if (skills.length === 0) return "";
+
+    const skillsXml = skills
+      .map(
+        (skill) =>
+          `  <skill>
+    <name>${this.escapeXml(skill.name)}</name>
+    <description>${this.escapeXml(skill.description)}</description>
+  </skill>`,
+      )
+      .join("\n");
+
+    return `
+AVAILABLE SKILLS (load via _gateway.read_resource({ uri = "gw-skill://{name}" }):await()):
+
+<available_skills>
+${skillsXml}
+</available_skills>`;
+  }
+
+  cacheServerSummary(
+    servers: PreloadedServerInfo[],
+    skills?: SkillMetadata[],
+  ): void {
+    let summary = this.buildServerSummaryForToolDescription(servers);
+    if (skills && skills.length > 0) {
+      summary += this.buildSkillSummaryForToolDescription(skills);
+    }
+    this.cachedSummary = summary;
+  }
+
+  getCachedServerSummary(): string {
+    return this.cachedSummary;
   }
 
   private truncateInstructions(

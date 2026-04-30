@@ -22,6 +22,7 @@ import type {
   IToolInspectionStore,
   IGatewayBuiltins,
   IExecutionLog,
+  IServerInfoPreloader,
 } from "../types/interfaces.js";
 import { $inject } from "../container/decorators.js";
 import { TYPES } from "../types/index.js";
@@ -95,7 +96,20 @@ Additional skill-related builtins in \`_gateway\`:
 @injectable()
 export class ExecuteLuaTool implements ITool {
   readonly name = "execute";
-  readonly description: string;
+
+  get description(): string {
+    let desc =
+      this.config.skills?.enabled === true
+        ? BASE_DESCRIPTION + SKILLS_NOTE
+        : BASE_DESCRIPTION;
+
+    const serverSummary = this.serverInfoPreloader.getCachedServerSummary();
+    if (serverSummary) {
+      desc += "\n" + serverSummary;
+    }
+
+    return desc;
+  }
 
   readonly schema = {
     script: z
@@ -134,12 +148,9 @@ export class ExecuteLuaTool implements ITool {
     private toolInspectionStore: IToolInspectionStore,
     @$inject(TYPES.ExecutionLog)
     private executionLog: IExecutionLog,
-  ) {
-    this.description =
-      this.config.skills?.enabled === true
-        ? BASE_DESCRIPTION + SKILLS_NOTE
-        : BASE_DESCRIPTION;
-  }
+    @$inject(TYPES.ServerInfoPreloader)
+    private serverInfoPreloader: IServerInfoPreloader,
+  ) {}
 
   /**
    * Execute a Lua script within the context of the current session.

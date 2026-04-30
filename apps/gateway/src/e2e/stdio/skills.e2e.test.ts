@@ -203,15 +203,14 @@ A second test skill.
     });
   });
 
-  describe("Server Instructions", () => {
-    it("should receive instructions from gateway", async () => {
-      const instructions = gatewayClient.getInstructions();
+  describe("Tool Description Discovery", () => {
+    it("should include skill information in execute tool description", async () => {
+      const tools = await gatewayClient.listTools();
+      const executeTool = tools.tools.find((t) => t.name === "execute");
 
-      // Instructions should be present and contain skill information
-      expect(instructions).toBeDefined();
-      expect(instructions).not.toBe("");
-      expect(instructions).toContain("MCP gateway");
-      expect(instructions).toContain("gw-skill://");
+      expect(executeTool).toBeDefined();
+      expect(executeTool!.description).toContain("gw-skill://");
+      expect(executeTool!.description).toContain("AVAILABLE SKILLS");
     });
   });
 

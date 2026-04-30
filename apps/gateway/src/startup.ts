@@ -12,7 +12,9 @@ import type {
   IServerInfoPreloader,
   ISkillDiscoveryService,
   IToolInspectionStore,
+  PreloadedServerInfo,
   ServerConfig,
+  SkillMetadata,
 } from "./types/interfaces.js";
 import type { IToolRegistry } from "./tools/tool-registry.js";
 import type {
@@ -162,13 +164,18 @@ export function resolveCommonServices(
  *   HTTP mode skips this and discovers skills per-session in the factory.
  * @returns The aggregated instructions string for the gateway server.
  */
+export interface PreloadResult {
+  instructions: string;
+  servers: PreloadedServerInfo[];
+}
+
 export async function preloadInstructions(
   config: ServerConfig,
   serverInfoPreloader: IServerInfoPreloader,
   skillDiscoveryService: ISkillDiscoveryService,
   logger: ILogger,
   options?: { discoverSkillsNow?: boolean },
-): Promise<string> {
+): Promise<PreloadResult> {
   logger.info("Preloading upstream server info...");
   const preloadedServers = await serverInfoPreloader.preloadServerInfo(config);
   let instructions =
@@ -178,18 +185,22 @@ export async function preloadInstructions(
   );
 
   const skillsEnabled = config.skills?.enabled === true;
+  let skills: SkillMetadata[] = [];
   if (skillsEnabled) {
     skillDiscoveryService.ensureSkillsDirectory();
 
     if (options?.discoverSkillsNow) {
-      const skills = await skillDiscoveryService.discoverSkills();
+      skills = await skillDiscoveryService.discoverSkills();
       if (skills.length > 0) {
         instructions += serverInfoPreloader.buildSkillInstructions(skills);
       }
     }
   }
 
-  return instructions;
+  // Cache a compact summary for tool descriptions (used by ExecuteLuaTool)
+  serverInfoPreloader.cacheServerSummary(preloadedServers, skills);
+
+  return { instructions, servers: preloadedServers };
 }
 
 /**

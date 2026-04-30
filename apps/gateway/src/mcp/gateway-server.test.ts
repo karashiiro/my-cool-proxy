@@ -21,6 +21,7 @@ import type {
   ISkillOperationsService,
   IToolInspectionStore,
   IExecutionLog,
+  IServerInfoPreloader,
 } from "../types/interfaces.js";
 import * as z from "zod";
 import { MCPClientSession } from "@my-cool-proxy/mcp-client";
@@ -108,6 +109,17 @@ const createMockExecutionLog = (): IExecutionLog => ({
   getExecutionResult: vi.fn().mockReturnValue(undefined),
 });
 
+// Mock server info preloader
+const createMockServerInfoPreloader = (): IServerInfoPreloader => ({
+  preloadServerInfo: vi.fn().mockResolvedValue([]),
+  buildAggregatedInstructions: vi.fn().mockReturnValue(""),
+  buildSkillInstructions: vi.fn().mockReturnValue(""),
+  buildServerSummaryForToolDescription: vi.fn().mockReturnValue(""),
+  buildSkillSummaryForToolDescription: vi.fn().mockReturnValue(""),
+  cacheServerSummary: vi.fn(),
+  getCachedServerSummary: vi.fn().mockReturnValue(""),
+});
+
 // Helper to create a tool registry with all tools
 const createToolRegistry = (
   luaRuntime: ILuaRuntime,
@@ -149,6 +161,7 @@ const createToolRegistry = (
   const toolInspectionStore = createMockToolInspectionStore();
 
   const executionLog = createMockExecutionLog();
+  const serverInfoPreloader = createMockServerInfoPreloader();
 
   const registry = new ToolRegistry(logger);
   registry.register(
@@ -165,6 +178,7 @@ const createToolRegistry = (
       skillOperationsService,
       toolInspectionStore,
       executionLog,
+      serverInfoPreloader,
     ),
   );
   registry.register(new ListServersTool(toolDiscovery, config));

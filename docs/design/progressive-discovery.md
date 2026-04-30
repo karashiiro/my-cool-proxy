@@ -107,13 +107,13 @@ Tools for calculator:
 - divide (Lua: divide): Divide two numbers
 ```
 
-**Note:** Tool names are preloaded in server instructions at gateway startup, so agents can see a summary of available tools without calling this tool. The gateway limits tool names to 40 per server in instructions, using an "(and X more)" suffix for larger tool sets.
+**Note:** Tool names are preloaded at gateway startup and embedded in the `execute` tool description, so agents (and tool search) can see a summary of available servers and tools without calling this tool. The gateway limits tool names to 40 per server in the summary, using an "(and X more)" suffix for larger tool sets.
 
-**Example instruction excerpt:**
+**Example summary excerpt (from execute tool description):**
 
 ```
-## github-mcp-server
-Tools: get_file_contents, list_issues, list_pull_requests, create_issue, ... (and 47 more)
+AVAILABLE SERVERS:
+- github-mcp-server - Provides GitHub API access (tools: get_file_contents, list_issues, ... (and 47 more))
 ```
 
 **Implementation:** `apps/gateway/src/tools/list-server-tools-tool.ts` (discovery), `apps/gateway/src/services/server-info-preloader.ts` (preloading, `MAX_TOOLS_IN_INSTRUCTIONS = 40`)

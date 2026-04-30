@@ -152,38 +152,40 @@ See the [Configuration Guide](../configuration.md#skills) for detailed configura
 
 ## Context Injection
 
-Skills are surfaced to AI agents through MCP server instructions, which appear in the system prompt before every conversation turn. This provides agents with metadata about available skills without requiring explicit tool calls.
+Skills are surfaced to AI agents through the `execute` tool description. When agents (or tool search systems) inspect the gateway's tools, the `execute` tool description includes a summary of available skills alongside the server summary. This ensures skill metadata is discoverable without relying on the MCP `instructions` field, which some clients (e.g., Claude Code, Claude Desktop) no longer inject into the agent's context.
 
 ### How It Works
 
-When the gateway initializes (or when a new HTTP session connects), the skill discovery service scans the skills directory and builds a manifest of available skills. This manifest is injected into the gateway's MCP `instructions` field, which MCP clients automatically surface in the agent's context.
+When the gateway initializes (or when a new HTTP session connects), the skill discovery service scans the skills directory and builds a manifest of available skills. This manifest is cached by `ServerInfoPreloader` and included in the `execute` tool's description via a dynamic getter.
 
 ```mermaid
 sequenceDiagram
     participant Session as Session Init
     participant Discovery as Skill Discovery
     participant Preloader as ServerInfoPreloader
-    participant Gateway as Gateway Server
+    participant ExecuteTool as ExecuteLuaTool
     participant Client as MCP Client
 
     Session->>Discovery: discoverSkills()
     Discovery-->>Session: SkillMetadata[]
-    Session->>Preloader: buildSkillInstructions(skills)
-    Preloader-->>Session: Formatted instructions
-    Session->>Gateway: new MCPGatewayServer(..., instructions)
-    Gateway->>Client: MCP initialize response w/ instructions
-    Note over Client: Instructions appear in agent context
+    Session->>Preloader: cacheServerSummary(servers, skills)
+    Client->>ExecuteTool: tools/list
+    ExecuteTool->>Preloader: getCachedServerSummary()
+    Preloader-->>ExecuteTool: Compact summary
+    Note over ExecuteTool: Description includes server + skill summary
+    ExecuteTool-->>Client: Tool description with skill info
 ```
 
-### What Gets Injected
+### What Gets Included
 
-The injected instructions include:
+The tool description summary includes:
 
 1. **Skill name** - The identifier for `_gateway.read_resource()` calls
 2. **Description** - Tells agents _when_ to load the skill (trigger conditions)
-3. **Usage hints** - How to access skill content and nested resources
 
 ```xml
+AVAILABLE SKILLS (load via _gateway.read_resource({ uri = "gw-skill://{name}" }):await()):
+
 <available_skills>
   <skill>
     <name>code-review</name>
@@ -199,10 +201,10 @@ The description field is critical: it determines when agents choose to load a sk
 In HTTP mode, skills are re-discovered for each new session. This enables runtime changes without gateway restarts:
 
 1. Create a new skill with `_gateway.write_skill()`
-2. Next session sees the new skill in its instructions
-3. Existing sessions see the skill via `_gateway.list_resources()` but not in their original instructions
+2. Next session's `execute` tool description includes the new skill
+3. Existing sessions see the skill via `_gateway.list_resources()` but not in their tool description
 
-This tradeoff balances discoverability with performance (instruction injection happens once per session).
+This tradeoff balances discoverability with performance (the cached summary is updated once per session).
 
 ## Resources vs Lua Builtins: The Dual Interface
 

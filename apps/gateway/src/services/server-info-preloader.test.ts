@@ -351,4 +351,89 @@ describe("ServerInfoPreloader", () => {
       expect(result).not.toContain("Tools:");
     });
   });
+
+  describe("buildServerSummaryForToolDescription", () => {
+    it("should return empty string for no servers", () => {
+      expect(preloader.buildServerSummaryForToolDescription([])).toBe("");
+    });
+
+    it("should include server names and descriptions", () => {
+      const servers = [
+        {
+          name: "calculator",
+          description: "A calculator server",
+          toolNames: ["add", "multiply"],
+        },
+      ];
+
+      const result = preloader.buildServerSummaryForToolDescription(servers);
+
+      expect(result).toContain("AVAILABLE SERVERS:");
+      expect(result).toContain("calculator");
+      expect(result).toContain("A calculator server");
+      expect(result).toContain("tools: add, multiply");
+    });
+
+    it("should handle servers without descriptions or tools", () => {
+      const servers = [{ name: "bare-server" }];
+
+      const result = preloader.buildServerSummaryForToolDescription(servers);
+
+      expect(result).toContain("bare-server");
+      expect(result).not.toContain("tools:");
+    });
+  });
+
+  describe("buildSkillSummaryForToolDescription", () => {
+    it("should return empty string for no skills", () => {
+      expect(preloader.buildSkillSummaryForToolDescription([])).toBe("");
+    });
+
+    it("should include skill names and descriptions in XML format", () => {
+      const skills: SkillMetadata[] = [
+        { name: "review", description: "Code review skill", path: "/p" },
+      ];
+
+      const result = preloader.buildSkillSummaryForToolDescription(skills);
+
+      expect(result).toContain("AVAILABLE SKILLS");
+      expect(result).toContain("gw-skill://");
+      expect(result).toContain("<available_skills>");
+      expect(result).toContain("<name>review</name>");
+      expect(result).toContain("<description>Code review skill</description>");
+      expect(result).toContain("</available_skills>");
+    });
+  });
+
+  describe("cacheServerSummary / getCachedServerSummary", () => {
+    it("should return empty string before caching", () => {
+      expect(preloader.getCachedServerSummary()).toBe("");
+    });
+
+    it("should cache and return server summary", () => {
+      const servers = [
+        { name: "my-server", description: "desc", toolNames: ["t1"] },
+      ];
+
+      preloader.cacheServerSummary(servers);
+
+      const result = preloader.getCachedServerSummary();
+      expect(result).toContain("my-server");
+      expect(result).toContain("desc");
+    });
+
+    it("should include skills when provided", () => {
+      const servers = [{ name: "srv" }];
+      const skills: SkillMetadata[] = [
+        { name: "my-skill", description: "A skill", path: "/p" },
+      ];
+
+      preloader.cacheServerSummary(servers, skills);
+
+      const result = preloader.getCachedServerSummary();
+      expect(result).toContain("srv");
+      expect(result).toContain("<name>my-skill</name>");
+      expect(result).toContain("<description>A skill</description>");
+    });
+  });
 });

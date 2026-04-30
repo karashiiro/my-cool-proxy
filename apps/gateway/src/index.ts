@@ -155,7 +155,7 @@ async function startHttpMode(
     TYPES.ResourceRoutingService,
   );
   // Preload upstream server info (skills discovered per-session in HTTP mode)
-  const baseInstructions = await preloadInstructions(
+  const { servers: preloadedServers } = await preloadInstructions(
     config,
     services.serverInfoPreloader,
     services.skillDiscoveryService,
@@ -203,13 +203,13 @@ async function startHttpMode(
       logger.info(`Creating gateway server for session ${sessionId}`);
 
       // Discover skills fresh per session so runtime changes are reflected
-      let sessionInstructions = baseInstructions;
       if (skillsEnabled) {
         const skills = await services.skillDiscoveryService.discoverSkills();
-        if (skills.length > 0) {
-          sessionInstructions +=
-            services.serverInfoPreloader.buildSkillInstructions(skills);
-        }
+        // Update cached summary so the execute tool description includes latest skills
+        services.serverInfoPreloader.cacheServerSummary(
+          preloadedServers,
+          skills,
+        );
       }
 
       // Create gateway server FIRST (before upstream clients)
@@ -221,7 +221,6 @@ async function startHttpMode(
         services.resourceAggregation,
         services.promptAggregation,
         services.completionAggregation,
-        sessionInstructions,
       );
 
       // Set up callback to initialize upstream clients when downstream client connects
@@ -461,7 +460,7 @@ async function startStdioMode(
   const services = resolveCommonServices(container);
 
   // Preload upstream server info and discover skills eagerly (single session)
-  const aggregatedInstructions = await preloadInstructions(
+  await preloadInstructions(
     config,
     services.serverInfoPreloader,
     services.skillDiscoveryService,
@@ -479,7 +478,6 @@ async function startStdioMode(
       services.resourceAggregation,
       services.promptAggregation,
       services.completionAggregation,
-      aggregatedInstructions,
     );
 
     // Set up callback to initialize upstream clients when downstream client connects
