@@ -62,7 +62,7 @@
     "@inversifyjs/strongly-typed": "^2.2.0",
     "@karashiiro/mcp": "0.7.0",
     "@modelcontextprotocol/sdk": "^1.25.2",
-    "better-sqlite3": "^11.10.0",
+    "better-sqlite3": "^12.11.1",
     "env-paths": "^3.0.0",
     "hono": "^4.11.4",
     "inversify": "^7.10.7",

@@ -5,4 +5,5 @@ onlyBuiltDependencies:
   - "@suites/di.inversify"
   - "@suites/doubles.vitest"
   - "@swc/core"
+  - better-sqlite3
   - esbuild
